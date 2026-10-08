@@ -108,9 +108,15 @@ export async function countScans(): Promise<number> {
 
 export async function updateScan(
   id: string,
-  patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe'>>,
+  patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe' | 'variants'>>,
 ): Promise<void> {
   await db.scans.update(id, patch);
+}
+
+/** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
+export async function replaceStoredScan(scan: DesignScan): Promise<void> {
+  const old = await db.scans.get(scan.id);
+  await db.scans.put({ ...scan, tags: old?.tags ?? [], favorite: old?.favorite });
 }
 
 export async function deleteScans(ids: string[]): Promise<void> {

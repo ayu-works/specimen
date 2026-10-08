@@ -96,7 +96,7 @@ export function compose(
   ];
 
   const out: DesignScan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: opts.id ?? `composed-${globalThis.crypto.randomUUID()}`,
     url: base.url,
     host: 'composed',

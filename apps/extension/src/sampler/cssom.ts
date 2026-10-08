@@ -1,5 +1,6 @@
 import { parseCssText } from '@specimen/core/cssText';
 import type { RawPage } from '@specimen/core/schema';
+import { mightBeStateSelector, propsOfRule, type StateRule, stateRulesFromText } from './states';
 
 export type FetchCss = (urls: string[]) => Promise<(string | null)[]>;
 
@@ -9,6 +10,12 @@ export interface CssomResult {
   fontFaces: RawPage['fontFaces'];
   loadedFonts: string[];
   warnings: string[];
+  /** Theme switches declared by the page: `class:dark`, `attr:data-theme=dark`, ... */
+  darkSelectors: string[];
+  lightSelectors: string[];
+  prefersScheme: boolean;
+  /** `:hover` / `:focus` / `:active` / `:disabled` rules (CSSOM plus fetched cross-origin text). */
+  stateRules: StateRule[];
 }
 
 const ROOT_SEL = /(^|[\s,>+~])(:root|html|body)(?![\w-])/i;
@@ -21,6 +28,38 @@ interface Acc {
   fontFaces: RawPage['fontFaces'];
   fontKeys: Set<string>;
   blocked: Set<string>;
+  dark: Set<string>;
+  light: Set<string>;
+  stateRules: StateRule[];
+}
+
+const MAX_STATE_RULES = 6000;
+
+// A theme class/attribute only counts at the start of a selector or right after html/body/:root,
+// so `.btn.dark` and Tailwind's escaped `.dark\:bg-black` are not mistaken for a theme switch.
+const THEME_CLASS =
+  /(?<=^|[\s,(>+~]|html|body|:root)\.(dark|dark-mode|dark-theme|theme-dark|light|light-mode|light-theme|theme-light)(?![\w\\-])/gi;
+const THEME_ATTR =
+  /\[\s*(data-theme|data-mode|data-color-mode|data-bs-theme|data-color-scheme|data-appearance)\s*=\s*["']?(dark|light)["']?\s*\]/gi;
+
+function noteThemeSelectors(selector: string, acc: Acc): void {
+  if (!/dark|light/i.test(selector)) return;
+  for (const m of selector.matchAll(THEME_CLASS)) {
+    const name = (m[1] ?? '').toLowerCase();
+    (name.includes('dark') ? acc.dark : acc.light).add(`class:${name}`);
+  }
+  for (const m of selector.matchAll(THEME_ATTR)) {
+    const value = (m[2] ?? '').toLowerCase();
+    (value === 'dark' ? acc.dark : acc.light).add(`attr:${(m[1] ?? '').toLowerCase()}=${value}`);
+  }
+}
+
+function matchesMedia(cond: string): boolean {
+  try {
+    return window.matchMedia(cond).matches;
+  } catch {
+    return false;
+  }
 }
 
 function addFont(acc: Acc, f: RawPage['fontFaces'][number]): void {
@@ -37,10 +76,27 @@ function unquote(v: string): string {
     : t;
 }
 
-function walkRules(rules: CSSRuleList, acc: Acc, depth: number): void {
+function walkRules(
+  rules: CSSRuleList,
+  acc: Acc,
+  depth: number,
+  mediaOk = true,
+  parent?: string,
+): void {
   for (const rule of Array.from(rules)) {
     // Duck-typed on constructor to also work for rules from other realms.
     if (rule instanceof CSSStyleRule) {
+      const sel = parent
+        ? rule.selectorText.includes('&')
+          ? rule.selectorText.replaceAll('&', `:is(${parent})`)
+          : `${parent} ${rule.selectorText}`
+        : rule.selectorText;
+      noteThemeSelectors(sel, acc);
+      if (mediaOk && acc.stateRules.length < MAX_STATE_RULES && mightBeStateSelector(sel)) {
+        const props = propsOfRule(rule.style);
+        if (Object.keys(props).length > 0) acc.stateRules.push({ selector: sel, props });
+      }
+      if (rule.cssRules?.length) walkRules(rule.cssRules, acc, depth, mediaOk, sel);
       if (
         ROOT_SEL.test(rule.selectorText) ||
         rule.selectorText.split(',').some((s) => ROOT_SEL.test(s))
@@ -54,7 +110,7 @@ function walkRules(rules: CSSRuleList, acc: Acc, depth: number): void {
     } else if (rule instanceof CSSMediaRule) {
       const cond = rule.conditionText ?? rule.media.mediaText;
       if (cond) acc.media.add(cond.replace(/\s+/g, ' '));
-      walkRules(rule.cssRules, acc, depth);
+      walkRules(rule.cssRules, acc, depth, mediaOk && (!cond || matchesMedia(cond)));
     } else if (rule instanceof CSSFontFaceRule) {
       const st = rule.style;
       const family = unquote(st.getPropertyValue('font-family'));
@@ -72,7 +128,7 @@ function walkRules(rules: CSSRuleList, acc: Acc, depth: number): void {
       if (media && media !== 'all') acc.media.add(media.replace(/\s+/g, ' '));
       try {
         const inner = rule.styleSheet;
-        if (inner) walkRules(inner.cssRules, acc, depth + 1);
+        if (inner) walkRules(inner.cssRules, acc, depth + 1, mediaOk);
         else if (rule.href) acc.blocked.add(rule.href);
       } catch {
         if (rule.href) acc.blocked.add(rule.href);
@@ -80,7 +136,7 @@ function walkRules(rules: CSSRuleList, acc: Acc, depth: number): void {
     } else {
       // @supports, @layer, @container, ... — grouping rules with nested rules
       const nested = (rule as CSSGroupingRule).cssRules;
-      if (nested && !(rule instanceof CSSKeyframesRule)) walkRules(nested, acc, depth);
+      if (nested && !(rule instanceof CSSKeyframesRule)) walkRules(nested, acc, depth, mediaOk);
     }
   }
 }
@@ -110,6 +166,9 @@ export async function collectCssom(fetchCss?: FetchCss): Promise<CssomResult> {
     fontFaces: [],
     fontKeys: new Set(),
     blocked: new Set(),
+    dark: new Set(),
+    light: new Set(),
+    stateRules: [],
   };
   const warnings: string[] = [];
 
@@ -149,6 +208,8 @@ export async function collectCssom(fetchCss?: FetchCss): Promise<CssomResult> {
         return;
       }
       const parsed = parseCssText(text);
+      for (const m of text.matchAll(/[^{}]*\{/g)) noteThemeSelectors(m[0], acc);
+      if (acc.stateRules.length < MAX_STATE_RULES) acc.stateRules.push(...stateRulesFromText(text));
       for (const n of Object.keys(parsed.vars)) acc.varNames.add(n);
       for (const m of parsed.mediaQueries) acc.media.add(m);
       for (const f of parsed.fontFaces) addFont(acc, f);
@@ -190,5 +251,9 @@ export async function collectCssom(fetchCss?: FetchCss): Promise<CssomResult> {
     fontFaces: acc.fontFaces,
     loadedFonts,
     warnings: [...new Set(warnings)],
+    darkSelectors: [...acc.dark].sort(),
+    lightSelectors: [...acc.light].sort(),
+    prefersScheme: [...acc.media].some((m) => /prefers-color-scheme/i.test(m)),
+    stateRules: acc.stateRules,
   };
 }

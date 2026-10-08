@@ -17,10 +17,13 @@ export {
   primaryRadius,
   roleColors,
 } from './common';
+export { COMPONENT_LABELS, describeBase, describeProps } from './components';
 export { generateCssVars } from './cssvars';
 export { generateDesignMd } from './designmd';
 export { generateDtcg } from './dtcg';
 export { generateFigma } from './figma';
+export { generateFixPrompt } from './fixPrompt';
+export { mobileLines, mobileSection } from './mobile';
 export {
   generatePrompt,
   PROMPT_TARGETS,

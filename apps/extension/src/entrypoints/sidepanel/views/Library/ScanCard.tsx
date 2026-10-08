@@ -32,10 +32,20 @@ interface Props {
   onSelect: () => void;
   onOpen: () => void;
   onRescan: () => void;
+  onCheck: () => void;
   onChanged: () => void;
 }
 
-export function ScanCard({ scan, thumb, selected, onSelect, onOpen, onRescan, onChanged }: Props) {
+export function ScanCard({
+  scan,
+  thumb,
+  selected,
+  onSelect,
+  onOpen,
+  onRescan,
+  onCheck,
+  onChanged,
+}: Props) {
   const [menu, setMenu] = useState(false);
   const [edit, setEdit] = useState<'title' | 'tags' | null>(null);
   const [draft, setDraft] = useState('');
@@ -166,7 +176,7 @@ export function ScanCard({ scan, thumb, selected, onSelect, onOpen, onRescan, on
               {menu && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-md border border-border bg-background py-1 shadow-lg"
+                  className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-md border border-border bg-background py-1 shadow-lg"
                 >
                   <button
                     type="button"
@@ -205,6 +215,17 @@ export function ScanCard({ scan, thumb, selected, onSelect, onOpen, onRescan, on
                       Re-scan
                     </button>
                   )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={itemCls}
+                    onClick={() => {
+                      setMenu(false);
+                      onCheck();
+                    }}
+                  >
+                    Check a build against this
+                  </button>
                   <button
                     type="button"
                     role="menuitem"

@@ -37,6 +37,42 @@ export const RawSectionSchema = z.object({
 });
 export type RawSection = z.infer<typeof RawSectionSchema>;
 
+export const RawComponentSchema = z.object({
+  kind: z.enum([
+    'button-primary',
+    'button-secondary',
+    'button-ghost',
+    'input',
+    'card',
+    'nav-link',
+    'badge',
+  ]),
+  /** Computed styles (kebab-case property names). */
+  base: z.record(z.string(), z.string()),
+  /** Declared property overrides from `:hover`, `:focus`, `:active` and `:disabled` rules. */
+  states: z.partialRecord(
+    z.enum(['hover', 'focus', 'active', 'disabled']),
+    z.record(z.string(), z.string()),
+  ),
+});
+export type RawComponent = z.infer<typeof RawComponentSchema>;
+
+/** Page-level facts the sampler can read cheaply and the pure extractors cannot. */
+export const RawHintsSchema = z.object({
+  /** Visible menu button in the top bar (hamburger). */
+  hamburger: z.boolean().optional(),
+  /** Visible links in the top bar. */
+  navLinks: z.number().optional(),
+  /** Theme switches the page declares: `class:dark`, `attr:data-theme=dark`, ... */
+  darkSelectors: z.array(z.string()).optional(),
+  lightSelectors: z.array(z.string()).optional(),
+  /** The page has `@media (prefers-color-scheme)` rules. */
+  prefersScheme: z.boolean().optional(),
+  /** Set on a themed re-sample: did toggling the class/attribute change anything? */
+  themeApplied: z.boolean().optional(),
+});
+export type RawHints = z.infer<typeof RawHintsSchema>;
+
 export const RawPageSchema = z.object({
   url: z.string(),
   title: z.string(),
@@ -59,6 +95,9 @@ export const RawPageSchema = z.object({
   loadedFonts: z.array(z.string()),
   samples: z.array(RawSampleSchema),
   sections: z.array(RawSectionSchema),
+  /** Phase 5: representative interactive elements and cards with their state rules. */
+  components: z.array(RawComponentSchema).optional(),
+  hints: RawHintsSchema.optional(),
   warnings: z.array(z.string()),
 });
 export type RawPage = z.infer<typeof RawPageSchema>;

@@ -111,7 +111,7 @@ interface RawSample {
 ### 4.2 `DesignScan` (canonical, stored, exported)
 ```ts
 interface DesignScan {
-  schemaVersion: 2; id: string; url: string; host: string; title: string;
+  schemaVersion: 3; id: string; url: string; host: string; title: string;
   scannedAt: number; viewport: { w: number; h: number }; colorScheme: 'light'|'dark';
   colors: {
     palette: ColorToken[];                       // clustered, weight-sorted
@@ -133,10 +133,10 @@ interface DesignScan {
     density: 'compact'|'comfortable'|'airy'; blueprint: Section[];
   };
   motion?: { durationsMs: number[]; easings: string[] };
-  components?: ComponentSpec[];                  // Phase 5
-  variants?: { dark?: Partial<DesignScan['colors']>; light?: Partial<DesignScan['colors']>; mobile?: Partial<DesignScan['layout']> }; // dark/light: counterpart theme (Phase 4: derived; Phase 5: captured)
+  components?: ComponentSpec[];                  // Phase 5: measured base styles + :hover/:focus/:active/:disabled
+  variants?: { dark?: Partial<DesignScan['colors']> & { measured?: boolean }; light?: …same…; mobile?: Partial<DesignScan['layout']> & { typeSizes?: Record<string, number>; sectionPaddingY?: number; hamburger?: boolean; viewportWidth?: number } }; // dark/light: counterpart theme (`measured: true` = captured from the page; otherwise derived in memory); mobile: captured at a phone viewport
   vibe?: { summary: string; keywords: string[]; model: string };   // AI, optional
-  a11y?: { pairs: { fg: string; bg: string; ratio: number; aa: boolean; aaLarge: boolean }[] };
+  a11y?: { pairs: { fg: string; bg: string; ratio: number; aa: boolean; aaLarge: boolean; fgRole?: ColorRole; bgRole?: ColorRole; kind?: 'text'|'ui'; fix?: string }[] };
   cssVariables: Record<string, string>;          // filtered design-relevant vars
   meta: { extractorVersion: string; sampleCount: number; durationMs: number; warnings: string[]; pages?: string[] };
 }
@@ -154,7 +154,7 @@ interface Section { index: number; kind: 'nav'|'hero'|'logos'|'features'|'stats'
 interface ComponentSpec { kind: 'button-primary'|'button-secondary'|'button-ghost'|'input'|'card'|'nav-link'|'badge';
   base: Record<string, string>; states: Partial<Record<'hover'|'focus'|'active'|'disabled', Record<string, string>>>; }
 ```
-`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read. v2 (Phase 4) only adds `variants.light`; the v1 → v2 migration is a no-op that sets the version.
+`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read. v2 (Phase 4) only adds `variants.light`; v3 (Phase 5) only adds optional fields (the `measured` flag on theme variants, mobile details in `variants.mobile`, role/kind/fix on `a11y` pairs). Both v1 → v2 and v2 → v3 are no-ops that set the version. The fidelity report is never stored on a scan.
 
 **Compose (`core/compose`).** `compose(sources: Partial<Record<Facet, DesignScan>>, base)` takes each facet (`colors`, `typography`, `spacing`, `shape` = radii + shadows + borders, `layout`) from its source, else from `base`, and returns a new valid scan (`host: 'composed'`, `meta.pages` = source URLs). After mixing it repairs contrast by moving the foreground's OKLCH lightness (`textPrimary` and `accentForeground` ≥ 4.5, `textSecondary` ≥ 3) and records each change in `meta.warnings`. In the UI, Compose is a mode inside Library, not a tab.
 
@@ -217,6 +217,27 @@ interface ComponentSpec { kind: 'button-primary'|'button-secondary'|'button-ghos
 - `arrangement` / `columns` come from `display:grid` columns or the count of horizontally aligned children.
 - `density` = `sectionPaddingY / baseSize` thresholds (< 4 compact, < 7 comfortable, else airy).
 
+### 5.1 Phase 5 additions
+
+**Components and states.** The sampler (`sampler/components.ts`) finds buttons, inputs, nav links, card-like boxes and badges, groups instances by a style signature (fill, border, radius, font) and keeps up to three representatives of the dominant group per kind. Buttons split into `button-primary` (the most common, most colorful filled group; on monochrome sites the most contrasting), `button-secondary` (outlined, else the next filled group) and `button-ghost`. Colors are resolved through a 1×1 canvas so any CSS color syntax works. States are **read, not simulated** (`sampler/states.ts`): the CSSOM walk (plus the cross-origin text the background fetches, parsed by a small rule scanner) collects rules naming `:hover`, `:focus`/`:focus-visible`, `:active` and `:disabled`/`[disabled]`; the state is stripped from each selector and the rest is tested with `element.matches()`. Matching rules apply in specificity/source order, only visual properties are kept, and `var()` is resolved against the element's computed custom properties. `@media` blocks count only when they match the current viewport. `core/extract/components.ts` takes the per-property mode over the representatives, normalises colors to hex and drops state values equal to the base. The result is `scan.components`. Generators use it for "Component rules" (prompt) and the Components table (DESIGN.md) and fall back to the derived rules per kind.
+
+**Mobile (`variants.mobile`).** No `debugger`: the side panel opens a temporary `chrome.windows.create({ type: 'popup', width: 390, height: 844, focused: false })`, waits for load plus a 1.5 s settle, runs the sampler with `skipComponents`, extracts with `core.extractMobile` (layout/blueprint, container, gutter, density, type sizes and section padding that differ, and whether the top bar shows a menu button) and closes the window. Browsers enforce a minimum popup width, so the real width is stored in `viewportWidth`.
+
+**Dark / light capture (`variants.dark|light`, `measured: true`).** The sampler first reads the page's CSSOM for theme switches (`.dark`, `.theme-dark`, `[data-theme=dark]`, `[data-mode=…]`, …; escaped utility classes like `.dark\:bg-x` do not count). If one exists, the scan flow re-samples with that class/attribute set on `<html>` (the other scheme's switch removed, transitions frozen) and restores it afterwards. No permission is needed. Only when the page merely has `@media (prefers-color-scheme)` rules is the user offered "capture", which requests the **optional** `debugger` permission, attaches, sends `Emulation.setEmulatedMedia` with `prefers-color-scheme`, re-samples colors, restores and detaches (Chrome shows its "debugging this browser" bar meanwhile). A result is accepted only if it is really in the other scheme and its background differs by ΔE ≥ 8. Palette ids are prefixed `dark-`/`light-`. A measured variant replaces the derived one everywhere (Palette toggle label, Generate checkbox, prompt/DESIGN.md wording).
+
+**Accessibility (`core/a11y`).** `computeA11y(colors)` runs at extract time: `textPrimary`, `textSecondary`, `textMuted` and `link` on `background` and `surface`, `accentForeground` on `accent` (4.5:1, large-text 3:1) and `border` on `background` (UI component, 3:1). Failing pairs get `fix` = `ensureContrast` (OKLCH lightness shift) to the required ratio. Inspect shows the summary ("9 of 11 pairs pass AA") and failing pairs with a before/after swatch; DESIGN.md has the table; the prompt adds one "adjusted colors for AA" line for failing text roles.
+
+**Multi-page merge (`core/extract/merge.ts`).** `mergeScans(scans)` re-clusters colors from the summed usage weights (a scan that already merges n pages counts n times), maps each role to the hex most pages agree on, keeps the heavier type style per role, uses weighted modes/medians for spacing, radii and layout, unions shadows and borders by weight, keeps the first page's blueprint, components and variants, and lists every URL in `meta.pages`. The merged scan keeps the first scan's id, so the Library entry is replaced, not duplicated. Output is deterministic.
+
+### 5.2 Fidelity check (`core/diff`)
+`diffScans(source, build) → { score, facets, deltas }`. Facet weights: colors 30, type 25, spacing 15, shape 15, layout 15; the score is the weighted mean, and a scan against itself scores 100.
+- **Colors:** per role present in the source, ΔE2000 → score (≤ 1 → 100, ≥ 20 → 0, linear between); a role missing in the build scores 0. Roles are weighted (background, text, accent highest).
+- **Type:** body, h1 (largest of display/h1), h2, h3: size (relative error, 0 at 50%), weight, line height (50/25/25), plus heading and body family. Families match on normalised names, on the first family of the stack, or on the free alternative the prompt recommended (`generate/fonts.ts`).
+- **Spacing:** base unit (equal, or a multiple), section padding (±15%), content gap (±25%).
+- **Shape:** button, card and input radius (within 2px; two pill-button scans match), shadow level overlap and count, border width.
+- **Layout:** container width (±5%), section-kind sequence similarity (LCS ratio over the blueprint), density.
+Deltas carry `facet, item, expected, actual, severity, hint`; severity comes from the item score (lowered for low-weight items) and they are sorted by severity, then by points lost. `generateFixPrompt(report, source)` turns the top 12 into a numbered "change X to Y" prompt ("Your build scores 82/100 … Don't change anything else."), sanitised like the main prompt. The UI (Generate → "Built it? Check your build") scans the active tab with `scanTab(tabId, { save: false })`, so builds never enter the Library; Library's card menu "Check a build against this" opens the scan and scrolls to that card. Same URL as the target → "Switch to the tab with your build."
+
 **Performance budget:** sampling < 300 ms, extraction < 200 ms in the side panel, total scan < 1 s on typical pages, excluding the screenshot.
 
 ---
@@ -226,7 +247,7 @@ Each generator is a pure function `(scan: DesignScan, opts) → { filename, mime
 
 | Generator | Output | Notes |
 |---|---|---|
-| `prompt` | Agent prompt (≈ 800–1500 tokens) | Sections: goal, visual direction, color roles (hex), type scale, spacing/radii, layout blueprint, component rules, do/don't, "use exact values". **Targets:** `generic`, `claude-code`, `cursor`, `v0`, `lovable` (wording plus stack hints, e.g. Next.js + Tailwind) |
+| `prompt` | Agent prompt (≈ 800–1500 tokens) | Sections: goal, visual direction, color roles (hex), type scale, spacing/radii, layout blueprint, on mobile (when captured), component rules (measured with states when available), do/don't, "use exact values". **Targets:** `generic`, `claude-code`, `cursor`, `v0`, `lovable` (wording plus stack hints, e.g. Next.js + Tailwind) |
 | `designmd` | `DESIGN.md` | Full reference with tables, more detail than the prompt |
 | `tailwind` | Tailwind v4 `@theme { --color-* --font-* --radius-* --spacing }` CSS | Plus a v3 `tailwind.config.js` option |
 | `cssvars` | `:root { … }` + `[data-theme=dark]` | |
@@ -278,7 +299,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 
 | Message | From → To | Payload → Response |
 |---|---|---|
-| `scan.run` | sidepanel → background | `{ tabId, opts }` → `{ raw: RawPage, screenshot: string }` |
+| `scan.run` | sidepanel → background | `{ tabId, opts? }` → `{ raw: RawPage, screenshot: string }`. `opts`: `theme` (toggle the page's own class/attribute switch), `emulate` (debugger color-scheme emulation), `colorsOnly`, `skipComponents`, `noScreenshot`. The options are handed to the sampler through `globalThis.__specimenOpts` in the same isolated world just before injection |
 | `css.fetch` | content → background | `{ urls[] }` → `{ texts[] }` |
 | `overlay.set` | sidepanel → background → content | `{ grid?: boolean; inspector?: boolean; highlight?: { tokenId, selectorHints } }` |
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
@@ -305,6 +326,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 ```jsonc
 {
   "permissions": ["activeTab", "scripting", "sidePanel", "storage", "offscreen", "unlimitedStorage"],
+  "optional_permissions": ["debugger"],          // requested only when the user turns on dark-mode capture that needs emulation
   "optional_host_permissions": ["<all_urls>"],   // only to fetch cross-origin CSS / BYOK endpoints, on request (each provider origin is requested via chrome.permissions.request when the user saves a key)
   "side_panel": { "default_path": "sidepanel.html" },
   "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
