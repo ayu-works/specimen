@@ -6,14 +6,14 @@ Open-source (MIT) Chrome MV3 extension that measures a website's design system (
 - Repo: https://github.com/ayu-works/specimen (public). "Specimen" is a working name.
 
 ## Workflow (mandatory)
-Each phase in IMPLEMENTATION.md runs this loop. Do not start phase N+1 until phase N's gate passes.
+Each phase in IMPLEMENTATION.md runs this loop. Don't start phase N+1 until phase N is merged.
 
 1. **Branch**: `phase-<n>-<slug>` from `main`.
 2. **Build the whole phase, code only**: a single Sonnet subagent (`Agent` with `model: "sonnet"`, run in the background) implements **every** task of the phase. It writes **no tests** and runs **no tests**; at most one `pnpm typecheck && pnpm lint` at the end so the code compiles. Subagents **do not commit or push**.
-3. **Review**: only once everything in the phase is implemented, Opus (the main session) reads the whole phase's code against ARCHITECTURE.md, the security rules below and the task ACs. Fixes go back to Sonnet in one batch.
-4. **Test**: after the review, a Sonnet subagent writes the phase's tests from `docs/TESTING.md` (IDs in the test names, e.g. `it('T1.09 accent within ΔE<3', …)`), then `pnpm gate` runs once (typecheck + lint + unit + build + e2e + test-ID check). Failures → one fix batch → re-run. Report actual output, never a summary of what "should" pass.
-5. **Gate**: every automated test ID for the phase must exist and pass.
-6. **Ship**: Opus commits, pushes, and opens a PR with `gh`. The user merges. Tick the phase in IMPLEMENTATION.md.
+3. **Review**: only once everything in the phase is implemented, Opus (the main session) reads the whole phase's code against ARCHITECTURE.md, the security rules below and the task ACs. Opus applies small, targeted fixes itself (faster than a new agent brief). Only large fix sets go back to Sonnet.
+4. **Lint**: `pnpm lint` must be clean. **Automated tests are deferred to the end of the whole product build** (user decision, 2026-10-09). Each phase's tests from `docs/TESTING.md` are written in a final testing pass, and then `pnpm gate` runs for all phases. Until then, the user tests by hand with `pnpm -F @specimen/extension try <url>`, and CI may be red.
+5. **Final testing pass** (after Phase 7): write the missing tests, run `pnpm gate` for every phase, fix failures in batches, and report the real output.
+6. **Ship**: Opus commits, pushes, and opens a PR with `gh`; it's merged when the user says so. Tick the phase in IMPLEMENTATION.md.
 
 Opus does planning, architecture and review. Sonnet does all implementation.
 
