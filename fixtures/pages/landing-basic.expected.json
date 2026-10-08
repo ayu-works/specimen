@@ -1,0 +1,62 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "colors": {
+    "background": "#ffffff",
+    "surface": "#f6f7f9",
+    "textPrimary": "#111827",
+    "textSecondary": "#6b7280",
+    "accent": "#5e6ad2",
+    "accentForeground": "#ffffff",
+    "border": "#e5e7eb"
+  },
+  "cssVars": {
+    "--brand": "#5e6ad2"
+  },
+  "typography": {
+    "body": {
+      "size": 16,
+      "weight": 400,
+      "lineHeight": 1.5
+    },
+    "h1": {
+      "size": 56,
+      "weight": 700
+    },
+    "h2": {
+      "size": 36,
+      "weight": 700
+    },
+    "h3": {
+      "size": 20,
+      "weight": 600
+    },
+    "displayFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "bodyFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "scaleRatio": null
+  },
+  "spacing": {
+    "baseUnit": 8,
+    "sectionPaddingY": 96
+  },
+  "radii": {
+    "button": 8,
+    "card": 16,
+    "input": 8,
+    "pillButtons": false
+  },
+  "layout": {
+    "containerMaxWidth": 1200,
+    "breakpoints": [640, 768, 1024, 1280],
+    "sectionKinds": ["nav", "hero", "logos", "features", "pricing", "faq", "cta", "footer"],
+    "density": "comfortable"
+  }
+}

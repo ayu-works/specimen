@@ -1,0 +1,60 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "colors": {
+    "background": "#f5f6f8",
+    "surface": "#ffffff",
+    "textPrimary": "#172b4d",
+    "textSecondary": "#5e6c84",
+    "accent": "#0052cc",
+    "accentForeground": "#ffffff",
+    "border": "#dfe1e6"
+  },
+  "typography": {
+    "body": {
+      "size": 14,
+      "weight": 400,
+      "lineHeight": 1.5
+    },
+    "h1": {
+      "size": 22,
+      "weight": 600
+    },
+    "h2": {
+      "size": 18,
+      "weight": 600
+    },
+    "h3": {
+      "size": 15,
+      "weight": 600
+    },
+    "displayFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "bodyFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "scaleRatio": null,
+    "scaleSizes": [13, 14, 15, 18, 22]
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "sectionPaddingY": 16
+  },
+  "radii": {
+    "button": 3,
+    "card": 4,
+    "input": 3,
+    "pillButtons": false
+  },
+  "layout": {
+    "containerMaxWidth": null,
+    "breakpoints": [640, 1024],
+    "sectionKinds": ["nav", "stats", "content", "content", "footer"],
+    "density": "compact"
+  }
+}

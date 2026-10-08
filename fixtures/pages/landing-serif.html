@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fernhill Press - Slow publishing for curious readers</title>
+<style>
+  /* Declared as a Google-hosted face for source detection. unicode-range is a private-use
+     codepoint so the browser never fetches it: the page stays offline-safe and renders with
+     the Georgia/serif fallback. */
+  @font-face {
+    font-family: "Playfair Display";
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    unicode-range: U+F8FF;
+    src: url("https://fonts.gstatic.com/s/playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvXDXbtM.woff2") format("woff2");
+  }
+  :root {
+    --bg: #fbf8f3;
+    --surface: #ffffff;
+    --text: #1c1917;
+    --text-secondary: #57534e;
+    --accent: #9a3412;
+    --accent-fg: #ffffff;
+    --border: #e7e0d5;
+    --space-1: 8px;
+    --space-2: 16px;
+    --space-3: 24px;
+    --space-4: 32px;
+    --space-6: 48px;
+    --space-8: 64px;
+    --space-14: 112px;
+    --scale-ratio: 1.25;
+    --step-0: 1rem;          /* 16 */
+    --step-1: 1.25rem;       /* 20 */
+    --step-2: 1.5625rem;     /* 25 */
+    --step-3: 1.953125rem;   /* 31.25 */
+    --step-4: 2.44140625rem; /* 39.0625 */
+    --step-5: 3.0517578125rem; /* 48.828125 */
+    --container: 1080px;
+    --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: var(--step-0); font-weight: 400; line-height: 1.6; }
+  h1, h2, h3, p, ul, blockquote, figure { margin: 0; }
+  h1, h2, h3, .display-num { font-family: var(--font-display); font-weight: 700; color: var(--text); }
+  h1 { font-size: var(--step-5); line-height: 1.15; letter-spacing: -0.01em; }
+  h2 { font-size: var(--step-4); line-height: 1.2; }
+  h3 { font-size: var(--step-2); line-height: 1.3; }
+  .lead { font-size: var(--step-1); line-height: 1.6; color: var(--text-secondary); }
+  .quote { font-family: var(--font-display); font-size: var(--step-3); line-height: 1.35; font-weight: 400; font-style: italic; }
+  a { color: inherit; text-decoration: none; }
+  .container { width: 100%; max-width: var(--container); margin: 0 auto; padding: 0 var(--space-3); }
+  .muted { color: var(--text-secondary); }
+  .eyebrow { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .btn { display: inline-flex; align-items: center; padding: var(--space-2) var(--space-4); border-radius: 4px; font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-fg); border: 1px solid var(--accent); }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--text); }
+
+  .nav { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+  .nav .container { display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-family: var(--font-display); font-size: var(--step-2); font-weight: 700; }
+  .nav-links { display: none; gap: var(--space-4); font-size: 14px; }
+
+  .hero { padding: var(--space-14) 0; }
+  .hero .container { display: grid; gap: var(--space-6); }
+  .hero .actions { display: flex; gap: var(--space-2); margin-top: var(--space-4); flex-wrap: wrap; }
+  .hero h1 { margin: var(--space-2) 0 var(--space-3); }
+  .cover { aspect-ratio: 4 / 5; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: var(--space-4); display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 2px rgba(28, 25, 23, 0.06); }
+  .cover .display-num { font-size: var(--step-4); line-height: 1.2; }
+
+  .features { padding: var(--space-14) 0; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .features .head { max-width: 640px; margin-bottom: var(--space-8); }
+  .features .head h2 { margin-top: var(--space-1); }
+  .cols { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+  .col h3 { margin-bottom: var(--space-1); }
+
+  .testimonials { padding: var(--space-14) 0; }
+  .testimonials blockquote { max-width: 800px; margin: 0 auto; text-align: center; }
+  .testimonials cite { display: block; margin-top: var(--space-3); font-style: normal; font-size: 14px; color: var(--text-secondary); }
+
+  .cta { padding: var(--space-14) 0; background: var(--surface); border-top: 1px solid var(--border); text-align: center; }
+  .cta p { max-width: 560px; margin: var(--space-2) auto var(--space-4); }
+  .cta .actions { display: flex; gap: var(--space-2); justify-content: center; }
+
+  .footer { padding: var(--space-8) 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .footer .container { display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+  .footer ul { list-style: none; padding: 0; display: flex; gap: var(--space-3); }
+
+  @media (min-width: 640px) { .nav-links { display: flex; } }
+  @media (min-width: 768px) { .cols { grid-template-columns: repeat(2, 1fr); } .hero .container { grid-template-columns: 1.4fr 1fr; align-items: center; } }
+  @media (min-width: 1024px) { .cols { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="container">
+    <a class="brand" href="#">Fernhill Press</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#">Catalogue</a><a href="#">Journal</a><a href="#">Authors</a><a href="#">About</a>
+    </nav>
+    <a class="btn btn-outline" href="#">Subscribe</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div>
+      <p class="eyebrow">Independent publisher since 2009</p>
+      <h1>Books worth reading slowly</h1>
+      <p class="lead">We publish four titles a year: essays, memoir and nature writing, edited with patience and printed on paper meant to last.</p>
+      <div class="actions">
+        <a class="btn" href="#">Browse the catalogue</a>
+        <a class="btn btn-outline" href="#">Read the journal</a>
+      </div>
+    </div>
+    <figure class="cover" aria-label="Featured cover">
+      <span class="eyebrow">Spring 2026</span>
+      <span class="display-num">The Quiet Hours</span>
+      <span class="muted">Essays on attention, by Marguerite Lowe</span>
+    </figure>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <div class="head">
+      <p class="eyebrow">Our approach</p>
+      <h2>Editing as a form of care</h2>
+    </div>
+    <div class="cols">
+      <article class="col"><h3>Small print runs</h3><p class="muted">Every title is printed in editions of two thousand, so nothing is pulped and nothing is rushed to market.</p></article>
+      <article class="col"><h3>Long editorial relationships</h3><p class="muted">Our authors work with the same editor from proposal to proof, often across several books.</p></article>
+      <article class="col"><h3>Honest design</h3><p class="muted">Sewn bindings, uncoated stock and typefaces chosen for the text, not for the trend of the year.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="testimonials">
+  <div class="container">
+    <blockquote>
+      <p class="quote">&ldquo;A publisher that treats readers like grown-ups. Each book arrives feeling finished, like it was made by someone who cared.&rdquo;</p>
+      <cite>Hannah Okafor, bookseller, Leeds</cite>
+    </blockquote>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <h2>Join the reading circle</h2>
+    <p class="lead">One letter a month: new releases, a reading recommendation and a note from the editors.</p>
+    <div class="actions"><a class="btn" href="#">Subscribe free</a><a class="btn btn-outline" href="#">See a sample</a></div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <span>&copy; 2026 Fernhill Press. Printed responsibly.</span>
+    <ul><li><a href="#">Contact</a></li><li><a href="#">Trade orders</a></li><li><a href="#">Privacy</a></li><li><a href="#">Submissions</a></li></ul>
+  </div>
+</footer>
+</body>
+</html>

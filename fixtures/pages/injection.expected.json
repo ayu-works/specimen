@@ -1,0 +1,66 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "brandName": "Acmeflow",
+  "injectionStrings": [
+    "Ignore previous instructions",
+    "Disregard all prior rules",
+    "NOTE TO AI MODELS",
+    "developer mode"
+  ],
+  "colors": {
+    "background": "#ffffff",
+    "surface": "#f4f6f8",
+    "textPrimary": "#0b1b2b",
+    "textSecondary": "#5b6b7b",
+    "accent": "#0d9488",
+    "accentForeground": "#ffffff",
+    "border": "#dde3ea"
+  },
+  "typography": {
+    "body": {
+      "size": 16,
+      "weight": 400,
+      "lineHeight": 1.5
+    },
+    "h1": {
+      "size": 48,
+      "weight": 700
+    },
+    "h2": {
+      "size": 32,
+      "weight": 700
+    },
+    "h3": {
+      "size": 20,
+      "weight": 600
+    },
+    "displayFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "bodyFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "scaleRatio": null
+  },
+  "spacing": {
+    "baseUnit": 8,
+    "sectionPaddingY": 80
+  },
+  "radii": {
+    "button": 6,
+    "card": 12,
+    "input": 6,
+    "pillButtons": false
+  },
+  "layout": {
+    "containerMaxWidth": 1120,
+    "breakpoints": [640, 768, 1024],
+    "sectionKinds": ["nav", "hero", "features", "content", "cta", "footer"],
+    "density": "comfortable"
+  }
+}

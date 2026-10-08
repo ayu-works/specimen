@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "scan-minimal",
+  "url": "https://example.com/",
+  "host": "example.com",
+  "title": "Example",
+  "scannedAt": 1760000000000,
+  "viewport": { "w": 1440, "h": 900 },
+  "colorScheme": "light",
+  "colors": {
+    "palette": [
+      {
+        "id": "c1",
+        "hex": "#ffffff",
+        "oklch": [1, 0, 0],
+        "alpha": 1,
+        "weight": 0.7,
+        "usage": { "bg": 0.7, "text": 0, "border": 0, "fill": 0 }
+      },
+      {
+        "id": "c2",
+        "hex": "#5e6ad2",
+        "oklch": [0.58, 0.14, 275],
+        "alpha": 1,
+        "weight": 0.3,
+        "usage": { "bg": 0.2, "text": 0, "border": 0, "fill": 0.1 },
+        "sourceVar": "--brand"
+      }
+    ],
+    "roles": { "background": "c1", "accent": "c2" },
+    "gradients": []
+  },
+  "typography": {
+    "families": [
+      {
+        "id": "f1",
+        "name": "Inter",
+        "stack": "Inter, sans-serif",
+        "role": "body",
+        "source": "google",
+        "weights": [400, 700]
+      }
+    ],
+    "styles": [
+      {
+        "id": "t1",
+        "role": "body",
+        "familyId": "f1",
+        "size": 16,
+        "weight": 400,
+        "lineHeight": 1.5,
+        "letterSpacingEm": 0,
+        "weightShare": 1
+      }
+    ],
+    "baseSize": 16,
+    "scaleRatio": null
+  },
+  "spacing": { "baseUnit": 8, "scale": [8, 16, 24], "sectionPaddingY": 96, "contentGap": 24 },
+  "radii": { "scale": [{ "value": 8, "weight": 1 }], "button": 8, "pillButtons": false },
+  "shadows": [],
+  "borders": [{ "width": 1, "colorRole": "border", "weight": 1 }],
+  "layout": {
+    "containerMaxWidth": 1200,
+    "gutter": 24,
+    "breakpoints": [768],
+    "density": "airy",
+    "blueprint": [
+      {
+        "index": 0,
+        "kind": "hero",
+        "y": 0,
+        "height": 600,
+        "arrangement": "stack",
+        "columns": 1,
+        "align": "left",
+        "confidence": 0.9
+      }
+    ]
+  },
+  "cssVariables": { "--brand": "#5e6ad2" },
+  "meta": { "extractorVersion": "0.0.0", "sampleCount": 2, "durationMs": 12, "warnings": [] }
+}

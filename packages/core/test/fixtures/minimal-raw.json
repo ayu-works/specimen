@@ -1,0 +1,37 @@
+{
+  "url": "https://example.com/",
+  "title": "Example",
+  "scannedAt": 1760000000000,
+  "viewport": { "w": 1440, "h": 900, "dpr": 2 },
+  "doc": { "w": 1440, "h": 2400 },
+  "colorScheme": "light",
+  "rootVars": { "--brand": "#5e6ad2" },
+  "mediaQueries": ["(min-width: 768px)"],
+  "fontFaces": [
+    { "family": "Inter", "src": "https://fonts.gstatic.com/s/inter/v1/a.woff2", "weight": "400" }
+  ],
+  "loadedFonts": ["Inter"],
+  "samples": [
+    {
+      "i": 0,
+      "tag": "h1",
+      "depth": 3,
+      "rect": [120, 160, 720, 64],
+      "text": { "len": 24, "snippet": "Build faster" },
+      "heading": 1,
+      "section": 0,
+      "s": { "color": "rgb(17, 17, 17)", "fontSize": "56px", "fontWeight": "700" }
+    },
+    {
+      "i": 1,
+      "tag": "a",
+      "depth": 4,
+      "rect": [120, 260, 160, 48],
+      "interactive": "link",
+      "section": 0,
+      "s": { "backgroundColor": "rgb(94, 106, 210)", "borderRadius": "8px" }
+    }
+  ],
+  "sections": [{ "index": 0, "rect": [0, 0, 1440, 600], "tag": "section", "childCount": 2 }],
+  "warnings": []
+}

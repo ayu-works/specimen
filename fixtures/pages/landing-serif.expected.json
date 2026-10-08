@@ -1,0 +1,59 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "colors": {
+    "background": "#fbf8f3",
+    "surface": "#ffffff",
+    "textPrimary": "#1c1917",
+    "textSecondary": "#57534e",
+    "accent": "#9a3412",
+    "accentForeground": "#ffffff",
+    "border": "#e7e0d5"
+  },
+  "typography": {
+    "body": {
+      "size": 16,
+      "weight": 400,
+      "lineHeight": 1.6
+    },
+    "h1": {
+      "size": 48.83,
+      "weight": 700
+    },
+    "h2": {
+      "size": 39.06,
+      "weight": 700
+    },
+    "h3": {
+      "size": 25,
+      "weight": 700
+    },
+    "displayFamily": {
+      "name": "Playfair Display",
+      "source": "google"
+    },
+    "bodyFamily": {
+      "name": "system-ui",
+      "source": "system"
+    },
+    "scaleRatio": 1.25,
+    "scaleSizes": [16, 20, 25, 31.25, 39.06, 48.83]
+  },
+  "spacing": {
+    "baseUnit": 8,
+    "sectionPaddingY": 112
+  },
+  "radii": {
+    "button": 4,
+    "card": 4,
+    "pillButtons": false
+  },
+  "layout": {
+    "containerMaxWidth": 1080,
+    "breakpoints": [640, 768, 1024],
+    "sectionKinds": ["nav", "hero", "features", "testimonials", "cta", "footer"],
+    "density": "airy"
+  }
+}
