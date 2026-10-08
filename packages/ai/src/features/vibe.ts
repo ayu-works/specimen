@@ -10,12 +10,23 @@ export const VibeSchema = z.object({
 });
 export type Vibe = z.infer<typeof VibeSchema>;
 
-const SYSTEM = [
+const SYSTEM_IMAGE = [
   'You describe the visual feel of a website screenshot for a designer.',
   'Reply with a single JSON object: {"summary": string, "keywords": string[]}.',
   '"summary" is one or two sentences on mood, density and style (no brand names, no readable text from the page). "keywords" is 3 to 6 short adjectives.',
   PAGE_DATA_RULE,
 ].join('\n');
+
+const SYSTEM_TEXT = [
+  'You describe the visual feel of a website for a designer, using only its measured design values (colors, type scale, spacing, radii, layout).',
+  'Reply with a single JSON object: {"summary": string, "keywords": string[]}.',
+  '"summary" is one or two sentences on mood, density and style (no brand names). "keywords" is 3 to 6 short adjectives.',
+  PAGE_DATA_RULE,
+].join('\n');
+
+/** Providers phrase "this model can't take images" differently; treat these 400s as that. */
+const IMAGE_REJECTED =
+  /content must be a string|image|vision|multimodal|multi-modal|image_url|unsupported content/i;
 
 function extractJson(text: string): unknown {
   const start = text.indexOf('{');
@@ -28,47 +39,60 @@ function extractJson(text: string): unknown {
   }
 }
 
-/** Vision providers only. Falls back to the raw text as the summary when JSON is malformed. */
+/**
+ * Describe the page's vibe. With a vision model and a screenshot, the model looks at the page;
+ * otherwise (or if the provider rejects the image) it works from the measured values alone, so
+ * text-only models such as local Gemma still get a useful description.
+ */
 export async function vibe(
   provider: LLMProvider,
   scan: DesignScan,
-  screenshotDataUrl: string,
+  screenshotDataUrl: string | null | undefined,
   signal?: AbortSignal,
-): Promise<Vibe & { model: string }> {
-  if (!provider.capabilities.vision) {
-    throw new ProviderError(
-      'unsupported',
-      'This model cannot look at images. Choose a vision model.',
+): Promise<Vibe & { model: string; usedImage: boolean }> {
+  const data = wrapPageData(compactScan(scan), pageDataBudget(provider.capabilities.contextTokens));
+  const run = (withImage: boolean) =>
+    collect(
+      provider,
+      scan,
+      {
+        system: withImage ? SYSTEM_IMAGE : SYSTEM_TEXT,
+        json: true,
+        temperature: 0.4,
+        maxTokens: 300,
+        messages: [
+          {
+            role: 'user',
+            content:
+              withImage && screenshotDataUrl
+                ? [
+                    { type: 'text', text: 'Describe the vibe of this page.' },
+                    { type: 'text', text: data },
+                    { type: 'image', dataUrl: screenshotDataUrl },
+                  ]
+                : `Describe the vibe of this page from its measured design values.\n${data}`,
+          },
+        ],
+      },
+      undefined,
+      signal,
     );
+
+  let usedImage = provider.capabilities.vision && !!screenshotDataUrl;
+  let raw: string;
+  try {
+    raw = await run(usedImage);
+  } catch (e) {
+    const rejected =
+      usedImage &&
+      e instanceof ProviderError &&
+      e.kind === 'other' &&
+      IMAGE_REJECTED.test(e.message);
+    if (!rejected) throw e;
+    usedImage = false;
+    raw = await run(false);
   }
-  const raw = await collect(
-    provider,
-    scan,
-    {
-      system: SYSTEM,
-      json: true,
-      temperature: 0.4,
-      maxTokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Describe the vibe of this page.' },
-            {
-              type: 'text',
-              text: wrapPageData(
-                compactScan(scan),
-                pageDataBudget(provider.capabilities.contextTokens),
-              ),
-            },
-            { type: 'image', dataUrl: screenshotDataUrl },
-          ],
-        },
-      ],
-    },
-    undefined,
-    signal,
-  );
+
   const parsed = VibeSchema.safeParse(extractJson(raw));
   const result: Vibe = parsed.success
     ? parsed.data
@@ -81,5 +105,6 @@ export async function vibe(
       .filter(Boolean)
       .slice(0, 8),
     model: provider.id,
+    usedImage,
   };
 }
