@@ -9,6 +9,14 @@ import { generateShadcn } from './shadcn';
 import { generateTailwindV3, generateTailwindV4 } from './tailwind';
 
 export type { GeneratedFile } from './common';
+export {
+  cssRadius,
+  familyByRole,
+  firstHex,
+  levelShadows,
+  primaryRadius,
+  roleColors,
+} from './common';
 export { generateCssVars } from './cssvars';
 export { generateDesignMd } from './designmd';
 export { generateDtcg } from './dtcg';

@@ -1,29 +1,9 @@
-import { extract } from '@specimen/core';
 import { ScanLine } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { send } from '@/lib/messaging';
+import { ensureSiteAccess, friendlyScanError, scanTab } from '@/lib/scanFlow';
 import { useStore } from '../store';
-
-function friendly(msg: string): string {
-  if (/Unsupported page|chrome:\/\/|chrome-extension:\/\/|extensions gallery|webstore/i.test(msg))
-    return "Can't scan chrome:// pages or the Chrome Web Store. Open a regular website and try again.";
-  if (/No active tab/.test(msg)) return 'No active tab to scan.';
-  if (/declined/.test(msg))
-    return 'Specimen needs permission to read the page you scan. Click Scan again and choose Allow.';
-  return `Scan failed: ${msg}`;
-}
-
-/**
- * Opening the side panel from the toolbar does not grant `activeTab`, so the first scan asks
- * for the optional site access declared in the manifest. Must run inside the click gesture.
- */
-async function ensureSiteAccess(): Promise<void> {
-  const origins = ['<all_urls>'];
-  if (await chrome.permissions.contains({ origins })) return;
-  if (!(await chrome.permissions.request({ origins }))) throw new Error('Site access declined');
-}
 
 export function Scan() {
   const { scan, screenshot, favicon, status, error, start, succeed, fail, setTab } = useStore();
@@ -35,10 +15,10 @@ export function Scan() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id === undefined) throw new Error('No active tab');
       if (tab.url && !/^https?:/.test(tab.url)) throw new Error(`Unsupported page: ${tab.url}`);
-      const res = await send('scan.run', { tabId: tab.id });
-      succeed(extract(res.raw), res.screenshot, tab.favIconUrl ?? null);
+      const res = await scanTab(tab.id);
+      succeed(res.scan, res.screenshot, tab.favIconUrl ?? null);
     } catch (e) {
-      fail(friendly(e instanceof Error ? e.message : String(e)));
+      fail(friendlyScanError(e instanceof Error ? e.message : String(e)));
     }
   }
 

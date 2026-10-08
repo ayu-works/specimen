@@ -9,6 +9,7 @@ import {
   goal,
   layout,
   spacingShape,
+  themeTokens,
   typography,
 } from './sections';
 import { PROMPT_TARGETS, type PromptTarget, targetSection } from './targets';
@@ -26,13 +27,16 @@ export function generatePrompt(scan: DesignScan, opts: PromptOptions = {}): Gene
     goal(),
     direction(scan),
     colorTokens(scan),
+    themeTokens(scan),
     typography(scan),
     spacingShape(scan),
     layout(scan),
     componentRules(scan),
     doDont(),
     targetSection(target, scan),
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   return {
     filename: 'specimen-prompt.md',
     mime: 'text/markdown',

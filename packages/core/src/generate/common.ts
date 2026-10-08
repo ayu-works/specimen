@@ -82,6 +82,16 @@ export function roleColors(scan: DesignScan, colors: Partial<Colors> = scan.colo
   return out;
 }
 
+/** The captured/derived opposite-scheme colors, if the scan carries any. */
+export function themeVariant(
+  scan: DesignScan,
+): { scheme: 'dark' | 'light'; colors: Partial<Colors> } | undefined {
+  const v = scan.variants;
+  if (v?.dark?.roles) return { scheme: 'dark', colors: v.dark };
+  if (v?.light?.roles) return { scheme: 'light', colors: v.light };
+  return undefined;
+}
+
 export function roleHex(scan: DesignScan, role: ColorRole): string | undefined {
   const id = scan.colors.roles[role];
   return id ? scan.colors.palette.find((t) => t.id === id)?.hex : undefined;

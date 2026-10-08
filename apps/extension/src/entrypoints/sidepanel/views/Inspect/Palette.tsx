@@ -1,7 +1,10 @@
+import { counterpartColors, counterpartKey, detectScheme } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
+import { useMemo, useState } from 'react';
 import { toast } from '@/components/toast';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Tooltip } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 export function copyHex(hex: string) {
   navigator.clipboard
@@ -11,19 +14,59 @@ export function copyHex(hex: string) {
 }
 
 export function Palette({ scan }: { scan: DesignScan }) {
-  const { palette, roles } = scan.colors;
+  const [alt, setAlt] = useState(false);
+  const counterpart = useMemo(() => counterpartColors(scan), [scan]);
+  const { palette, roles } = alt ? counterpart : scan.colors;
+  const baseScheme = detectScheme(scan.colors);
+  const otherScheme = counterpartKey(scan);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const byId = new Map(palette.map((t) => [t.id, t]));
   const roleEntries = Object.entries(roles).flatMap(([role, id]) => {
     const t = id ? byId.get(id) : undefined;
     return t ? [{ role, token: t }] : [];
   });
   const roleIds = new Set(roleEntries.map((r) => r.token.id));
-  const rest = palette.filter((t) => !roleIds.has(t.id));
+  const rest = alt ? [] : palette.filter((t) => !roleIds.has(t.id));
   const max = Math.max(...palette.map((t) => t.weight), 0.0001);
 
   return (
     <Card>
-      <CardTitle>Palette</CardTitle>
+      <div className="mb-2 flex items-center justify-between">
+        <CardTitle className="mb-0">Palette</CardTitle>
+        <fieldset
+          aria-label="Theme preview"
+          className="m-0 flex min-w-0 gap-0.5 rounded-md border-0 bg-muted p-0.5"
+        >
+          {(baseScheme === 'light'
+            ? [
+                { id: false, name: baseScheme },
+                { id: true, name: otherScheme },
+              ]
+            : [
+                { id: true, name: otherScheme },
+                { id: false, name: baseScheme },
+              ]
+          ).map((o) => (
+            <button
+              key={o.name}
+              type="button"
+              aria-pressed={alt === o.id}
+              onClick={() => setAlt(o.id)}
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                alt === o.id ? 'bg-background shadow-sm' : 'text-muted-foreground',
+              )}
+            >
+              {cap(o.name)}
+            </button>
+          ))}
+        </fieldset>
+      </div>
+      {alt && (
+        <p className="mb-2 text-[10px] text-muted-foreground">
+          Derived {otherScheme} counterpart (not measured from the site).
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-1.5">
         {roleEntries.map(({ role, token }) => (
           <button
@@ -58,11 +101,13 @@ export function Palette({ scan }: { scan: DesignScan }) {
           ))}
         </div>
       )}
-      <div className="mt-3 flex h-2 overflow-hidden rounded">
-        {palette.map((t) => (
-          <div key={t.id} style={{ background: t.hex, flexGrow: t.weight / max }} />
-        ))}
-      </div>
+      {!alt && (
+        <div className="mt-3 flex h-2 overflow-hidden rounded">
+          {palette.map((t) => (
+            <div key={t.id} style={{ background: t.hex, flexGrow: t.weight / max }} />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

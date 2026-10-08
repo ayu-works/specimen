@@ -1,6 +1,6 @@
 import { toOklch } from '../color';
 import type { DesignScan } from '../schema';
-import { firstHex, type GeneratedFile, oklchCss, primaryRadius, rem } from './common';
+import { firstHex, type GeneratedFile, oklchCss, primaryRadius, rem, themeVariant } from './common';
 
 const DEFAULT_DANGER = '#ef4444';
 
@@ -10,8 +10,7 @@ function ok(hex: string): string {
   return oklchCss(l, c, h, alpha);
 }
 
-/** shadcn/ui theme variables in oklch (roles mapped onto shadcn names). */
-export function generateShadcn(scan: DesignScan): GeneratedFile {
+function shadcnVars(scan: DesignScan): [string, string][] {
   const bg = firstHex(scan, 'background') ?? '#ffffff';
   const text = firstHex(scan, 'textPrimary') ?? '#111111';
   const surface = firstHex(scan, 'surface', 'surfaceAlt') ?? bg;
@@ -22,7 +21,7 @@ export function generateShadcn(scan: DesignScan): GeneratedFile {
   const muted = firstHex(scan, 'surface', 'surfaceAlt') ?? bg;
   const mutedFg = firstHex(scan, 'textMuted', 'textSecondary') ?? text;
   const border = firstHex(scan, 'border', 'surfaceAlt') ?? muted;
-  const vars: [string, string][] = [
+  return [
     ['background', bg],
     ['foreground', text],
     ['card', surface],
@@ -42,8 +41,20 @@ export function generateShadcn(scan: DesignScan): GeneratedFile {
     ['input', border],
     ['ring', accent],
   ];
+}
+
+/** shadcn/ui theme variables in oklch (roles mapped onto shadcn names; `.dark`/`.light` for a counterpart theme). */
+export function generateShadcn(scan: DesignScan): GeneratedFile {
+  const vars = shadcnVars(scan);
   const lines = [':root {', ...vars.map(([k, v]) => `  --${k}: ${ok(v)};`)];
   const r = primaryRadius(scan);
   lines.push(`  --radius: ${r >= 9999 ? '9999px' : rem(r)};`, '}');
+  const variant = themeVariant(scan);
+  if (variant) {
+    const themed = { ...scan, colors: { ...scan.colors, ...variant.colors } };
+    lines.push('', `.${variant.scheme} {`);
+    for (const [k, v] of shadcnVars(themed)) lines.push(`  --${k}: ${ok(v)};`);
+    lines.push('}');
+  }
   return { filename: 'shadcn-theme.css', mime: 'text/css', content: `${lines.join('\n')}\n` };
 }

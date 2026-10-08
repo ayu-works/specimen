@@ -1,11 +1,14 @@
 import { polishPrompt } from '@specimen/ai';
 import {
+  counterpartKey,
   GENERATORS,
   type GeneratedFile,
   type GeneratorId,
   PROMPT_TARGETS,
   type PromptTarget,
   TARGET_LABELS,
+  withCounterpart,
+  withoutThemeVariants,
 } from '@specimen/core';
 import { Code2, Copy, Download, Heart, Sparkles, Square } from 'lucide-react';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +23,7 @@ import { useStore } from '../store';
 
 const KEY_FORMAT = 'settings.lastFormat';
 const KEY_TARGET = 'settings.promptTarget';
+const KEY_THEME = 'settings.includeCounterpart';
 const DEFAULT_FORMAT = 'prompt';
 const DEFAULT_TARGET: PromptTarget = 'claude-code';
 
@@ -33,18 +37,22 @@ type FormatId = (typeof FORMATS)[number]['id'];
 /** Target order in the logo row; `generic` last as the catch-all. */
 const TARGET_ORDER: PromptTarget[] = ['claude-code', 'cursor', 'v0', 'lovable', 'generic'];
 
-async function loadSettings(): Promise<{ format?: FormatId; target?: PromptTarget }> {
+async function loadSettings(): Promise<{
+  format?: FormatId;
+  target?: PromptTarget;
+  theme?: boolean;
+}> {
   try {
-    const got = await chrome.storage.local.get([KEY_FORMAT, KEY_TARGET]);
+    const got = await chrome.storage.local.get([KEY_FORMAT, KEY_TARGET, KEY_THEME]);
     const format = FORMATS.find((f) => f.id === got[KEY_FORMAT])?.id;
     const target = PROMPT_TARGETS.find((t) => t === got[KEY_TARGET]);
-    return { format, target };
+    return { format, target, theme: got[KEY_THEME] === true };
   } catch {
     return {};
   }
 }
 
-async function saveSetting(key: string, value: string): Promise<void> {
+async function saveSetting(key: string, value: string | boolean): Promise<void> {
   try {
     await chrome.storage.local.set({ [key]: value });
   } catch {
@@ -172,13 +180,14 @@ export function Generate() {
   const { scan, setTab } = useStore();
   const [format, setFormat] = useState<FormatId>(DEFAULT_FORMAT);
   const [target, setTarget] = useState<PromptTarget>(DEFAULT_TARGET);
+  const [theme, setTheme] = useState(false);
   const ai = useAiContext();
   // An AI-polished prompt replaces the deterministic one until the scan, target or vibe changes.
   const [polished, setPolished] = useState<{ key: string; text: string } | null>(null);
   const [polishing, setPolishing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const polishCtl = useRef<AbortController | null>(null);
-  const polishKey = `${scan?.id}|${target}|${scan?.vibe?.summary ?? ''}`;
+  const polishKey = `${scan?.id}|${target}|${theme}|${scan?.vibe?.summary ?? ''}`;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the inputs change
   useEffect(() => {
@@ -193,6 +202,7 @@ export function Generate() {
       if (!live) return;
       if (s.format) setFormat(s.format);
       if (s.target) setTarget(s.target);
+      if (s.theme) setTheme(true);
     });
     return () => {
       live = false;
@@ -204,11 +214,12 @@ export function Generate() {
     const gen = GENERATORS.find((g) => g.id === format) ?? GENERATORS[0];
     if (!gen) return null;
     try {
-      return { file: gen.run(scan, { target }), error: null };
+      const input = theme ? withCounterpart(scan) : withoutThemeVariants(scan);
+      return { file: gen.run(input, { target }), error: null };
     } catch (e) {
       return { file: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [scan, format, target]);
+  }, [scan, format, target, theme]);
 
   if (!scan) {
     return (
@@ -227,6 +238,10 @@ export function Generate() {
   function pickFormat(id: FormatId) {
     setFormat(id);
     void saveSetting(KEY_FORMAT, id);
+  }
+  function pickTheme(on: boolean) {
+    setTheme(on);
+    void saveSetting(KEY_THEME, on);
   }
   function pickTarget(t: PromptTarget) {
     setTarget(t);
@@ -289,6 +304,15 @@ export function Generate() {
       <Card className="flex flex-col gap-2.5">
         <Segmented value={format} onChange={pickFormat} />
         {format === 'prompt' && <TargetLogos value={target} onChange={pickTarget} />}
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={theme}
+            onChange={(e) => pickTheme(e.target.checked)}
+            className="size-3.5 accent-foreground"
+          />
+          Include {counterpartKey(scan)} theme
+        </label>
       </Card>
 
       <Card className="flex flex-col gap-2.5">

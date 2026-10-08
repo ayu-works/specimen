@@ -12,6 +12,7 @@ import {
   radiusText,
   roleColors,
   table,
+  themeVariant,
 } from './common';
 import { visualDirection } from './direction';
 import { type FontInfo, fontPhrase, fontSet } from './fonts';
@@ -19,8 +20,12 @@ import { brandTokens, containsBrand, sanitize } from './sanitize';
 
 const pct = (w: number) => `${fmt(w * 100, 1)}%`;
 
-function hexToOk(hex: string, scan: DesignScan): string {
-  const t = scan.colors.palette.find((p) => p.hex === hex);
+function hexToOk(
+  hex: string,
+  scan: DesignScan,
+  colors: { palette?: DesignScan['colors']['palette'] } = scan.colors,
+): string {
+  const t = (colors.palette ?? scan.colors.palette).find((p) => p.hex === hex);
   if (!t) return '';
   const [l, c, h] = t.oklch;
   return `oklch(${fmt(l, 3)} ${fmt(c, 3)} ${fmt(c < 0.0005 ? 0 : h, 1)})`;
@@ -81,6 +86,28 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
         scan.colors.gradients.slice(0, 6).map((g) => [pct(g.weight), `\`${g.css}\``]),
       ),
     );
+  }
+
+  const variant = themeVariant(scan);
+  if (variant) {
+    const vrows = roleColors(scan, variant.colors);
+    if (vrows.length > 0) {
+      out.push(
+        '',
+        `## ${variant.scheme === 'dark' ? 'Dark' : 'Light'} theme`,
+        '',
+        `Counterpart palette for \`[data-theme="${variant.scheme}"]\`.`,
+        '',
+        table(
+          ['Role', 'Hex', 'OKLCH'],
+          vrows.map(({ role, token }) => [
+            role,
+            token.hex,
+            hexToOk(token.hex, scan, variant.colors),
+          ]),
+        ),
+      );
+    }
   }
 
   // Typography

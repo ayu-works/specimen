@@ -64,7 +64,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
     /* keep raw */
   }
   const scan: DesignScan = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: opts.id ?? `scan_${hash(`${raw.url}|${raw.scannedAt}`)}`,
     url: raw.url,
     host,

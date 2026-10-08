@@ -10,6 +10,7 @@ import { type TabId, useStore } from './store';
 import { Ask } from './views/Ask';
 import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
+import { Library } from './views/Library';
 import { Scan } from './views/Scan';
 
 const TABS: { id: TabId; label: string }[] = [
@@ -136,7 +137,7 @@ function Panel() {
             <Ask />
           </TabsContent>
           <TabsContent value="library">
-            <p className="py-10 text-center text-muted-foreground">Coming soon</p>
+            <Library />
           </TabsContent>
         </main>
       </Tabs>

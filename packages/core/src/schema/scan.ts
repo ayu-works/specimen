@@ -125,7 +125,7 @@ export const FamilySchema = z.object({
 });
 
 export const DesignScanSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   id: z.string(),
   url: z.string(),
   host: z.string(),
@@ -169,6 +169,7 @@ export const DesignScanSchema = z.object({
   variants: z
     .object({
       dark: ColorsSchema.partial().optional(),
+      light: ColorsSchema.partial().optional(),
       mobile: LayoutSchema.partial().optional(),
     })
     .optional(),

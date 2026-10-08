@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
 import { openSettings, useAiContext } from '@/lib/aiContext';
 import { SETUP_HINT } from '@/lib/aiRuntime';
+import { updateScan } from '@/lib/db';
 import { useStore } from '../../store';
 
 /** "Describe the vibe": vision providers only; the result feeds the prompt's visual direction. */
@@ -27,7 +28,10 @@ export function VibeCard() {
     setNote('');
     try {
       const v = await vibe(provider, scan, screenshot);
-      setVibe({ summary: v.summary, keywords: v.keywords, model: v.model });
+      const next = { summary: v.summary, keywords: v.keywords, model: v.model };
+      setVibe(next);
+      // Persist for saved scans; a scan not in the Library simply has no row to update.
+      void updateScan(scan.id, { vibe: next }).catch(() => {});
       if (!v.usedImage) setNote('Based on the measured values (this model can’t look at images).');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');

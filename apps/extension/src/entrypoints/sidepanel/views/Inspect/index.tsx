@@ -107,6 +107,21 @@ function Toolbar() {
   );
 }
 
+function OriginBanner() {
+  const { scan, origin } = useStore();
+  if (!scan || origin === 'tab') return null;
+  return (
+    <p
+      className="rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-[11px] text-muted-foreground"
+      data-testid="origin-banner"
+    >
+      {origin === 'composed'
+        ? 'Composed design'
+        : `Saved scan · ${new Date(scan.scannedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
+    </p>
+  );
+}
+
 export function Inspect() {
   const { scan, setTab } = useStore();
   if (!scan) {
@@ -119,6 +134,7 @@ export function Inspect() {
   }
   return (
     <div className="flex flex-col gap-3">
+      <OriginBanner />
       <VibeCard />
       <Toolbar />
       <Palette scan={scan} />
