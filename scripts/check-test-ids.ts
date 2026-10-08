@@ -29,7 +29,7 @@ for (const line of md.split('\n')) {
   ids.set(row[1] as string, manual);
 }
 
-const SKIP = new Set(['node_modules', '.output', '.wxt', '.git', 'dist']);
+const SKIP = new Set(['node_modules', '.output', '.output-e2e', '.wxt', '.git', 'dist']);
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (SKIP.has(e.name)) continue;

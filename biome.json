@@ -6,7 +6,18 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/.output", "!**/.wxt", "!**/node_modules", "!pnpm-lock.yaml", "!docs"]
+    "includes": [
+      "**",
+      "!**/.output",
+      "!**/.output-e2e",
+      "!**/.wxt",
+      "!**/node_modules",
+      "!pnpm-lock.yaml",
+      "!docs",
+      "!fixtures/pages/*.html",
+      "!fixtures/raw",
+      "!**/__snapshots__"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

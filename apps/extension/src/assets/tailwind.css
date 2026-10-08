@@ -11,6 +11,7 @@
   --muted-foreground: oklch(0.556 0 0);
   --border: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  --destructive: oklch(0.577 0.245 27);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
     --muted-foreground: oklch(0.708 0 0);
     --border: oklch(1 0 0 / 10%);
     --ring: oklch(0.556 0 0);
+    --destructive: oklch(0.704 0.191 22);
   }
 }
 
@@ -35,6 +37,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
 }
 
 body {

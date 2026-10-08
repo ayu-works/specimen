@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop - Friendly invoicing for freelancers</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --text: #0f172a;
+    --text-secondary: #64748b;
+    --accent: #4f46e5;
+    --accent-fg: #ffffff;
+    --border: #e2e8f0;
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --danger: #dc2626;
+    --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-2: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1);
+    --shadow-3: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+    --space-1: 8px;
+    --space-2: 16px;
+    --space-3: 24px;
+    --space-4: 32px;
+    --space-6: 48px;
+    --space-8: 64px;
+    --space-10: 80px;
+    --radius-button: 9999px;
+    --radius-card: 24px;
+    --radius-input: 12px;
+    --container: 1120px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; font-weight: 400; line-height: 1.5; }
+  h1, h2, h3, p, ul { margin: 0; }
+  h1 { font-size: 52px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
+  h2 { font-size: 32px; font-weight: 700; line-height: 1.2; }
+  h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
+  a { color: inherit; text-decoration: none; }
+  .container { width: 100%; max-width: var(--container); margin: 0 auto; padding: 0 var(--space-3); }
+  .muted { color: var(--text-secondary); }
+  .small { font-size: 14px; }
+  .center { text-align: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; padding: var(--space-1) var(--space-3); border-radius: var(--radius-button); font: inherit; font-weight: 600; border: 1px solid transparent; background: var(--accent); color: var(--accent-fg); box-shadow: var(--shadow-1); }
+  .btn-outline { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .btn-lg { padding: var(--space-2) var(--space-4); }
+  .input { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-input); font: inherit; background: var(--surface); color: var(--text); min-width: 260px; }
+  .badge { display: inline-block; padding: 0 var(--space-2); border-radius: var(--radius-button); font-size: 14px; font-weight: 600; line-height: 24px; }
+  .badge.success { background: var(--success); color: #ffffff; }
+  .badge.warning { background: var(--warning); color: var(--text); }
+  .badge.danger { background: var(--danger); color: #ffffff; }
+  .card { background: var(--surface); border-radius: var(--radius-card); border: 1px solid var(--border); padding: var(--space-4); box-shadow: var(--shadow-2); }
+
+  .nav { padding: var(--space-2) 0; }
+  .nav .container { display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 24px; font-weight: 800; color: var(--accent); }
+  .nav-links { display: none; gap: var(--space-4); font-size: 14px; color: var(--text-secondary); }
+
+  .hero { padding: var(--space-10) 0; }
+  .hero .container { display: grid; gap: var(--space-6); align-items: center; }
+  .hero p.lead { font-size: 20px; margin: var(--space-3) 0 var(--space-4); max-width: 520px; }
+  .hero .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .invoice { box-shadow: var(--shadow-3); }
+  .invoice header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+  .invoice dl { margin: 0; display: grid; gap: var(--space-2); }
+  .invoice .row { display: flex; justify-content: space-between; align-items: center; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+  .invoice .row:last-child { border-bottom: 0; padding-bottom: 0; }
+
+  .features { padding: var(--space-10) 0; }
+  .grid { display: grid; gap: var(--space-3); grid-template-columns: 1fr; margin-top: var(--space-6); }
+  .card.sm { box-shadow: var(--shadow-1); }
+  .card h3 { margin: var(--space-2) 0 var(--space-1); }
+  .alerts { padding: var(--space-10) 0; }
+  .alert { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius-input); box-shadow: var(--shadow-1); margin-top: var(--space-2); }
+  .alert.success { border-left-color: var(--success); }
+  .alert.warning { border-left-color: var(--warning); }
+  .alert.danger { border-left-color: var(--danger); }
+
+  .cta { padding: var(--space-10) 0; }
+  .cta .card { text-align: center; box-shadow: var(--shadow-3); padding: var(--space-8) var(--space-4); }
+  .cta form { display: flex; gap: var(--space-1); justify-content: center; margin-top: var(--space-4); flex-wrap: wrap; }
+
+  .footer { padding: var(--space-10) 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .footer .container { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; }
+  .footer ul { list-style: none; display: flex; gap: var(--space-3); padding: 0; }
+
+  @media (min-width: 640px) { .nav-links { display: flex; } }
+  @media (min-width: 768px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1024px) { .hero .container { grid-template-columns: 1.1fr 0.9fr; } }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="container">
+    <a class="logo" href="#">loop</a>
+    <nav class="nav-links" aria-label="Primary"><a href="#">Features</a><a href="#">Templates</a><a href="#">Pricing</a><a href="#">Help</a></nav>
+    <a class="btn btn-outline" href="#">Log in</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div>
+      <h1>Get paid on time, without the awkward emails</h1>
+      <p class="lead muted">Loop creates beautiful invoices, sends gentle reminders and tells you the moment a client pays.</p>
+      <div class="actions">
+        <a class="btn btn-lg" href="#">Create your first invoice</a>
+        <a class="btn btn-lg btn-outline" href="#">See how it works</a>
+      </div>
+    </div>
+    <div class="card invoice">
+      <header><h3>Invoice #1042</h3><span class="badge success">Paid</span></header>
+      <dl>
+        <div class="row"><span>Brand identity</span><strong>$2,400</strong></div>
+        <div class="row"><span>Landing page design</span><strong>$1,800</strong></div>
+        <div class="row"><span>Illustration pack</span><span class="badge warning">Due in 3 days</span></div>
+        <div class="row"><span>Rush fee</span><span class="badge danger">Overdue</span></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container center">
+    <h2>Everything a one-person studio needs</h2>
+    <p class="muted" style="margin-top: 16px">Simple tools that stay out of your way.</p>
+    <div class="grid" style="text-align:left">
+      <article class="card"><h3>Smart reminders</h3><p class="muted">Friendly nudges go out before and after the due date, in your voice.</p></article>
+      <article class="card"><h3>Multi-currency</h3><p class="muted">Bill in 30 currencies and see what you earned in your own.</p></article>
+      <article class="card"><h3>Instant receipts</h3><p class="muted">Clients get a receipt the second they pay, and so do you.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="alerts">
+  <div class="container">
+    <h2>Know where every invoice stands</h2>
+    <div class="alert success"><span class="badge success">Paid</span><span>Northside Cafe paid invoice #1039 for $1,250.</span></div>
+    <div class="alert warning"><span class="badge warning">Due soon</span><span>Invoice #1041 for Fieldwork Studio is due on Friday.</span></div>
+    <div class="alert danger"><span class="badge danger">Overdue</span><span>Invoice #1036 is 12 days late. A reminder is scheduled for tomorrow.</span></div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <div class="card">
+      <h2>Send your first invoice in two minutes</h2>
+      <p class="muted" style="margin-top: 16px">Free for your first five clients. No card required.</p>
+      <form onsubmit="return false">
+        <input class="input" type="email" placeholder="you@studio.com" aria-label="Email address">
+        <button class="btn" type="submit">Get started</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <span class="muted">&copy; 2026 Loop Labs</span>
+    <ul class="muted"><li><a href="#">Privacy</a></li><li><a href="#">Terms</a></li><li><a href="#">Contact</a></li><li><a href="#">Status</a></li></ul>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northwind Analytics - Product analytics your whole team understands</title>
+<style>
+  :root {
+    --brand: #5e6ad2;
+    --brand-fg: #ffffff;
+    --bg: #ffffff;
+    --surface: #f6f7f9;
+    --text: #111827;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+    --space-1: 8px;
+    --space-2: 16px;
+    --space-3: 24px;
+    --space-4: 32px;
+    --space-6: 48px;
+    --space-8: 64px;
+    --space-12: 96px;
+    --radius-button: 8px;
+    --radius-card: 16px;
+    --radius-input: 8px;
+    --container: 1200px;
+    --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.06);
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; font-weight: 400; line-height: 1.5; }
+  h1, h2, h3, p, ul { margin: 0; }
+  a { color: inherit; text-decoration: none; }
+  h1 { font-size: 56px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; }
+  h2 { font-size: 36px; font-weight: 700; line-height: 1.2; }
+  h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
+  .container { width: 100%; max-width: var(--container); margin: 0 auto; padding: 0 var(--space-3); }
+  .muted { color: var(--text-secondary); }
+  .small { font-size: 14px; line-height: 1.5; }
+  .center { text-align: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; padding: var(--space-1) var(--space-3); border-radius: var(--radius-button); font: inherit; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
+  .btn-primary { background: var(--brand); color: var(--brand-fg); }
+  .btn-secondary { background: var(--bg); color: var(--text); border-color: var(--border); }
+  .btn-lg { padding: var(--space-2) var(--space-4); }
+  .input { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-input); font: inherit; background: var(--bg); color: var(--text); min-width: 280px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-4); box-shadow: var(--shadow-card); }
+
+  /* nav */
+  .nav { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+  .nav .container { display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 700; font-size: 20px; }
+  .nav-links { display: none; gap: var(--space-4); align-items: center; }
+  .nav-actions { display: flex; gap: var(--space-1); }
+
+  /* hero */
+  .hero { padding: var(--space-12) 0; }
+  .hero p { max-width: 640px; margin: var(--space-3) auto 0; font-size: 20px; line-height: 1.5; }
+  .hero .actions { display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-4); flex-wrap: wrap; }
+
+  /* logos */
+  .logos { padding: var(--space-6) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .logos-row { display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: center; align-items: center; margin-top: var(--space-3); }
+  .logo-item { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-secondary); font-weight: 600; }
+  .logo-item svg { width: 28px; height: 28px; fill: currentColor; }
+
+  /* features / pricing */
+  .features, .pricing, .faq, .cta { padding: var(--space-12) 0; }
+  .section-head { max-width: 640px; margin: 0 auto var(--space-8); text-align: center; }
+  .section-head p { margin-top: var(--space-2); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
+  .icon { width: 48px; height: 48px; border-radius: var(--radius-button); background: var(--brand); display: grid; place-items: center; margin-bottom: var(--space-3); }
+  .icon svg { width: 24px; height: 24px; fill: var(--brand-fg); }
+  .card h3 { margin-bottom: var(--space-1); }
+  .price { font-size: 36px; font-weight: 700; line-height: 1.2; margin: var(--space-2) 0; }
+  .price span { font-size: 14px; font-weight: 400; color: var(--text-secondary); }
+  .plan ul { list-style: none; padding: 0; margin: var(--space-3) 0; display: grid; gap: var(--space-1); }
+  .plan .btn { width: 100%; }
+  .plan.popular { background: var(--bg); box-shadow: 0 8px 24px rgba(17, 24, 39, 0.1); position: relative; }
+  .badge { position: absolute; top: calc(-1 * var(--space-2)); left: var(--space-4); background: var(--brand); color: var(--brand-fg); font-size: 14px; font-weight: 600; padding: 0 var(--space-2); border-radius: var(--radius-button); }
+
+  /* faq */
+  .faq .container { max-width: 800px; }
+  details { border-bottom: 1px solid var(--border); padding: var(--space-3) 0; }
+  summary { cursor: pointer; font-weight: 600; font-size: 20px; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  details p { margin-top: var(--space-2); color: var(--text-secondary); }
+
+  /* cta */
+  .cta { background: var(--surface); text-align: center; }
+  .cta form { display: flex; gap: var(--space-1); justify-content: center; margin-top: var(--space-4); flex-wrap: wrap; }
+
+  /* footer */
+  .footer { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
+  .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+  .footer ul { list-style: none; padding: 0; display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+  .footer h3 { font-size: 16px; }
+  .legal { margin-top: var(--space-6); }
+
+  @media (min-width: 640px) {
+    .nav-links { display: flex; }
+    .footer-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 768px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .hero p { font-size: 20px; }
+  }
+  @media (min-width: 1024px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 1280px) {
+    .container { padding: 0 var(--space-4); }
+  }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="container">
+    <a class="logo" href="#">Northwind</a>
+    <nav class="nav-links small" aria-label="Primary">
+      <a href="#features">Product</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">Docs</a>
+      <a href="#faq">Customers</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="btn btn-secondary" href="#">Sign in</a>
+      <a class="btn btn-primary" href="#">Start free</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero center">
+  <div class="container">
+    <h1>Product analytics your whole team understands</h1>
+    <p class="muted">Northwind turns raw events into clear answers. Track funnels, retention and revenue without writing a single query.</p>
+    <div class="actions">
+      <a class="btn btn-primary btn-lg" href="#">Start free trial</a>
+      <a class="btn btn-secondary btn-lg" href="#">Book a demo</a>
+    </div>
+  </div>
+</section>
+
+<section class="logos center">
+  <div class="container">
+    <p class="small muted">Trusted by product teams at fast-growing companies</p>
+    <div class="logos-row">
+      <span class="logo-item"><svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="12"/></svg>Orbital</span>
+      <span class="logo-item"><svg viewBox="0 0 28 28"><rect x="2" y="2" width="24" height="24" rx="4"/></svg>Quarry</span>
+      <span class="logo-item"><svg viewBox="0 0 28 28"><path d="M14 2 26 26H2z"/></svg>Summit</span>
+      <span class="logo-item"><svg viewBox="0 0 28 28"><path d="M2 8h24v4H2zm0 8h24v4H2z"/></svg>Lumen</span>
+      <span class="logo-item"><svg viewBox="0 0 28 28"><path d="M14 2l12 12-12 12L2 14z"/></svg>Harbor</span>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-head">
+      <h2>Everything you need to understand your users</h2>
+      <p class="muted">From the first click to the thousandth session, see what is working and fix what is not.</p>
+    </div>
+    <div class="grid">
+      <article class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M3 3h2v18H3zm4 10h2v8H7zm4-6h2v14h-2zm4 4h2v10h-2z"/></svg></div>
+        <h3>Funnels in seconds</h3>
+        <p class="muted">Drag steps into place and watch conversion update live, segmented by plan, country or campaign.</p>
+      </article>
+      <article class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2z"/></svg></div>
+        <h3>Retention that explains itself</h3>
+        <p class="muted">Cohort charts highlight the behaviours that keep people coming back, with plain-language summaries.</p>
+      </article>
+      <article class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg></div>
+        <h3>Share without screenshots</h3>
+        <p class="muted">Send a live link or schedule a weekly digest so everyone sees the same numbers, always.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="pricing" id="pricing" style="background: var(--bg)">
+  <div class="container">
+    <div class="section-head">
+      <h2>Simple, predictable pricing</h2>
+      <p class="muted">Start free and upgrade when your team grows. No per-seat surprises.</p>
+    </div>
+    <div class="grid">
+      <article class="card plan">
+        <h3>Starter</h3>
+        <p class="muted small">For side projects and early ideas.</p>
+        <p class="price">$0 <span>/ month</span></p>
+        <ul class="small"><li>10,000 events per month</li><li>3 saved dashboards</li><li>Community support</li></ul>
+        <a class="btn btn-secondary" href="#">Get started</a>
+      </article>
+      <article class="card plan popular">
+        <span class="badge">Most popular</span>
+        <h3>Team</h3>
+        <p class="muted small">For teams shipping every week.</p>
+        <p class="price">$24 <span>/ month</span></p>
+        <ul class="small"><li>1M events per month</li><li>Unlimited dashboards</li><li>Weekly digests</li><li>Email support</li></ul>
+        <a class="btn btn-primary" href="#">Start free trial</a>
+      </article>
+      <article class="card plan">
+        <h3>Enterprise</h3>
+        <p class="muted small">For organisations with security needs.</p>
+        <p class="price">Custom</p>
+        <ul class="small"><li>Unlimited events</li><li>SSO and audit logs</li><li>Dedicated success manager</li></ul>
+        <a class="btn btn-secondary" href="#">Talk to sales</a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="faq" id="faq">
+  <div class="container">
+    <div class="section-head" style="margin-bottom: var(--space-6)">
+      <h2>Frequently asked questions</h2>
+    </div>
+    <details open><summary>How long does setup take?</summary><p>Most teams are collecting events within fifteen minutes using our JavaScript snippet or server SDKs.</p></details>
+    <details><summary>Can I export my data?</summary><p>Yes. Every chart exports to CSV, and raw events can be streamed to your warehouse at any time.</p></details>
+    <details><summary>Do you offer discounts for nonprofits?</summary><p>We offer 50% off any paid plan for registered nonprofits and education programmes.</p></details>
+    <details><summary>Is Northwind compliant with GDPR?</summary><p>Yes. Data can be hosted in the EU, and we provide a data processing agreement on request.</p></details>
+    <details><summary>What happens if I exceed my event limit?</summary><p>We never drop data. We will email you, and you can upgrade or let the overage roll into next month.</p></details>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <h2>Ready to see what your users do?</h2>
+    <p class="muted" style="margin-top: var(--space-2)">Join 4,000 teams using Northwind every day.</p>
+    <form onsubmit="return false">
+      <input class="input" type="email" placeholder="you@company.com" aria-label="Email address">
+      <button class="btn btn-primary" type="submit">Start free</button>
+    </form>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div><h3>Product</h3><ul class="small muted"><li><a href="#">Funnels</a></li><li><a href="#">Retention</a></li><li><a href="#">Dashboards</a></li><li><a href="#">Changelog</a></li></ul></div>
+      <div><h3>Company</h3><ul class="small muted"><li><a href="#">About</a></li><li><a href="#">Careers</a></li><li><a href="#">Blog</a></li><li><a href="#">Contact</a></li></ul></div>
+      <div><h3>Resources</h3><ul class="small muted"><li><a href="#">Docs</a></li><li><a href="#">Guides</a></li><li><a href="#">API</a></li><li><a href="#">Status</a></li></ul></div>
+      <div><h3>Legal</h3><ul class="small muted"><li><a href="#">Privacy</a></li><li><a href="#">Terms</a></li><li><a href="#">Security</a></li><li><a href="#">DPA</a></li></ul></div>
+    </div>
+    <p class="small muted legal">&copy; 2026 Northwind Analytics, Inc. All rights reserved.</p>
+  </div>
+</footer>
+</body>
+</html>

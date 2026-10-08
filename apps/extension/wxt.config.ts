@@ -1,8 +1,14 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 
+// E2E builds only: the Playwright harness can't grant activeTab, and chrome.tabs.captureVisibleTab
+// accepts only activeTab or a literal <all_urls> host pattern (not 127.0.0.1 alone), so the test
+// build declares <all_urls>. Never set in a normal build (T0.03 asserts there are no host_permissions).
+const e2e = process.env.SPECIMEN_E2E === '1';
+
 export default defineConfig({
   srcDir: 'src',
+  outDir: e2e ? '.output-e2e' : '.output',
   modules: ['@wxt-dev/module-react'],
   vite: () => ({ plugins: [tailwindcss()] }),
   manifest: {
@@ -18,6 +24,7 @@ export default defineConfig({
       'unlimitedStorage',
     ],
     optional_host_permissions: ['<all_urls>'],
+    ...(e2e ? { host_permissions: ['<all_urls>'] } : {}),
     icons: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png', 128: 'icon/128.png' },
     action: { default_title: 'Specimen' },
     content_security_policy: {
