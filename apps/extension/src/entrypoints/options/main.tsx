@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Byok } from './Byok';
 import { LocalGemma } from './LocalGemma';
+import { Mcp } from './Mcp';
 
 const CHOICES: { id: AiProviderId; label: string; hint: string }[] = [
   { id: 'none', label: 'None', hint: 'AI features are off. Everything else works as usual.' },
@@ -75,6 +76,7 @@ function Options() {
       </Card>
       {settings.provider === 'webllm' && <LocalGemma settings={settings} onChange={setSettings} />}
       {settings.provider === 'byok' && <Byok settings={settings} onChange={setSettings} />}
+      <Mcp />
     </main>
   );
 }

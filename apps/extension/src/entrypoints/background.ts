@@ -1,5 +1,7 @@
 import { extract, generatePrompt, PROMPT_TARGETS, type PromptTarget } from '@specimen/core';
+import { isMcpKey, McpBridge } from '@/lib/mcpBridge';
 import { listen, type Message, type ScanOpts, type ScanResult } from '@/lib/messaging';
+import { waitForTabLoad } from '@/lib/scanFlow';
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const OVERLAY_FILE = '/content-scripts/overlay.js';
@@ -204,6 +206,17 @@ async function scanAndCopy(commandTab?: chrome.tabs.Tab): Promise<void> {
 }
 
 export default defineBackground(() => {
+  const mcp = new McpBridge({
+    scanTab: async (tabId) => (await scanRun(tabId, { noScreenshot: true })).raw,
+    waitForTabLoad: (tabId) => waitForTabLoad(tabId),
+  });
+  const mcpRefresh = () => void mcp.refresh().catch(() => {});
+  mcpRefresh();
+  chrome.runtime.onStartup.addListener(mcpRefresh);
+  chrome.runtime.onInstalled.addListener(mcpRefresh);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && Object.keys(changes).some(isMcpKey)) mcpRefresh();
+  });
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command === 'scan-copy') void scanAndCopy(tab);
   });
@@ -216,5 +229,13 @@ export default defineBackground(() => {
       return { ok: true };
     },
     'css.fetch': async (msg) => ({ texts: await cssFetch(msg.urls) }),
+    'mcp.push': async (msg) => {
+      await mcp.pushScan(msg.id);
+      return { ok: true };
+    },
+    'mcp.delete': async (msg) => {
+      mcp.deleteScans(msg.ids);
+      return { ok: true };
+    },
   });
 });

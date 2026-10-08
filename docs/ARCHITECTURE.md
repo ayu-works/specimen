@@ -30,7 +30,7 @@ AI-design website/
 │  │     └─ a11y/               # contrast matrix + accessible variants
 │  ├─ ai/                       # provider interface + adapters (runs in extension pages)
 │  │  └─ src/ types.ts registry.ts prompts/ providers/{webllm,chromeBuiltin,openaiCompat,anthropic,gemini}.ts
-│  └─ mcp/                      # (Phase 6) `npx specimen-mcp` local MCP server
+│  └─ mcp/                      # `@specimen/mcp` (bin `specimen-mcp`): stdio MCP server + local WS bridge
 ├─ apps/
 │  ├─ extension/                # WXT + React + TS + Tailwind v4 + shadcn/ui
 │  │  └─ src/entrypoints/
@@ -65,7 +65,7 @@ AI-design website/
 │   └─ ai providers: BYOK fetch() directly · local → Port to offscreen    │
 │  options page: chrome.storage.local (settings, encrypted keys)          │
 └──────────────────────────────────────────────────────────────────────────┘
-           (Phase 6) sidepanel ── ws://127.0.0.1:7457 ──► specimen-mcp ──► coding agent
+           background ── ws://127.0.0.1:7457 ──► specimen-mcp ──stdio──► coding agent (see §14)
 ```
 
 | Component | Responsibility | Why it lives there |
@@ -306,7 +306,8 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |
 | Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id}` \| `error{id,kind,message}` · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
 | `offscreen.busy` | background → offscreen | `{}` → `{ busy }`; the background closes a document it created for the clipboard only when not busy |
-| `mcp.push` (P6) | sidepanel → ws | `{ scan }` |
+| `mcp.push` | library (`lib/db.ts`) → background | `{ id }` → `{ ok }`. A scan was saved or changed; the background reads it from Dexie and pushes it over the WS (no-op unless connected and sharing) |
+| `mcp.delete` | library → background | `{ ids[] }` → `{ ok }`; mirrored to the server as `scan.delete` |
 
 ---
 
@@ -317,6 +318,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
   - `chats`: `&scanId`; value = `{ scanId, messages[] }` (Ask history per scan)
   - `composes`: `&id, createdAt`; value = `{ id, name, sources: Record<Facet, scanId>, createdAt }` (the composed scan itself is also saved in `scans` with the tag `composed`)
 - **chrome.storage.local:** `settings.promptTarget`, `settings.lastFormat`, `settings.includeCounterpart`, `settings.libraryCapAsked`, and `settings.ai = { provider: 'none'|'webllm'|'chrome'|'byok', webllmModel, byok: { preset, baseUrl, model, keyRef, vision? }, encryptKeys, downloaded[] }`. API keys are stored separately under `secrets.<preset>` as `{ v:1, enc:false, key }` or, with the optional passphrase, `{ v:1, enc:true, salt, iv, ct, iterations }` (AES-GCM; key from PBKDF2-SHA256, 250k iterations, one random salt shared by all encrypted keys so one passphrase unlocks them). The derived raw key (never the passphrase) is cached in `chrome.storage.session` for the browser session; the side panel asks for the passphrase once. Never use `storage.sync`, because keys must not leave the device. Keys are never logged or put in URLs (Gemini uses the `x-goog-api-key` header).
+- **MCP:** `settings.mcp = { share: boolean, port: number }` and the pairing token in `chrome.storage.local` under `secrets.mcpToken` (a plain string, never logged, never in `storage.sync`). The background publishes the connection status `{ state: 'unpaired'|'connecting'|'connected'|'error', reason? }` in `chrome.storage.session` under `session.mcpStatus`; the options page only reads it.
 - **Cache Storage:** WebLLM model weights (handled by WebLLM). `unlimitedStorage` permission.
 - **Export/Import:** `.specimen.json` = `{ format: 'specimen', version: 1, scans: DesignScan[] }`, without thumbnails or tags. Import rejects files over 20 MB or malformed ones, migrates each scan, skips invalid ones and gives colliding ids a new id.
 
@@ -353,3 +355,48 @@ No `content_scripts` declared statically. Everything is injected on demand with 
 
 ## 13. Tech stack summary
 WXT · React 19 · TypeScript (strict) · Tailwind v4 · shadcn/ui · zustand · Dexie · zod · culori · @mlc-ai/web-llm · Vitest · Playwright · Biome · pnpm. Later: Astro (website), Remotion (video), `@modelcontextprotocol/sdk` (MCP).
+
+---
+
+## 14. MCP bridge (`packages/mcp`)
+
+### Process model
+```
+coding agent ──stdio (MCP)──► specimen-mcp ◄──ws://127.0.0.1:7457── extension background (service worker)
+                                  │
+                                  └─ ~/.specimen/{config.json, scans/<id>.json}
+```
+The agent (Claude Code, Cursor) launches `specimen-mcp` as a stdio MCP server. The same process also runs the WS bridge on `127.0.0.1:<port>` (default 7457; `--port` or `SPECIMEN_PORT`). If the port is busy, another instance owns the bridge: this one logs a single line to stderr (stdout is the MCP channel) and keeps serving the scans already on disk. `check_build` only works on the instance that owns the bridge. The bundle includes `@specimen/core`, so the package is self-contained.
+
+### Tools and resources
+`list_scans {query?}` · `get_scan {id}` · `get_prompt {id, target?, includeTheme?}` · `get_design_md {id}` · `get_tokens {id, format}` (`tailwind-v4|tailwind-v3|cssvars|shadcn|dtcg|figma`) · `check_build {targetId, url}` (needs the extension connected; scans `url` in Chrome, runs `diffScans` and returns the score plus `generateFixPrompt`; 60 s timeout). Resources: `specimen://scans/{id}` (JSON) and `specimen://scans/{id}/prompt` (markdown). Everything is computed on demand from the stored `DesignScan` by `@specimen/core`.
+
+### WS protocol (JSON text frames)
+| Direction | Message | Notes |
+|---|---|---|
+| ext → server | `hello { token, version }` | must be the first message, within 5 s |
+| server → ext | `welcome { version, scans }` | hello accepted |
+| server → ext | `error { reason }` | `bad-token` (socket closed, 4401), `bad-hello`, `bad-message` |
+| ext → server | `scan.push { scan, tags? }` | validated with `migrate()` and upserted to disk |
+| ext → server | `scan.delete { id }` | |
+| server → ext | `scan.request { reqId, url }` | ext opens `url` in a background tab, waits for load plus 800 ms, scans with `save: false` and closes the tab |
+| ext → server | `scan.result { reqId, scan \| error }` | scan validated with `migrate()`; not stored |
+| both | `ping` / `pong` | the extension pings every 20 s (this also keeps the MV3 worker alive); the server sends WS-level pings every 20 s and drops dead sockets |
+
+On connect, with "Share scans with coding agents" on, the extension pushes the whole Library, then every new or updated scan and every delete. Reconnects use exponential backoff (1 s up to 30 s). While waiting, the worker calls a no-op API every 20 s so it is not stopped (no `alarms` permission needed). A wrong token is terminal until the user pastes a new one.
+
+### Security
+- The listener binds to `127.0.0.1` only. There is no other network exposure.
+- Upgrades whose `Origin` is not `chrome-extension://…` are refused (HTTP 401), so web pages cannot reach it.
+- The pairing token is 32 random bytes (base64url), generated on first run and stored in `~/.specimen/config.json` (mode `0600`). It is checked with a constant-time comparison (`timingSafeEqual` over SHA-256 digests) and never logged, except by the explicit `specimen-mcp pair` command. In the extension it lives in `chrome.storage.local` under `secrets.mcpToken`.
+- Scan ids are restricted to `[A-Za-z0-9_-]{1,128}` before they touch the file system. Every scan is validated with `migrate()` before it is written or used. WS frames are capped at 64 MB.
+- `check_build` is limited to `http(s)` URLs and needs the extension's existing `<all_urls>` optional access; without it the extension answers with an error asking the user to scan once from the side panel.
+
+### `~/.specimen` layout (`$SPECIMEN_HOME` overrides it)
+```
+~/.specimen/            0700
+├─ config.json          0600   { "token": "<base64url>" }
+└─ scans/               0700
+   └─ <scanId>.json     0600   DesignScan + { tags: string[] }
+```
+Disconnecting in the extension does not delete stored scans; remove `~/.specimen/scans` to clear them.

@@ -34,6 +34,10 @@ export interface MessageMap {
   'offscreen.ensure': { req: Record<string, never>; res: { ok: boolean } };
   /** Background -> offscreen document: is a model loaded/loading or a client connected? */
   'offscreen.busy': { req: Record<string, never>; res: { busy: boolean } };
+  /** Library -> background: a scan was saved or changed; push it to the paired MCP server. */
+  'mcp.push': { req: { id: string }; res: { ok: true } };
+  /** Library -> background: scans were deleted; tell the paired MCP server. */
+  'mcp.delete': { req: { ids: string[] }; res: { ok: true } };
   /** Background -> offscreen document: write text to the clipboard. */
   'offscreen.copy': { req: { text: string }; res: { ok: true } };
 }
@@ -72,6 +76,18 @@ export type Message = {
 export type Response<K extends MessageType> =
   | { ok: true; data: MessageMap[K]['res'] }
   | { ok: false; error: string };
+
+/** Fire-and-forget: tell the background about a Library change. Never throws. */
+export function notifyBackground<K extends 'mcp.push' | 'mcp.delete'>(
+  type: K,
+  payload: MessageMap[K]['req'],
+): void {
+  try {
+    void chrome.runtime.sendMessage({ type, ...payload })?.catch?.(() => {});
+  } catch {
+    /* no extension context (tests, private mode): nothing to notify */
+  }
+}
 
 /** Send a typed message to the background and unwrap its response (throws on error). */
 export async function send<K extends MessageType>(

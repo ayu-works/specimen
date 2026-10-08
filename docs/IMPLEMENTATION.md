@@ -126,6 +126,8 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 > **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
 
 ## Phase 6: MCP bridge & release (≈ 2 days)
+> **Phase 6 status:** 6.1, 6.2 and the docs part of 6.4 (README, CONTRIBUTING, issue/PR templates, ARCHITECTURE §14) are implemented (code only; tests deferred to the final testing pass). **Deferred until after the testing pass:** 6.3 (Chrome Web Store assets and submission), the npm publish of `@specimen/mcp`, and the v1.0.0 release tag. Until the package is published, the setup docs show the local-path variant (`node <repo>/packages/mcp/dist/cli.js`). Untested in a real session: Claude Code / Cursor talking to the server, and `check_build` through a live extension.
+
 | ID | Task | AC |
 |---|---|---|
 | 6.1 🟦 | `packages/mcp`: stdio MCP server (`@modelcontextprotocol/sdk`) + local WS listener on 127.0.0.1 with pairing token; tools `list_scans`, `get_scan`, `get_prompt`, `get_tokens(format)` | Claude Code `claude mcp add specimen -- npx specimen-mcp` lists scans |

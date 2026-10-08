@@ -1,0 +1,32 @@
+{
+  "name": "@specimen/mcp",
+  "version": "0.0.0",
+  "description": "MCP server that lets coding agents read Specimen design scans.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "specimen-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@specimen/core": "workspace:*",
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2"
+  }
+}

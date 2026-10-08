@@ -4,6 +4,7 @@
  */
 import { type DesignScan, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
+import { notifyBackground } from './messaging';
 
 export interface StoredScan extends DesignScan {
   tags: string[];
@@ -78,6 +79,7 @@ export async function saveScan(
   await db.scans.put(row);
   const blob = screenshot ? dataUrlToBlob(screenshot) : null;
   if (blob) await db.thumbs.put({ scanId: scan.id, blob });
+  notifyBackground('mcp.push', { id: scan.id });
   return row;
 }
 
@@ -111,12 +113,14 @@ export async function updateScan(
   patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe' | 'variants'>>,
 ): Promise<void> {
   await db.scans.update(id, patch);
+  notifyBackground('mcp.push', { id });
 }
 
 /** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
 export async function replaceStoredScan(scan: DesignScan): Promise<void> {
   const old = await db.scans.get(scan.id);
   await db.scans.put({ ...scan, tags: old?.tags ?? [], favorite: old?.favorite });
+  notifyBackground('mcp.push', { id: scan.id });
 }
 
 export async function deleteScans(ids: string[]): Promise<void> {
@@ -125,6 +129,7 @@ export async function deleteScans(ids: string[]): Promise<void> {
     await db.thumbs.bulkDelete(ids);
     await db.chats.bulkDelete(ids);
   });
+  notifyBackground('mcp.delete', { ids });
 }
 
 /** A saved scan's thumbnail as a data URL (for vision models), or null. */
@@ -167,4 +172,5 @@ export async function saveCompose(row: ComposeRow, composed: DesignScan): Promis
     await db.composes.put(row);
     await db.scans.put({ ...composed, tags: ['composed'] });
   });
+  notifyBackground('mcp.push', { id: composed.id });
 }

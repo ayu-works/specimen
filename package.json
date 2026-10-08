@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -F @specimen/extension dev",
-    "build": "pnpm -F @specimen/extension build",
+    "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "e2e": "pnpm -F @specimen/extension e2e",
     "typecheck": "pnpm -r --if-present typecheck",
