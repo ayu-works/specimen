@@ -98,8 +98,9 @@ export function Scan() {
               </ul>
             </details>
           )}
+          <Button onClick={() => setTab('generate')}>Generate prompt</Button>
           <div className="flex gap-2">
-            <Button className="flex-1" onClick={() => setTab('inspect')}>
+            <Button variant="outline" className="flex-1" onClick={() => setTab('inspect')}>
               Inspect
             </Button>
             <Button variant="outline" onClick={run} disabled={scanning}>

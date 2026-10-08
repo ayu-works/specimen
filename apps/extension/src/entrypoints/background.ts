@@ -1,3 +1,4 @@
+import { extract, generatePrompt, PROMPT_TARGETS, type PromptTarget } from '@specimen/core';
 import { listen, type Message, type ScanResult } from '@/lib/messaging';
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
@@ -73,7 +74,79 @@ async function overlaySet(msg: Extract<Message, { type: 'overlay.set' }>): Promi
   return { ok: true };
 }
 
+const DEFAULT_TARGET: PromptTarget = 'claude-code';
+const OFFSCREEN_URL = 'offscreen.html';
+const BADGE_MS = 2000;
+
+async function storedTarget(): Promise<PromptTarget> {
+  try {
+    const got = await chrome.storage.local.get('settings.promptTarget');
+    const v = got['settings.promptTarget'] as PromptTarget | undefined;
+    if (v && PROMPT_TARGETS.includes(v)) return v;
+  } catch {
+    /* storage unavailable: use the default */
+  }
+  return DEFAULT_TARGET;
+}
+
+/** Create the offscreen document unless one exists. Returns true when we created it. */
+async function ensureOffscreen(): Promise<boolean> {
+  const existing = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+  if (existing.length > 0) return false;
+  try {
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_URL,
+      reasons: ['CLIPBOARD'],
+      justification: 'Copy the generated prompt',
+    });
+    return true;
+  } catch (e) {
+    // Lost a race with another creator: the document exists now, which is all we need.
+    if (e instanceof Error && /single offscreen|already exists/i.test(e.message)) return false;
+    throw e;
+  }
+}
+
+async function copyViaOffscreen(text: string): Promise<void> {
+  const created = await ensureOffscreen();
+  try {
+    const res = (await chrome.runtime.sendMessage({ type: 'offscreen.copy', text })) as
+      | { ok: boolean; error?: string }
+      | undefined;
+    if (!res?.ok) throw new Error(res?.error ?? 'copy failed');
+  } finally {
+    if (created) await chrome.offscreen.closeDocument().catch(() => {});
+  }
+}
+
+function flashBadge(text: string, color: string): void {
+  void chrome.action.setBadgeBackgroundColor({ color });
+  void chrome.action.setBadgeText({ text });
+  setTimeout(() => void chrome.action.setBadgeText({ text: '' }), BADGE_MS);
+}
+
+/** Keyboard shortcut: scan the active tab and copy the AI prompt to the clipboard. */
+async function scanAndCopy(commandTab?: chrome.tabs.Tab): Promise<void> {
+  try {
+    const tab =
+      commandTab?.id !== undefined
+        ? commandTab
+        : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    if (tab?.id === undefined) throw new Error('No active tab');
+    if (!tab.url || !/^https?:/.test(tab.url)) throw new Error('Unsupported page');
+    const { raw } = await scanRun(tab.id);
+    const prompt = generatePrompt(extract(raw), { target: await storedTarget() });
+    await copyViaOffscreen(prompt.content);
+    flashBadge('✓', '#16a34a');
+  } catch {
+    flashBadge('!', '#dc2626');
+  }
+}
+
 export default defineBackground(() => {
+  chrome.commands.onCommand.addListener((command, tab) => {
+    if (command === 'scan-copy') void scanAndCopy(tab);
+  });
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   listen({
     'scan.run': (msg) => scanRun(msg.tabId),
