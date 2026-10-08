@@ -1,5 +1,5 @@
-import { getPreset, PRESETS, ProviderError } from '@specimen/ai';
-import { Eye, EyeOff } from 'lucide-react';
+import { getPreset, listModels, PRESETS, ProviderError, pickModel } from '@specimen/ai';
+import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,7 @@ export function Byok({
   const [presetId, setPresetId] = useState(settings.byok.preset);
   const preset = getPreset(presetId) ?? PRESETS[0];
   const saved = settings.byok.preset === presetId;
+  const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState(
     saved && settings.byok.model ? settings.byok.model : (preset?.model ?? ''),
   );
@@ -50,6 +51,7 @@ export function Byok({
     if (!p) return;
     setPresetId(id);
     setModel(settings.byok.preset === id && settings.byok.model ? settings.byok.model : p.model);
+    setModels([]);
     setBaseUrl(
       settings.byok.preset === id && settings.byok.baseUrl ? settings.byok.baseUrl : p.baseUrl,
     );
@@ -89,6 +91,33 @@ export function Byok({
         ? 'Your saved key is encrypted: enter the passphrase below.'
         : 'Enter an API key first.',
     );
+  }
+
+  async function fetchModels() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await requestProviderPermission(effectiveBase);
+      const apiKey = await currentKey();
+      const list = await listModels(preset as NonNullable<typeof preset>, {
+        baseUrl: effectiveBase,
+        apiKey,
+      });
+      setModels(list);
+      if (list.length === 0) {
+        setMsg({ ok: false, text: 'The provider returned no chat models for this key.' });
+        return;
+      }
+      if (!list.includes(effectiveModel)) {
+        const next = pickModel(list, preset?.model);
+        if (next) setModel(next);
+      }
+      setMsg({ ok: true, text: `${list.length} models available. Pick one, then Test.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function test() {
@@ -196,13 +225,31 @@ export function Byok({
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium">Model</span>
-        <input
-          className={fieldClass}
-          value={model}
-          placeholder={preset.model || 'model id'}
-          onChange={(e) => setModel(e.target.value)}
-          spellCheck={false}
-        />
+        <div className="flex gap-1.5">
+          <input
+            className={`${fieldClass} min-w-0 flex-1`}
+            value={model}
+            placeholder={preset.model || 'model id'}
+            onChange={(e) => setModel(e.target.value)}
+            list="byok-models"
+            spellCheck={false}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={fetchModels}
+            disabled={busy}
+            title="Ask the provider which models your key can use"
+          >
+            <RefreshCw size={14} />
+            Fetch models
+          </Button>
+        </div>
+        <datalist id="byok-models">
+          {models.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
       </label>
       {preset.editableBaseUrl && (
         <label className="flex flex-col gap-1">

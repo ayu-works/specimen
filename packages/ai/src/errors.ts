@@ -23,6 +23,12 @@ export async function httpError(res: Response): Promise<ProviderError> {
   if (res.status === 400 && /api[_ ]key/i.test(detail)) {
     return new ProviderError('auth', `Invalid API key${suffix}`);
   }
+  if (res.status === 404 || /model.*(not (exist|found)|decommission|deprecat)/i.test(detail)) {
+    return new ProviderError(
+      'other',
+      `This model isn't available for your key. In Settings, click "Fetch models" and pick one${suffix}`,
+    );
+  }
   if (res.status === 429)
     return new ProviderError('rate', `Rate limited, try again shortly${suffix}`);
   if (res.status >= 500)

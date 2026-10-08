@@ -10,6 +10,7 @@ export {
 export { type Vibe, VibeSchema, vibe } from './features/vibe';
 export type { LlmEvent, LlmRequest, PortLike } from './llmProtocol';
 export { LLM_PORT } from './llmProtocol';
+export { listModels, pickModel } from './models';
 export { getPreset, PRESETS, type Preset, type ProviderKind } from './presets';
 export {
   ANTHROPIC_DEFAULT_MODEL,
