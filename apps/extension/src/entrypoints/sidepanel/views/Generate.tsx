@@ -6,8 +6,9 @@ import {
   type PromptTarget,
   TARGET_LABELS,
 } from '@specimen/core';
-import { Copy, Download } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Code2, Copy, Download, Heart } from 'lucide-react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type SimpleIcon, siClaude, siCursor, siV0 } from 'simple-icons';
 import { toast } from '@/components/toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -16,13 +17,23 @@ import { useStore } from '../store';
 
 const KEY_FORMAT = 'settings.lastFormat';
 const KEY_TARGET = 'settings.promptTarget';
-const DEFAULT_FORMAT: GeneratorId = 'prompt';
+const DEFAULT_FORMAT = 'prompt';
 const DEFAULT_TARGET: PromptTarget = 'claude-code';
 
-async function loadSettings(): Promise<{ format?: GeneratorId; target?: PromptTarget }> {
+/** The panel offers two outputs; token exports stay in core for the MCP bridge and power users. */
+const FORMATS = [
+  { id: 'prompt', label: 'Prompt' },
+  { id: 'designmd', label: 'DESIGN.md' },
+] as const satisfies readonly { id: GeneratorId; label: string }[];
+type FormatId = (typeof FORMATS)[number]['id'];
+
+/** Target order in the logo row; `generic` last as the catch-all. */
+const TARGET_ORDER: PromptTarget[] = ['claude-code', 'cursor', 'v0', 'lovable', 'generic'];
+
+async function loadSettings(): Promise<{ format?: FormatId; target?: PromptTarget }> {
   try {
     const got = await chrome.storage.local.get([KEY_FORMAT, KEY_TARGET]);
-    const format = GENERATORS.find((g) => g.id === got[KEY_FORMAT])?.id;
+    const format = FORMATS.find((f) => f.id === got[KEY_FORMAT])?.id;
     const target = PROMPT_TARGETS.find((t) => t === got[KEY_TARGET]);
     return { format, target };
   } catch {
@@ -38,29 +49,83 @@ async function saveSetting(key: string, value: string): Promise<void> {
   }
 }
 
-function Pill({
-  active,
-  onClick,
-  children,
+function BrandIcon({ icon }: { icon: SimpleIcon }) {
+  return (
+    <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor" aria-hidden="true">
+      <path d={icon.path} />
+    </svg>
+  );
+}
+
+/** Lovable has no Simple Icons entry, so it gets a heart; generic gets a code glyph. */
+const TARGET_ICONS: Record<PromptTarget, () => ReactElement> = {
+  'claude-code': () => <BrandIcon icon={siClaude} />,
+  cursor: () => <BrandIcon icon={siCursor} />,
+  v0: () => <BrandIcon icon={siV0} />,
+  lovable: () => <Heart size={18} aria-hidden="true" />,
+  generic: () => <Code2 size={18} aria-hidden="true" />,
+};
+
+function Segmented({ value, onChange }: { value: FormatId; onChange: (id: FormatId) => void }) {
+  return (
+    <fieldset
+      aria-label="Output"
+      className="m-0 min-w-0 border-0 p-0 grid grid-cols-2 rounded-lg bg-muted p-1"
+    >
+      {FORMATS.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          aria-pressed={f.id === value}
+          onClick={() => onChange(f.id)}
+          className={cn(
+            'rounded-md py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            f.id === value
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {f.label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+function TargetLogos({
+  value,
+  onChange,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
+  value: PromptTarget;
+  onChange: (t: PromptTarget) => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        'rounded-md border px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        active
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
+    <fieldset
+      aria-label="Prompt for"
+      className="m-0 min-w-0 border-0 p-0 flex justify-between gap-1.5"
     >
-      {children}
-    </button>
+      {TARGET_ORDER.map((t) => {
+        const Icon = TARGET_ICONS[t];
+        return (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={t === value}
+            aria-label={TARGET_LABELS[t]}
+            title={TARGET_LABELS[t]}
+            onClick={() => onChange(t)}
+            className={cn(
+              'flex h-10 flex-1 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              t === value
+                ? 'border-foreground bg-muted text-foreground'
+                : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <Icon />
+          </button>
+        );
+      })}
+    </fieldset>
   );
 }
 
@@ -102,7 +167,7 @@ function Preview({ file }: { file: GeneratedFile }) {
 
 export function Generate() {
   const { scan, setTab } = useStore();
-  const [format, setFormat] = useState<GeneratorId>(DEFAULT_FORMAT);
+  const [format, setFormat] = useState<FormatId>(DEFAULT_FORMAT);
   const [target, setTarget] = useState<PromptTarget>(DEFAULT_TARGET);
 
   useEffect(() => {
@@ -140,7 +205,7 @@ export function Generate() {
   const file = result?.file ?? null;
   const approxTokens = file ? Math.round(file.content.length / 4) : 0;
 
-  function pickFormat(id: GeneratorId) {
+  function pickFormat(id: FormatId) {
     setFormat(id);
     void saveSetting(KEY_FORMAT, id);
   }
@@ -173,32 +238,16 @@ export function Generate() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Card>
-        <CardTitle>Format</CardTitle>
-        <div className="flex flex-wrap gap-1.5">
-          {GENERATORS.map((g) => (
-            <Pill key={g.id} active={g.id === format} onClick={() => pickFormat(g.id)}>
-              {g.label}
-            </Pill>
-          ))}
-        </div>
-        {format === 'prompt' && (
-          <>
-            <CardTitle className="mt-3">Target</CardTitle>
-            <div className="flex flex-wrap gap-1.5">
-              {PROMPT_TARGETS.map((t) => (
-                <Pill key={t} active={t === target} onClick={() => pickTarget(t)}>
-                  {TARGET_LABELS[t]}
-                </Pill>
-              ))}
-            </div>
-          </>
-        )}
+      <Card className="flex flex-col gap-2.5">
+        <Segmented value={format} onChange={pickFormat} />
+        {format === 'prompt' && <TargetLogos value={target} onChange={pickTarget} />}
       </Card>
 
       <Card className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="mb-0">Preview</CardTitle>
+          <CardTitle className="mb-0">
+            {format === 'prompt' ? `Prompt · ${TARGET_LABELS[target]}` : 'DESIGN.md'}
+          </CardTitle>
           {file && (
             <span
               className="font-mono text-[10px] text-muted-foreground"
