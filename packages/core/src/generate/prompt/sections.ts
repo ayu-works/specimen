@@ -1,3 +1,4 @@
+import { a11yFixes } from '../../a11y';
 import type { DesignScan } from '../../schema';
 import { describeSection, usableSections } from '../blueprint';
 import {
@@ -16,8 +17,10 @@ import {
   table,
   themeVariant,
 } from '../common';
+import { type ComponentKind, measured, measuredLines } from '../components';
 import { cornerStyle, visualDirection } from '../direction';
 import { type FontInfo, fontPhrase, fontSet } from '../fonts';
+import { mobileSection } from '../mobile';
 
 export function goal(): string {
   return [
@@ -38,6 +41,13 @@ export function colorTokens(scan: DesignScan): string {
   if (extras.length > 0) {
     out.push('', `Supporting colors: ${extras.map((t) => t.hex).join(', ')}.`);
   }
+  const fixes = a11yFixes(scan);
+  if (fixes.length > 0) {
+    out.push(
+      '',
+      `Use these adjusted colors for AA contrast: ${fixes.map((f) => `${f.role} ${f.to}`).join(', ')}.`,
+    );
+  }
   return out.join('\n');
 }
 
@@ -48,8 +58,9 @@ export function themeTokens(scan: DesignScan): string {
   const label = v.scheme === 'dark' ? 'Dark' : 'Light';
   const rows = roleColors(scan, v.colors).map(({ role, token }) => [role, token.hex]);
   if (rows.length === 0) return '';
+  const origin = v.colors.measured ? ' (measured from the site)' : '';
   return [
-    `## ${label} theme tokens`,
+    `## ${label} theme tokens${origin}`,
     '',
     `Apply these under \`[data-theme="${v.scheme}"]\`; everything else stays the same.`,
     '',
@@ -147,18 +158,63 @@ export function componentRules(scan: DesignScan): string {
   const shadow = levelShadows(scan)[0];
   const btnFont = btnStyle ? `, ${btnStyle.size}px / weight ${btnStyle.weight}` : '';
   const bw = scan.borders[0]?.width ?? 1;
-  const out = [
+
+  // Derived rules (from the color/radius/spacing tokens); measured specs replace them per kind.
+  const derived: Partial<Record<ComponentKind, string[]>> = {
+    'button-primary': [
+      `- Primary button: background ${accent ?? text ?? 'textPrimary'}${accent ? ' (accent)' : ''}, text ${fg ?? bg ?? 'accentForeground'}, radius ${radiusText(radius)}, padding ${py}px ${pxx}px${btnFont}. Slightly darken or lighten on hover.`,
+    ],
+    'button-secondary': [
+      `- Secondary button: transparent or ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, text ${text ?? 'textPrimary'}, same radius and padding as primary.`,
+    ],
+    card: [
+      `- Card: ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(cardRadius)}, padding ${nearestSpace(scan, scan.spacing.baseUnit * 6)}px${shadow ? `, shadow \`${shadow.css}\`` : ', no shadow'}.`,
+    ],
+    input: [
+      `- Input: ${bg ?? 'background'} fill, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(inputRadius)}, height about ${py * 2 + (btnStyle?.size ?? scan.typography.baseSize)}px; focus ring in ${accent ?? text ?? 'the text color'}.`,
+    ],
+    'nav-link': [
+      `- Links: ${link ?? text ?? 'the text color'}${link && !scan.colors.roles.link ? ' (accent)' : ''}, no underline at rest, underline or color shift on hover.`,
+    ],
+  };
+  const order: ComponentKind[] = [
+    'button-primary',
+    'button-secondary',
+    'button-ghost',
+    'card',
+    'input',
+    'nav-link',
+    'badge',
+  ];
+  const lines: string[] = [];
+  let usedMeasured = false;
+  for (const kind of order) {
+    const spec = measured(scan, kind);
+    if (spec) {
+      lines.push(...measuredLines(spec));
+      if (kind === 'button-primary' && !spec.states.hover) {
+        lines.push('  - Primary button hover: slightly darken or lighten the background.');
+      }
+      usedMeasured = true;
+    } else if (derived[kind]) lines.push(...(derived[kind] as string[]));
+  }
+  if (cornerStyle(scan) === 'pill')
+    lines.push('- Keep every interactive control fully rounded (pill).');
+  return [
     '## Component rules',
     '',
-    `- Primary button: background ${accent ?? text ?? 'textPrimary'}${accent ? ' (accent)' : ''}, text ${fg ?? bg ?? 'accentForeground'}, radius ${radiusText(radius)}, padding ${py}px ${pxx}px${btnFont}. Slightly darken or lighten on hover.`,
-    `- Secondary button: transparent or ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, text ${text ?? 'textPrimary'}, same radius and padding as primary.`,
-    `- Card: ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(cardRadius)}, padding ${nearestSpace(scan, scan.spacing.baseUnit * 6)}px${shadow ? `, shadow \`${shadow.css}\`` : ', no shadow'}.`,
-    `- Input: ${bg ?? 'background'} fill, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(inputRadius)}, height about ${py * 2 + (btnStyle?.size ?? scan.typography.baseSize)}px; focus ring in ${accent ?? text ?? 'the text color'}.`,
-    `- Links: ${link ?? text ?? 'the text color'}${link && !scan.colors.roles.link ? ' (accent)' : ''}, no underline at rest, underline or color shift on hover.`,
-  ];
-  if (cornerStyle(scan) === 'pill')
-    out.push('- Keep every interactive control fully rounded (pill).');
-  return out.join('\n');
+    ...(usedMeasured
+      ? [
+          'Measured from the live page, with hover/focus/active states where the page declares them.',
+          '',
+        ]
+      : []),
+    ...lines,
+  ].join('\n');
+}
+
+export function mobile(scan: DesignScan): string {
+  return mobileSection(scan);
 }
 
 export function doDont(): string {

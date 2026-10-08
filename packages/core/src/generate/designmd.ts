@@ -1,3 +1,4 @@
+import { pairLevel } from '../a11y';
 import type { DesignScan } from '../schema';
 import { describeSection, usableSections } from './blueprint';
 import {
@@ -14,8 +15,10 @@ import {
   table,
   themeVariant,
 } from './common';
+import { COMPONENT_LABELS, describeBase, describeProps } from './components';
 import { visualDirection } from './direction';
 import { type FontInfo, fontPhrase, fontSet } from './fonts';
+import { mobileSection } from './mobile';
 import { brandTokens, containsBrand, sanitize } from './sanitize';
 
 const pct = (w: number) => `${fmt(w * 100, 1)}%`;
@@ -96,7 +99,7 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
         '',
         `## ${variant.scheme === 'dark' ? 'Dark' : 'Light'} theme`,
         '',
-        `Counterpart palette for \`[data-theme="${variant.scheme}"]\`.`,
+        `Counterpart palette for \`[data-theme="${variant.scheme}"]\`${variant.colors.measured ? ' (measured from the site).' : ' (derived, not measured).'}`,
         '',
         table(
           ['Role', 'Hex', 'OKLCH'],
@@ -232,24 +235,60 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
       : ['No sections detected.']),
   );
 
+  // Mobile
+  const mobile = mobileSection(scan, '## Mobile (≤ 390px)');
+  if (mobile) out.push('', mobile);
+
   // Components
   out.push('', '## Components', '');
   if (scan.components && scan.components.length > 0) {
     out.push(
       table(
-        ['Component', 'Base styles', 'States'],
-        scan.components.map((c) => [
-          c.kind,
-          Object.entries(c.base)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join('; '),
-          Object.keys(c.states).join(', ') || 'none',
-        ]),
+        ['Component', 'Base styles'],
+        scan.components.map((c) => [COMPONENT_LABELS[c.kind], describeBase(c.base)]),
       ),
     );
+    const stateRows = scan.components.flatMap((c) =>
+      Object.entries(c.states).flatMap(([state, props]) =>
+        props && Object.keys(props).length > 0
+          ? [[COMPONENT_LABELS[c.kind], state, describeProps(props)]]
+          : [],
+      ),
+    );
+    if (stateRows.length > 0) {
+      out.push(
+        '',
+        '### Interaction states',
+        '',
+        table(['Component', 'State', 'Changes'], stateRows),
+      );
+    }
   } else {
     out.push(
       'No component specs captured. Derive buttons, cards and inputs from the color, radius and spacing tables above.',
+    );
+  }
+
+  // Accessibility
+  const pairs = scan.a11y?.pairs ?? [];
+  if (pairs.length > 0) {
+    const label = { aa: 'AA', 'aa-large': 'AA large text only', fail: 'Fail' } as const;
+    out.push(
+      '',
+      '## Accessibility',
+      '',
+      `${pairs.filter((p) => p.aa).length} of ${pairs.length} color pairs pass WCAG AA (4.5:1 text, 3:1 UI components).`,
+      '',
+      table(
+        ['Foreground', 'Background', 'Ratio', 'Result', 'Suggested fix'],
+        pairs.map((p) => [
+          `${p.fgRole ?? 'fg'} ${p.fg}`,
+          `${p.bgRole ?? 'bg'} ${p.bg}`,
+          `${fmt(p.ratio, 2)}:1`,
+          label[pairLevel(p)],
+          p.fix ? p.fix : p.aa ? 'none needed' : 'n/a',
+        ]),
+      ),
     );
   }
 

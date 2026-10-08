@@ -1,5 +1,5 @@
 import { extract, generatePrompt, PROMPT_TARGETS, type PromptTarget } from '@specimen/core';
-import { listen, type Message, type ScanResult } from '@/lib/messaging';
+import { listen, type Message, type ScanOpts, type ScanResult } from '@/lib/messaging';
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const OVERLAY_FILE = '/content-scripts/overlay.js';
@@ -30,14 +30,58 @@ async function downscale(dataUrl: string): Promise<string> {
   return `data:image/jpeg;base64,${toBase64(new Uint8Array(await out.arrayBuffer()))}`;
 }
 
-async function scanRun(tabId: number): Promise<ScanResult> {
-  const tab = await chrome.tabs.get(tabId);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run `fn` with `prefers-color-scheme` emulated through the DevTools protocol. Needs the optional
+ * `debugger` permission (requested from the side panel). Chrome shows its "debugging this
+ * browser" bar while attached; we always restore and detach.
+ */
+async function withColorSchemeEmulation<T>(
+  tabId: number,
+  scheme: 'dark' | 'light',
+  fn: () => Promise<T>,
+): Promise<T> {
+  const dbg = (chrome as { debugger?: typeof chrome.debugger }).debugger;
+  if (!dbg) throw new Error('Debugger permission not granted');
+  const target = { tabId };
+  await dbg.attach(target, '1.3');
+  try {
+    await dbg.sendCommand(target, 'Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-color-scheme', value: scheme }],
+    });
+    await sleep(400); // let transitions and media-query listeners settle
+    return await fn();
+  } finally {
+    await dbg.sendCommand(target, 'Emulation.setEmulatedMedia', { features: [] }).catch(() => {});
+    await dbg.detach(target).catch(() => {});
+  }
+}
+
+async function sample(tabId: number, opts: ScanOpts): Promise<ScanResult['raw']> {
+  // Hand the options to the sampler, which runs in the same isolated world a moment later.
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (o: Pick<ScanOpts, 'theme' | 'colorsOnly' | 'skipComponents'>) => {
+      (globalThis as { __specimenOpts?: unknown }).__specimenOpts = o;
+    },
+    args: [{ theme: opts.theme, colorsOnly: opts.colorsOnly, skipComponents: opts.skipComponents }],
+  });
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
     files: [SAMPLER_FILE],
   });
   const raw = injection?.result as ScanResult['raw'] | undefined;
   if (!raw) throw new Error('sampler returned no result');
+  return raw;
+}
+
+async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanResult> {
+  const tab = await chrome.tabs.get(tabId);
+  const raw = opts.emulate
+    ? await withColorSchemeEmulation(tabId, opts.emulate, () => sample(tabId, opts))
+    : await sample(tabId, opts);
+  if (opts.noScreenshot) return { raw, screenshot: '' };
   // The thumbnail is a nice-to-have: a failed capture must not fail the scan.
   try {
     const shot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 });
@@ -165,7 +209,7 @@ export default defineBackground(() => {
   });
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   listen({
-    'scan.run': (msg) => scanRun(msg.tabId),
+    'scan.run': (msg) => scanRun(msg.tabId, msg.opts),
     'overlay.set': overlaySet,
     'offscreen.ensure': async () => {
       await ensureOffscreen();

@@ -1,6 +1,8 @@
+import { computeA11y } from '../a11y';
 import { type DesignScan, DesignScanSchema, type RawPage } from '../schema';
 import { extractBorders } from './borders';
 import { analyzeColors, type ColorOptions, CSS_VAR_HINT } from './colors';
+import { extractComponents } from './components';
 import { densityOf, extractLayout } from './layout';
 import { extractRadii } from './radii';
 import { classifySections } from './sections';
@@ -8,7 +10,10 @@ import { extractShadows } from './shadows';
 import { extractSpacing } from './spacing';
 import { extractTypography } from './typography';
 
-export const EXTRACTOR_VERSION = '1.0.0';
+export const EXTRACTOR_VERSION = '1.1.0';
+
+export { mergeScans } from './merge';
+export { extractMobile } from './mobile';
 
 export interface ExtractOptions extends ColorOptions {
   /** Override the scan id (default: derived from url + scannedAt). */
@@ -64,7 +69,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
     /* keep raw */
   }
   const scan: DesignScan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: opts.id ?? `scan_${hash(`${raw.url}|${raw.scannedAt}`)}`,
     url: raw.url,
     host,
@@ -83,6 +88,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
       density: densityOf(spacing.sectionPaddingY, typography.baseSize),
       blueprint,
     },
+    a11y: computeA11y(colors.colors),
     cssVariables: designVars(raw.rootVars),
     meta: {
       extractorVersion: EXTRACTOR_VERSION,
@@ -91,5 +97,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
       warnings: [...raw.warnings],
     },
   };
+  const components = extractComponents(raw.components);
+  if (components.length > 0) scan.components = components;
   return opts.validate === false ? scan : DesignScanSchema.parse(scan);
 }

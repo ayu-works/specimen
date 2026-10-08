@@ -4,6 +4,7 @@ import {
   GENERATORS,
   type GeneratedFile,
   type GeneratorId,
+  hasMeasuredCounterpart,
   PROMPT_TARGETS,
   type PromptTarget,
   TARGET_LABELS,
@@ -20,6 +21,7 @@ import { openSettings, useAiContext } from '@/lib/aiContext';
 import { SETUP_HINT } from '@/lib/aiRuntime';
 import { cn } from '@/lib/utils';
 import { useStore } from '../store';
+import { FidelityCheck } from './FidelityCheck';
 
 const KEY_FORMAT = 'settings.lastFormat';
 const KEY_TARGET = 'settings.promptTarget';
@@ -312,6 +314,7 @@ export function Generate() {
             className="size-3.5 accent-foreground"
           />
           Include {counterpartKey(scan)} theme
+          {hasMeasuredCounterpart(scan) ? ' (measured)' : ' (derived)'}
         </label>
       </Card>
 
@@ -389,6 +392,8 @@ export function Generate() {
         </div>
         {file && <p className="text-[11px] text-muted-foreground">Saves as {file.filename}</p>}
       </Card>
+
+      <FidelityCheck />
     </div>
   );
 }

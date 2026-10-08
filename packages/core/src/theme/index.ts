@@ -133,3 +133,9 @@ export function withoutThemeVariants(scan: DesignScan): DesignScan {
   const { dark: _d, light: _l, ...rest } = scan.variants;
   return { ...scan, variants: Object.keys(rest).length > 0 ? rest : undefined };
 }
+
+/** True when the stored counterpart theme was measured from the page (not derived). */
+export function hasMeasuredCounterpart(scan: DesignScan): boolean {
+  const stored = scan.variants?.[counterpartKey(scan)];
+  return Boolean(stored?.roles && stored.measured);
+}

@@ -28,7 +28,7 @@ async function capAlreadyAsked(): Promise<boolean> {
 }
 
 export function Library() {
-  const { scan: current, openScan, setTab } = useStore();
+  const { scan: current, openScan, setTab, requestCheck } = useStore();
   const [scans, setScans] = useState<StoredScan[] | null>(null);
   const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
   const [query, setQuery] = useState('');
@@ -84,6 +84,13 @@ export function Library() {
     // The saved thumbnail stands in for the screenshot so vision models can still look.
     openScan(s, 'saved', await thumbDataUrl(s.id).catch(() => null));
     setTab('inspect');
+  }
+
+  /** Make this scan the target, then jump to Generate's "Check your build" card. */
+  async function checkBuild(s: StoredScan) {
+    openScan(s, 'saved', await thumbDataUrl(s.id).catch(() => null));
+    setTab('generate');
+    requestCheck();
   }
 
   async function rescan(s: StoredScan) {
@@ -266,6 +273,7 @@ export function Library() {
             }
             onOpen={() => open(s)}
             onRescan={() => void rescan(s)}
+            onCheck={() => void checkBuild(s)}
             onChanged={() => void reload()}
           />
         ))}

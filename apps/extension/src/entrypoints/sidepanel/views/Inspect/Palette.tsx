@@ -1,4 +1,9 @@
-import { counterpartColors, counterpartKey, detectScheme } from '@specimen/core';
+import {
+  counterpartColors,
+  counterpartKey,
+  detectScheme,
+  hasMeasuredCounterpart,
+} from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
 import { useMemo, useState } from 'react';
 import { toast } from '@/components/toast';
@@ -16,6 +21,7 @@ export function copyHex(hex: string) {
 export function Palette({ scan }: { scan: DesignScan }) {
   const [alt, setAlt] = useState(false);
   const counterpart = useMemo(() => counterpartColors(scan), [scan]);
+  const measured = hasMeasuredCounterpart(scan);
   const { palette, roles } = alt ? counterpart : scan.colors;
   const baseScheme = detectScheme(scan.colors);
   const otherScheme = counterpartKey(scan);
@@ -58,13 +64,16 @@ export function Palette({ scan }: { scan: DesignScan }) {
               )}
             >
               {cap(o.name)}
+              {o.id && <span className="ml-1 opacity-60">{measured ? 'measured' : 'derived'}</span>}
             </button>
           ))}
         </fieldset>
       </div>
       {alt && (
         <p className="mb-2 text-[10px] text-muted-foreground">
-          Derived {otherScheme} counterpart (not measured from the site).
+          {measured
+            ? `Measured ${otherScheme} theme, captured from the site.`
+            : `Derived ${otherScheme} counterpart (not measured from the site).`}
         </p>
       )}
       <div className="grid grid-cols-2 gap-1.5">

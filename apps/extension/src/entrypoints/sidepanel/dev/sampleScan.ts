@@ -11,7 +11,7 @@ const tok = (id: string, hex: string, weight: number, usage: ColorToken['usage']
 
 /** Plausible Linear-like scan for visual development (`sidepanel.html?demo=1`). */
 export const sampleScan: DesignScan = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: 'demo',
   url: 'https://linear.app/',
   host: 'linear.app',

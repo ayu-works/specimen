@@ -1,5 +1,5 @@
 import { extract } from '@specimen/core';
-import type { DesignScan } from '@specimen/core/schema';
+import type { DesignScan, RawPage } from '@specimen/core/schema';
 import { saveScan } from './db';
 import { send } from './messaging';
 
@@ -25,27 +25,38 @@ export async function ensureSiteAccess(): Promise<void> {
 export interface ScanOutcome {
   scan: DesignScan;
   screenshot: string;
+  /** Page facts from the sampler (theme switches, menu button). */
+  hints?: RawPage['hints'];
+}
+
+export interface ScanTabOptions {
+  /** Save to the library (default true). Off for builds and extra pages. */
+  save?: boolean;
+  /** Skip the thumbnail. */
+  noScreenshot?: boolean;
 }
 
 /** Scan a tab and save the result (with thumbnail) to the library. Saving never fails the scan. */
-export async function scanTab(tabId: number): Promise<ScanOutcome> {
-  const res = await send('scan.run', { tabId });
+export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
+  const res = await send('scan.run', {
+    tabId,
+    opts: opts.noScreenshot ? { noScreenshot: true } : undefined,
+  });
   const scan = extract(res.raw);
-  try {
-    await saveScan(scan, res.screenshot);
-  } catch {
-    /* library unavailable (private mode, quota): the scan itself still works */
+  if (opts.save !== false) {
+    try {
+      await saveScan(scan, res.screenshot);
+    } catch {
+      /* library unavailable (private mode, quota): the scan itself still works */
+    }
   }
-  return { scan, screenshot: res.screenshot };
+  return { scan, screenshot: res.screenshot, hints: res.raw.hints };
 }
 
-/** Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. */
-export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: string | null }> {
-  const tab = await chrome.tabs.create({ url, active: true });
-  const id = tab.id;
-  if (id === undefined) throw new Error('Could not open a tab');
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => done(new Error('The page took too long to load')), 30000);
+/** Resolve when the tab finishes loading; reject on timeout or when it is closed. */
+export function waitForTabLoad(id: number, timeoutMs = 30000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => done(new Error('The page took too long to load')), timeoutMs);
     const onUpdated = (tabId: number, info: { status?: string }) => {
       if (tabId === id && info.status === 'complete') done();
     };
@@ -69,8 +80,29 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
       })
       .catch(() => {});
   });
+}
+
+/** Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. */
+export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: string | null }> {
+  const tab = await chrome.tabs.create({ url, active: true });
+  const id = tab.id;
+  if (id === undefined) throw new Error('Could not open a tab');
+  await waitForTabLoad(id);
   await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
   const out = await scanTab(id);
   const fresh = await chrome.tabs.get(id).catch(() => null);
   return { ...out, favicon: fresh?.favIconUrl ?? null };
+}
+
+/** Same page, ignoring hash, query order and a trailing slash. */
+export function sameUrl(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    const x = new URL(a);
+    const y = new URL(b);
+    const path = (u: URL) => u.pathname.replace(/\/+$/, '') || '/';
+    return x.origin === y.origin && path(x) === path(y) && x.search === y.search;
+  } catch {
+    return a === b;
+  }
 }

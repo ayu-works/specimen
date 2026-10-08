@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "scan-minimal",
   "url": "https://example.com/",
   "host": "example.com",

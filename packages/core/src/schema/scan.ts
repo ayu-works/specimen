@@ -115,6 +115,20 @@ const LayoutSchema = z.object({
   blueprint: z.array(SectionSchema),
 });
 
+/** Layout measured at a phone-width viewport, plus what changes versus desktop. */
+const MobileSchema = LayoutSchema.partial().extend({
+  /** Type sizes (px, by role) that differ from desktop. */
+  typeSizes: z.record(z.string(), z.number()).optional(),
+  sectionPaddingY: z.number().optional(),
+  /** True when the top navigation collapses into a menu button. */
+  hamburger: z.boolean().optional(),
+  /** Real viewport width of the capture (browsers enforce a minimum popup width). */
+  viewportWidth: z.number().optional(),
+});
+
+/** Colors of the other color scheme. `measured` = captured from the page (else derived). */
+const ThemeVariantSchema = ColorsSchema.partial().extend({ measured: z.boolean().optional() });
+
 export const FamilySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -125,7 +139,7 @@ export const FamilySchema = z.object({
 });
 
 export const DesignScanSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   id: z.string(),
   url: z.string(),
   host: z.string(),
@@ -168,9 +182,9 @@ export const DesignScanSchema = z.object({
   components: z.array(ComponentSpecSchema).optional(),
   variants: z
     .object({
-      dark: ColorsSchema.partial().optional(),
-      light: ColorsSchema.partial().optional(),
-      mobile: LayoutSchema.partial().optional(),
+      dark: ThemeVariantSchema.optional(),
+      light: ThemeVariantSchema.optional(),
+      mobile: MobileSchema.optional(),
     })
     .optional(),
   vibe: z
@@ -185,6 +199,12 @@ export const DesignScanSchema = z.object({
           ratio: z.number(),
           aa: z.boolean(),
           aaLarge: z.boolean(),
+          fgRole: ColorRoleSchema.optional(),
+          bgRole: ColorRoleSchema.optional(),
+          /** `ui` = non-text component (needs 3:1), `text` = needs 4.5:1 (3:1 when large). */
+          kind: z.enum(['text', 'ui']).optional(),
+          /** Nearest passing foreground (OKLCH lightness shift), when the pair fails. */
+          fix: z.string().optional(),
         }),
       ),
     })

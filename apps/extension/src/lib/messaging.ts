@@ -1,8 +1,21 @@
 import type { RawPage } from '@specimen/core/schema';
 
 /** Request/response shapes keyed by message type (ARCHITECTURE §8). */
+export interface ScanOpts {
+  /** Re-sample with the page switched to this scheme through its own class/attribute switch. */
+  theme?: 'dark' | 'light';
+  /** Emulate `prefers-color-scheme` via the optional `debugger` permission, then restore. */
+  emulate?: 'dark' | 'light';
+  /** Skip component specs and page hints. */
+  colorsOnly?: boolean;
+  /** Skip only the component specs (mobile capture). */
+  skipComponents?: boolean;
+  /** Skip the thumbnail (secondary captures: mobile popup, themed re-samples, builds). */
+  noScreenshot?: boolean;
+}
+
 export interface MessageMap {
-  'scan.run': { req: { tabId: number; opts?: Record<string, never> }; res: ScanResult };
+  'scan.run': { req: { tabId: number; opts?: ScanOpts }; res: ScanResult };
   'css.fetch': { req: { urls: string[] }; res: { texts: (string | null)[] } };
   // Declared for later phases; the background answers these with "not implemented".
   'overlay.set': {

@@ -1,3 +1,4 @@
+import { mobileLines } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
 import {
   AlignHorizontalDistributeCenter,
@@ -14,7 +15,9 @@ import {
   Tag,
   Type,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Card, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 const ICONS: Record<string, LucideIcon> = {
   nav: Menu,
@@ -32,11 +35,45 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function Blueprint({ scan }: { scan: DesignScan }) {
-  const sections = scan.layout.blueprint;
+  const mobileSections = scan.variants?.mobile?.blueprint;
+  const [view, setView] = useState<'desktop' | 'mobile'>('desktop');
+  const showMobile = view === 'mobile' && !!mobileSections;
+  const sections = showMobile && mobileSections ? mobileSections : scan.layout.blueprint;
   const total = sections.reduce((a, s) => a + s.height, 0) || 1;
+  const notes = showMobile ? mobileLines(scan) : [];
   return (
     <Card>
-      <CardTitle>Blueprint</CardTitle>
+      <div className="mb-2 flex items-center justify-between">
+        <CardTitle className="mb-0">Blueprint</CardTitle>
+        {mobileSections && (
+          <fieldset
+            aria-label="Blueprint view"
+            className="m-0 flex min-w-0 gap-0.5 rounded-md border-0 bg-muted p-0.5"
+          >
+            {(['desktop', 'mobile'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                  view === v ? 'bg-background shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </fieldset>
+        )}
+      </div>
+      {notes.length > 0 && (
+        <ul className="mb-2 list-disc pl-4 text-[11px] text-muted-foreground">
+          {notes.map((n) => (
+            <li key={n}>{n.replace(/^- /, '')}</li>
+          ))}
+        </ul>
+      )}
       <div className="flex gap-3">
         <ol className="flex min-w-0 flex-1 flex-col gap-1">
           {sections.map((s) => {

@@ -85,7 +85,7 @@ export function roleColors(scan: DesignScan, colors: Partial<Colors> = scan.colo
 /** The captured/derived opposite-scheme colors, if the scan carries any. */
 export function themeVariant(
   scan: DesignScan,
-): { scheme: 'dark' | 'light'; colors: Partial<Colors> } | undefined {
+): { scheme: 'dark' | 'light'; colors: Partial<Colors> & { measured?: boolean } } | undefined {
   const v = scan.variants;
   if (v?.dark?.roles) return { scheme: 'dark', colors: v.dark };
   if (v?.light?.roles) return { scheme: 'light', colors: v.light };

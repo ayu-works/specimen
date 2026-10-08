@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { type InspectorHover, send } from '@/lib/messaging';
 import { useStore } from '../../store';
+import { Accessibility } from './Accessibility';
 import { Blueprint } from './Blueprint';
+import { Components } from './Components';
 import { Palette } from './Palette';
 import { Shapes } from './Shapes';
 import { Spacing } from './Spacing';
@@ -138,9 +140,11 @@ export function Inspect() {
       <VibeCard />
       <Toolbar />
       <Palette scan={scan} />
+      <Accessibility scan={scan} />
       <TypeScale scan={scan} />
       <Spacing scan={scan} />
       <Shapes scan={scan} />
+      <Components scan={scan} />
       <Blueprint scan={scan} />
     </div>
   );
