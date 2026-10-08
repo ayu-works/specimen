@@ -253,20 +253,20 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
   const primary = neutralText[0] ?? textTokens[0];
   if (primary) {
     roles.textPrimary = primary.id;
-    const lower = textTokens
-      .filter(
-        (t) =>
-          t.id !== primary.id &&
-          chroma(t) < 0.06 &&
-          ratioOf(t) < ratioOf(primary) &&
-          ratioOf(t) >= 2 &&
-          t.usage.text >= topText * 0.02,
-      )
-      .sort((a, b) => ratioOf(b) - ratioOf(a));
+    // Secondary/muted must be clearly dimmer than primary (≤ 80% of its contrast) so a
+    // near-duplicate of the primary colour isn't chosen; among those, usage decides.
+    const lower = textTokens.filter(
+      (t) =>
+        t.id !== primary.id &&
+        chroma(t) < 0.06 &&
+        ratioOf(t) <= ratioOf(primary) * 0.8 &&
+        ratioOf(t) >= 2 &&
+        t.usage.text >= topText * 0.02,
+    );
     const second = lower.find((t) => ratioOf(t) >= 3) ?? lower[0];
     if (second) {
       roles.textSecondary = second.id;
-      const muted = lower.find((t) => ratioOf(t) < ratioOf(second));
+      const muted = lower.find((t) => ratioOf(t) < ratioOf(second) * 0.9);
       if (muted) roles.textMuted = muted.id;
     }
   }
@@ -304,6 +304,35 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
           (b.usage.bg + b.usage.fill + b.usage.text) * chroma(b) -
           (a.usage.bg + a.usage.fill + a.usage.text) * chroma(a),
       )[0]?.id;
+  }
+  // Monochrome sites (e.g. white buttons on black) have no real chromatic accent; a single
+  // promo button must not define the brand. When neutral button fills clearly dominate, the
+  // accent is that neutral.
+  const neutralBtn = new Map<string, number>();
+  raw.samples.forEach((smp, idx) => {
+    const c = perSample[idx] as SampleColors;
+    if (smp.interactive !== 'button' || !c.ownBg) return;
+    const t = tokenOf(c.ownBg);
+    if (t && t.id !== bgId && chroma(t) <= 0.06) bump(neutralBtn, t.id, 1);
+  });
+  const neutralTotal = [...neutralBtn.values()].reduce((a, b) => a + b, 0);
+  const chromaticVotes = accentId ? (accentVotes.get(accentId) ?? 0) : 0;
+  if (neutralTotal >= 2 && neutralTotal >= chromaticVotes * 3) {
+    // The monochrome "accent" is the fill that stands out: a neutral button with real
+    // contrast against the page (white-on-black CTA), else the primary text colour itself.
+    const standout = ranked(neutralBtn).find(
+      ([id]) => contrast((byId.get(id) as ColorToken).hex, bgHex) >= 3,
+    );
+    accentId = standout?.[0] ?? roles.textPrimary;
+    raw.samples.forEach((smp, idx) => {
+      const c = perSample[idx] as SampleColors;
+      if (smp.interactive !== 'button' || !c.ownBg || tokenOf(c.ownBg)?.id !== accentId) return;
+      const tt = c.text && tokenOf(c.text);
+      if (!tt) return;
+      const m = onAccent.get(accentId as string) ?? new Map<string, number>();
+      bump(m, tt.id, 1);
+      onAccent.set(accentId as string, m);
+    });
   }
   if (accentId) roles.accent = accentId;
 
@@ -383,6 +412,21 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     const m = onAccent.get(roles.accent);
     const top = m && ranked(m)[0];
     if (top) roles.accentForeground = top[0];
+    else {
+      // No measured button text: use whichever of background / primary text reads best on it.
+      const acc = byId.get(roles.accent);
+      const opts = [roles.background, roles.textPrimary].filter(
+        (id): id is string => !!id && id !== roles.accent,
+      );
+      const best = acc
+        ? opts.sort(
+            (a, b) =>
+              contrast((byId.get(b) as ColorToken).hex, acc.hex) -
+              contrast((byId.get(a) as ColorToken).hex, acc.hex),
+          )[0]
+        : undefined;
+      if (best) roles.accentForeground = best;
+    }
   }
 
   // ---- gradients ----

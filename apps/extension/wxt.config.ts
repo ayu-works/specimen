@@ -32,6 +32,10 @@ export default defineConfig({
     },
     commands: {
       _execute_action: { suggested_key: { default: 'Alt+Shift+S' } },
+      'scan-copy': {
+        suggested_key: { default: 'Alt+Shift+C' },
+        description: 'Scan this page and copy the AI prompt',
+      },
     },
   },
 });

@@ -3,6 +3,7 @@ import { Toaster } from '@/components/toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sampleScan } from './dev/sampleScan';
 import { type TabId, useStore } from './store';
+import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
 import { Scan } from './views/Scan';
 
@@ -48,7 +49,10 @@ export default function App() {
           <TabsContent value="inspect">
             <Inspect />
           </TabsContent>
-          {(['generate', 'ask', 'library'] as const).map((id) => (
+          <TabsContent value="generate">
+            <Generate />
+          </TabsContent>
+          {(['ask', 'library'] as const).map((id) => (
             <TabsContent key={id} value={id}>
               <p className="py-10 text-center text-muted-foreground">Coming soon</p>
             </TabsContent>

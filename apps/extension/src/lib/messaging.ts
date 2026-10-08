@@ -19,6 +19,8 @@ export interface MessageMap {
     res: { ok: true };
   };
   'offscreen.ensure': { req: Record<string, never>; res: { ok: boolean } };
+  /** Background -> offscreen document: write text to the clipboard. */
+  'offscreen.copy': { req: { text: string }; res: { ok: true } };
 }
 
 /** Payload streamed over Port `inspector` (content -> side panel). */

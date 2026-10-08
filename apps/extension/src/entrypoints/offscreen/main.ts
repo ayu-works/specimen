@@ -1,0 +1,39 @@
+/**
+ * Offscreen document: a hidden page the service worker can use for DOM-only APIs.
+ * It is a message router; Phase 3 adds the WebLLM routes here.
+ */
+
+type Handler = (msg: never) => Promise<unknown>;
+
+/** `navigator.clipboard` needs focus, so copy with a hidden textarea + execCommand. */
+async function copy(msg: { text: string }): Promise<{ ok: true }> {
+  const ta = document.createElement('textarea');
+  ta.value = msg.text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+  document.body.append(ta);
+  try {
+    ta.focus();
+    ta.select();
+    if (!document.execCommand('copy')) throw new Error('execCommand(copy) was rejected');
+    return { ok: true };
+  } finally {
+    ta.remove();
+  }
+}
+
+const ROUTES: Record<string, Handler> = {
+  'offscreen.copy': copy as Handler,
+};
+
+// Only answer messages we own: replying to others would race the real handler in the background.
+chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
+  const type = (msg as { type?: unknown } | null)?.type;
+  const handler = typeof type === 'string' ? ROUTES[type] : undefined;
+  if (!handler) return false;
+  (handler as (m: unknown) => Promise<unknown>)(msg).then(
+    () => sendResponse({ ok: true }),
+    (e: unknown) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+  );
+  return true;
+});
