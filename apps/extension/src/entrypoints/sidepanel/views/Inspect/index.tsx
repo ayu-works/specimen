@@ -9,6 +9,7 @@ import { Palette } from './Palette';
 import { Shapes } from './Shapes';
 import { Spacing } from './Spacing';
 import { TypeScale } from './TypeScale';
+import { VibeCard } from './Vibe';
 
 async function activeTabId(): Promise<number | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -118,6 +119,7 @@ export function Inspect() {
   }
   return (
     <div className="flex flex-col gap-3">
+      <VibeCard />
       <Toolbar />
       <Palette scan={scan} />
       <TypeScale scan={scan} />

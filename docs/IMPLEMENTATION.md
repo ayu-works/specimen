@@ -88,6 +88,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 ---
 
 ## Phase 3: AI layer (≈ 3 days)
+> **Status: implemented (code only; tests deferred to the final testing pass).** Done: 3.1 (registry; the mock provider comes with the tests, `globalThis.__specimenProvider` is the injection hook), 3.2, 3.3, 3.4, 3.5, 3.6 and 3.7 except `nameRoles` (not built; `polishPrompt`, `vibe` and the Ask view are). Untested against a real model or real keys. 3.8 (review, tag) is pending.
 | ID | Task | AC |
 |---|---|---|
 | 3.1 🟦 | `LLMProvider` types, registry, mock provider | Unit tests use the mock |

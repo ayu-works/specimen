@@ -72,9 +72,9 @@ AI-design website/
 |---|---|---|
 | **sampler.content** | Walk the DOM, read `getComputedStyle`, `:root` custom props, `@media`, `@font-face`, `document.fonts`, section bounding boxes → `RawPage` | Only a content script can read the live DOM |
 | **overlay.content** | Grid overlay, hover inspector, highlight of a token's usages | Draws on the page; shadow root so page CSS can't leak in |
-| **background** | Inject scripts with `activeTab`, capture screenshots, fetch cross-origin stylesheets the page blocks (CORS), manage the offscreen doc | Privileged APIs; short-lived and stateless |
+| **background** | Inject scripts with `activeTab`, capture screenshots, fetch cross-origin stylesheets the page blocks (CORS), manage the offscreen doc (`ensureOffscreen()`: reasons `CLIPBOARD` + `WORKERS`, never closed while a model is loaded or loading) | Privileged APIs; short-lived and stateless |
 | **sidepanel** | UI, runs `core` extraction/generation, storage, BYOK calls | Long-lived while open; heavy compute stays off the page |
-| **offscreen** | WebLLM engine on WebGPU | MV3 service workers are killed when idle and side panels close. The offscreen doc keeps the loaded model alive |
+| **offscreen** | WebLLM engine on WebGPU, running in a dedicated Web Worker (`llm.worker.ts`) | MV3 service workers are killed when idle and side panels close. The offscreen doc keeps the loaded model alive |
 | **options** | Model download manager, API key management | Full-page settings UI |
 
 ---
@@ -250,18 +250,20 @@ type ContentPart = { type: 'text'; text: string } | { type: 'image'; dataUrl: st
 
 | Provider | Transport | Details |
 |---|---|---|
-| `webllm` (default local) | Port `llm` → offscreen doc → `@mlc-ai/web-llm` `MLCEngine` | Model: Gemma (default **gemma-2-2b-it-q4f16_1-MLC**, ~1.5 GB; upgrade to a Gemma 3 build if WebLLM's prebuilt list has one, vision-capable 4B as an option). Weights cached in Cache Storage. Requires WebGPU (detect `navigator.gpu`, show a fallback message). CSP needs `'wasm-unsafe-eval'` |
+| `webllm` (local) | Port `llm` → offscreen doc → Web Worker → `@mlc-ai/web-llm` `WebWorkerMLCEngine` | Gemma options from WebLLM 0.2.85's prebuilt list: **gemma3-1b-it-q4f16_1-MLC** (small, default; ~0.7 GB download, 711 MB VRAM), **gemma-2-2b-it-q4f16_1-MLC** (balanced; ~1.5 GB, 1895 MB VRAM), **gemma-2-9b-it-q4f16_1-MLC** (larger; ~5.2 GB, 6422 MB VRAM). There is no vision-capable Gemma in the prebuilt list, so `vision` is false. Weights are cached by WebLLM in Cache Storage. Requires WebGPU (`navigator.gpu.requestAdapter()`; otherwise the `unsupported` error and a friendly message). **No remote code:** the model-library `.wasm` for each option is bundled in `public/models/` (fetched at build-prep time by `scripts/fetch-model-libs.mjs`) and the `appConfig` override points `model_lib` at `chrome.runtime.getURL('/models/<file>.wasm')`; only weights are downloaded at runtime. CSP needs `'wasm-unsafe-eval'`. Gemma has no system role, so the offscreen host folds the system prompt into the first user turn |
 | `chromeBuiltin` (optional) | `LanguageModel` (Chrome Prompt API, Gemini Nano) | Zero download where available |
 | `openaiCompat` | `fetch` `{baseUrl}/chat/completions`, SSE | Covers OpenAI, OpenRouter, Groq, Together, Mistral, DeepSeek, xAI, Ollama, LM Studio. Presets fill in baseUrl; a custom URL is allowed → "any API key" |
 | `anthropic` | `fetch` `api.anthropic.com/v1/messages`, SSE | Header `anthropic-dangerous-direct-browser-access: true` |
 | `gemini` | `fetch` `generativelanguage.googleapis.com` streamGenerateContent | Header `x-goog-api-key` |
 
 **AI features** (each degrades gracefully when no provider is set):
-- `polishPrompt(scan)`: rewrites the deterministic prompt for flow. Must keep every token value (validated by regex after generation, falling back to the original).
+- `polishPrompt(provider, scan, prompt)`: rewrites the deterministic prompt for flow. Must keep every hex, px value and font name (validated after generation and after `sanitize`, falling back to the original with `{ polished: false, reason }`).
 - `nameRoles(scan)`: JSON mode, suggests role fixes when heuristic confidence is low.
-- `vibe(scan, screenshot)`: vision models only. Returns `{summary, keywords}`.
-- `ask(scan, question, history)`: grounded Q&A. The system prompt contains a compact scan JSON.
+- `vibe(provider, scan, screenshot)`: vision models only. Returns `{summary, keywords}` (zod-validated, falls back to the raw text as the summary); stored into `scan.vibe`.
+- `ask(provider, scan, question, history)`: grounded Q&A. The system prompt contains a compact, brand-free scan JSON (roles + hex, type scale, spacing, radii, layout, section kinds; no snippets) inside `<page_data>`. Streaming features report sanitized running snapshots (the ethics `sanitize` pass needs whole text), not raw deltas.
 - `composeFill(scanA, scanB)`: resolves conflicts when mixing (e.g. accent contrast on the new background).
+
+**Not built yet:** `nameRoles`, `composeFill`.
 
 **Prompt-injection hygiene:** page text reaches the model only as short snippets inside a clearly delimited `<page_data>` block, and the system prompt tells the model to treat it as data.
 
@@ -277,7 +279,8 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | `overlay.set` | sidepanel → background → content | `{ grid?: boolean; inspector?: boolean; highlight?: { tokenId, selectorHints } }` |
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |
-| Port `llm` | sidepanel ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{req,id}` → `delta{id,text}`… `done{id}` · `abort{id}` |
+| Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id}` \| `error{id,kind,message}` · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
+| `offscreen.busy` | background → offscreen | `{}` → `{ busy }`; the background closes a document it created for the clipboard only when not busy |
 | `mcp.push` (P6) | sidepanel → ws | `{ scan }` |
 
 ---
@@ -288,7 +291,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
   - `thumbs`: `scanId → Blob` (JPEG 640px)
   - `chats`: `id, scanId, messages[]`
   - `composes`: saved mixes
-- **chrome.storage.local:** settings `{ provider, model, promptTarget, theme }` and API keys (optional AES-GCM encryption with a PBKDF2-derived passphrase key). Never use `storage.sync`, because keys must not leave the device.
+- **chrome.storage.local:** `settings.promptTarget`, `settings.lastFormat`, and `settings.ai = { provider: 'none'|'webllm'|'chrome'|'byok', webllmModel, byok: { preset, baseUrl, model, keyRef, vision? }, encryptKeys, downloaded[] }`. API keys are stored separately under `secrets.<preset>` as `{ v:1, enc:false, key }` or, with the optional passphrase, `{ v:1, enc:true, salt, iv, ct, iterations }` (AES-GCM; key from PBKDF2-SHA256, 250k iterations, one random salt shared by all encrypted keys so one passphrase unlocks them). The derived raw key (never the passphrase) is cached in `chrome.storage.session` for the browser session; the side panel asks for the passphrase once. Never use `storage.sync`, because keys must not leave the device. Keys are never logged or put in URLs (Gemini uses the `x-goog-api-key` header).
 - **Cache Storage:** WebLLM model weights (handled by WebLLM). `unlimitedStorage` permission.
 - **Export/Import:** `.specimen.json` = `{ format: 'specimen', version, scans: DesignScan[] }`.
 
@@ -298,7 +301,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 ```jsonc
 {
   "permissions": ["activeTab", "scripting", "sidePanel", "storage", "offscreen", "unlimitedStorage"],
-  "optional_host_permissions": ["<all_urls>"],   // only to fetch cross-origin CSS / BYOK endpoints, on request
+  "optional_host_permissions": ["<all_urls>"],   // only to fetch cross-origin CSS / BYOK endpoints, on request (each provider origin is requested via chrome.permissions.request when the user saves a key)
   "side_panel": { "default_path": "sidepanel.html" },
   "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   "commands": { "_execute_action": { "suggested_key": { "default": "Alt+Shift+S" } } }
@@ -307,10 +310,10 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 No `content_scripts` declared statically. Everything is injected on demand with `activeTab`, which avoids the "read all sites" install warning.
 
 ## 11. Security & privacy
-- No remote code. All JS is bundled. Model weights are data.
+- No remote code (Chrome Web Store policy). All JS is bundled, **including WebLLM's model-library `.wasm`** (`public/models/`, referenced through the `appConfig` `model_lib` override with `chrome.runtime.getURL`). Only model weights are downloaded at runtime, and they are data. The offscreen document is created with reasons `CLIPBOARD` and `WORKERS` (fixed at creation; only one can exist).
 - API keys are never logged, never sent anywhere except the chosen provider's host, and can be cleared with one click.
 - Content scripts are read-only on the page. Overlays live in a closed shadow root.
-- Page text in prompts is truncated and delimited (see §7).
+- Page text in prompts is truncated and delimited in `<page_data>` with a system rule to treat it as data (see §7). Page data goes only to the provider the user chose; with none configured nothing is sent.
 - A privacy policy in the store listing: "No data collected."
 
 ## 12. Testing strategy
