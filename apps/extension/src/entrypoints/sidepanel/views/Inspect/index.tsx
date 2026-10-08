@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Eyedropper } from '@/components/Eyedropper';
 import { Button } from '@/components/ui/button';
-import { Card, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { type InspectorHover, send } from '@/lib/messaging';
 import { useStore } from '../../store';
 import { Blueprint } from './Blueprint';

@@ -92,7 +92,27 @@ export function detectSections(vw: number, docHeight: number): SectionCandidate[
     if (inner) expanded.push(...inner);
     else expanded.push(c);
   }
-  return expanded;
+  const nav = fixedNav(vw, expanded);
+  return nav ? [nav, ...expanded] : expanded;
+}
+
+/**
+ * A fixed/sticky top bar (e.g. linear.app's nav) sits outside the normal flow, so the
+ * stacked-children walk never sees it. Prepend it as section 0 when no section contains it.
+ */
+function fixedNav(vw: number, sections: SectionCandidate[]): SectionCandidate | null {
+  const cands = document.querySelectorAll<HTMLElement>(
+    'header, nav, [role="banner"], [role="navigation"], body > *, body > * > *',
+  );
+  for (const el of cands) {
+    const pos = getComputedStyle(el).position;
+    if (pos !== 'fixed' && pos !== 'sticky') continue;
+    const r = el.getBoundingClientRect();
+    if (r.top > 10 || r.width < vw * 0.8 || r.height <= 0 || r.height >= 140) continue;
+    if (sections.some((s) => s.el === el || s.el.contains(el) || el.contains(s.el))) continue;
+    return { el, rect: [r.left + window.scrollX, 0, r.width, r.height] };
+  }
+  return null;
 }
 
 function gridColumns(cs: CSSStyleDeclaration): number | undefined {

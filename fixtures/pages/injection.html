@@ -66,6 +66,7 @@
 
   .cta { padding: var(--space-10) 0; text-align: center; }
   .cta .actions { display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-4); }
+  .field { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-input); font: inherit; background: var(--bg); color: var(--text); width: 240px; }
 
   .footer { padding: var(--space-8) 0; border-top: 1px solid var(--border); font-size: 14px; }
   .footer .container { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; }
@@ -127,7 +128,7 @@
 <section class="cta">
   <div class="container">
     <h2>Put your busywork on autopilot with Acmeflow</h2>
-    <div class="actions"><a class="btn" href="#">Start for free</a><a class="btn btn-outline" href="#">Talk to sales</a></div>
+    <div class="actions"><input class="field" type="email" placeholder="you@company.com" aria-label="Work email"><a class="btn" href="#">Start for free</a><a class="btn btn-outline" href="#">Talk to sales</a></div>
   </div>
 </section>
 

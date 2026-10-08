@@ -44,6 +44,8 @@ export const RawPageSchema = z.object({
   viewport: z.object({ w: z.number(), h: z.number(), dpr: z.number() }),
   doc: z.object({ w: z.number(), h: z.number() }),
   colorScheme: z.enum(['light', 'dark']),
+  /** Computed background of <html> (the canvas), when the page sets one. */
+  canvasBg: z.string().optional(),
   rootVars: z.record(z.string(), z.string()),
   mediaQueries: z.array(z.string()),
   fontFaces: z.array(

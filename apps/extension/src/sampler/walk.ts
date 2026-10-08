@@ -101,7 +101,6 @@ export function walkDom(opts: WalkOptions = {}): WalkResult {
   const roots = opts.sectionRoots;
   const body = document.body;
   const docW = document.documentElement.scrollWidth;
-  const docH = document.documentElement.scrollHeight;
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT);
   const cands: Candidate[] = [];
   const sectionStack: number[] = [];

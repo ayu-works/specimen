@@ -59,7 +59,13 @@ export function initOverlay(): void {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el || el === host) return;
     const r = el.getBoundingClientRect();
-    hoverBox.style.cssText += `;display:block;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    Object.assign(hoverBox.style, {
+      display: 'block',
+      left: `${r.left}px`,
+      top: `${r.top}px`,
+      width: `${r.width}px`,
+      height: `${r.height}px`,
+    });
     const cs = getComputedStyle(el);
     const styles: InspectorHover['styles'] = {
       color: cs.color,
@@ -113,7 +119,7 @@ export function initOverlay(): void {
   };
 
   chrome.runtime.onMessage.addListener((msg: Message) => {
-    if (!msg || msg.type !== 'overlay.set') return false;
+    if (msg?.type !== 'overlay.set') return false;
     const m = msg as OverlayMsg;
     if (m.gridSpec) gridSpec = m.gridSpec;
     if (m.tokens) tokens = m.tokens;
@@ -128,7 +134,18 @@ export function initOverlay(): void {
     }
     return false;
   });
+  // Highlight boxes use viewport coordinates, so redraw them (once per frame) on scroll.
+  let hlRaf = 0;
+  const scheduleHighlights = () => {
+    if (!highlightHex || hlRaf) return;
+    hlRaf = requestAnimationFrame(() => {
+      hlRaf = 0;
+      redrawHighlights();
+    });
+  };
+  window.addEventListener('scroll', scheduleHighlights, { passive: true, capture: true });
   window.addEventListener('resize', () => {
     if (gridEl.style.display !== 'none') renderGrid(gridEl, gridSpec);
+    scheduleHighlights();
   });
 }

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -83,7 +83,7 @@ pwTest.describe('sampler (plain Chromium)', () => {
           // biome-ignore lint/suspicious/noExplicitAny: injected global
           const raw = await (globalThis as any).__specimenSample({ validate: () => {} });
           return { raw, ms: performance.now() - t0 };
-        });
+        }) as Promise<{ raw: Sample; ms: number }>;
       await run(); // warm-up (style/layout caches)
       const base = await run();
       await page.evaluate(() => {
@@ -214,10 +214,26 @@ pwTest.describe('sampler (plain Chromium)', () => {
     },
   );
 
+  pwTest(
+    'T1.12 cross-origin.html fixture: skipped-stylesheet warning, scan still succeeds',
+    async ({ page }) => {
+      // The fixture links http://localhost:4999/xo.css; the page itself is on 127.0.0.1 (another origin).
+      await page.route('http://localhost:4999/xo.css', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/css', body: XO_CSS }),
+      );
+      const { raw } = await sample(page, `${server.url}/cross-origin.html`, { validate: true });
+      expect(raw.warnings).toContain('cross-origin stylesheet skipped: localhost:4999');
+      expect(raw.rootVars['--xo-color']).toBeUndefined();
+      expect(raw.rootVars['--local']).toBe('#0d9488'); // same-origin <style> still parsed
+      expect(raw.samples.length).toBeGreaterThan(0);
+    },
+  );
+
   pwTest('section counts match every fixture’s expected sectionKinds', async ({ page }) => {
     const counts: Record<string, string> = {};
     for (const f of readdirSync(PAGES).filter((n) => n.endsWith('.html'))) {
       const name = f.replace('.html', '');
+      if (!existsSync(path.join(PAGES, `${name}.expected.json`))) continue; // e.g. cross-origin.html
       const expected = JSON.parse(readFileSync(path.join(PAGES, `${name}.expected.json`), 'utf8'));
       const { raw, ms } = await sample(page, `${server.url}/${f}`, { validate: true });
       counts[name] =

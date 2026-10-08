@@ -50,6 +50,7 @@ function classify(
   ctx: Ctx,
   largestHeading: number,
   firstPost: number,
+  heroIdx: number,
 ): { scores: Partial<Record<Kind, number>>; boxes: RawSample[] } {
   const vw = ctx.raw.viewport.w;
   const [, y, , h] = sec.rect;
@@ -75,8 +76,8 @@ function classify(
   if (sec.landmark === 'footer') set('footer', 0.97);
   else if (idx === ctx.raw.sections.length - 1 && links.length >= 8) set('footer', 0.7);
 
-  if (idx === firstPost && maxH >= ctx.baseSize * 1.75) {
-    set('hero', 0.6 + (maxH >= largestHeading * 0.95 ? 0.25 : 0) + (buttons.length > 0 ? 0.1 : 0));
+  if (idx === heroIdx) {
+    set('hero', 0.75 + (maxH >= largestHeading * 0.95 ? 0.1 : 0) + (buttons.length > 0 ? 0.1 : 0));
   }
 
   const media = samples.filter((s) => MEDIA.has(s.tag) && s.rect[3] <= 80 && s.rect[3] >= 12);
@@ -166,9 +167,23 @@ export function classifySections(ctx: Ctx): DesignScan['layout']['blueprint'] {
     (sec.landmark === 'header' || sec.landmark === 'nav' || sec.index === 0);
   const firstPost = raw.sections.find((s) => !isNav(s))?.index ?? 0;
 
+  // Hero = the section with the biggest text among the first three non-nav sections. Many
+  // sites set their headline in a styled div, so any text sample counts, not only <h1>.
+  const textSize = (smp: RawSample) =>
+    smp.heading || (smp.text?.len ?? 0) > 0 ? (px(smp.s.fontSize) ?? 0) : 0;
+  let heroIdx = -1;
+  let heroSize = ctx.baseSize * 1.5;
+  for (const sec of raw.sections.filter((x) => !isNav(x)).slice(0, 3)) {
+    const size = Math.max(0, ...(bySection.get(sec.index) ?? []).map(textSize));
+    if (size > heroSize) {
+      heroSize = size;
+      heroIdx = sec.index;
+    }
+  }
+
   return raw.sections.map((sec) => {
     const samples = bySection.get(sec.index) ?? [];
-    const { scores, boxes } = classify(sec, samples, sec.index, ctx, largest, firstPost);
+    const { scores, boxes } = classify(sec, samples, sec.index, ctx, largest, firstPost, heroIdx);
     const ranked = (Object.entries(scores) as [Kind, number][]).sort((a, b) => b[1] - a[1]);
     const [kind, top] = ranked[0] ?? ['unknown' as Kind, 0];
     const second = ranked[1]?.[1] ?? 0;

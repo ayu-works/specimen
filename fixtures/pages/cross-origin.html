@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cross-origin stylesheet fixture</title>
+    <!-- T1.12: this stylesheet is on a different origin (localhost vs 127.0.0.1) and unreadable
+         without host permission. The e2e test intercepts the request; no server listens on :4999. -->
+    <link rel="stylesheet" href="http://localhost:4999/xo.css" />
+    <style>
+      :root { --local: #0d9488; }
+      body { margin: 0; font-family: system-ui, sans-serif; color: #0b1b2b; }
+      main { max-width: 800px; margin: 0 auto; padding: 64px 24px; }
+      h1 { font-size: 40px; margin: 0 0 16px; }
+      a.btn { display: inline-block; padding: 12px 20px; background: var(--local); color: #fff; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cross-origin stylesheet</h1>
+      <p>This page links a stylesheet from a second origin.</p>
+      <a class="btn" href="#">Get started</a>
+    </main>
+  </body>
+</html>

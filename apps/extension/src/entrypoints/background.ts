@@ -37,8 +37,14 @@ async function scanRun(tabId: number): Promise<ScanResult> {
   });
   const raw = injection?.result as ScanResult['raw'] | undefined;
   if (!raw) throw new Error('sampler returned no result');
-  const shot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 });
-  return { raw, screenshot: await downscale(shot) };
+  // The thumbnail is a nice-to-have: a failed capture must not fail the scan.
+  try {
+    const shot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 });
+    return { raw, screenshot: await downscale(shot) };
+  } catch (e) {
+    raw.warnings.push(`screenshot unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return { raw, screenshot: '' };
+  }
 }
 
 /** Fetch stylesheet text only for origins we hold host permission for; others → null. */

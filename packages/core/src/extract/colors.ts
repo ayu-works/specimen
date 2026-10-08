@@ -55,19 +55,40 @@ function resolve(css: string | undefined, under: string): string | null {
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
 
 /**
+ * The colour the page paints on when body has no background: <html>'s background, else a
+ * large opaque wrapper near the top of the tree (≥ 50% viewport wide, ≥ 30% of the document
+ * tall, e.g. a dark `main`), else white (the browser canvas). Assuming white for dark sites
+ * that colour a wrapper instead of html/body would invert every role.
+ */
+function pageDefaultBg(raw: RawPage): string {
+  const canvas = parse(raw.canvasBg);
+  if (canvas && canvas.alpha >= 1) return toHex(canvas);
+  let best: { hex: string; area: number } | undefined;
+  for (const smp of raw.samples) {
+    if (smp.depth > 3) continue;
+    const c = parse(smp.s.backgroundColor);
+    if (!c || c.alpha < 1) continue;
+    const [, , w, h] = smp.rect;
+    if (w < raw.viewport.w * 0.5 || h < raw.doc.h * 0.3) continue;
+    if (!best || w * h > best.area) best = { hex: toHex(c), area: w * h };
+  }
+  return best?.hex ?? PAGE_DEFAULT_BG;
+}
+
+/**
  * Pass 1: resolve every sample's colors. Translucent colors are composited over the
  * nearest opaque ancestor background, found by walking the document-ordered samples with a
  * depth stack (a pragmatic stand-in for rect containment: ancestors precede descendants and
  * have a smaller depth). With no ancestor background, white (the browser canvas) is assumed.
  */
-function resolveSamples(raw: RawPage): SampleColors[] {
+function resolveSamples(raw: RawPage, pageDefault: string): SampleColors[] {
   const stack: { depth: number; hex: string }[] = [];
   return raw.samples.map((smp) => {
     while (stack.length > 0 && (stack[stack.length - 1] as { depth: number }).depth >= smp.depth) {
       stack.pop();
     }
     const parentBg =
-      stack.length > 0 ? (stack[stack.length - 1] as { hex: string }).hex : PAGE_DEFAULT_BG;
+      stack.length > 0 ? (stack[stack.length - 1] as { hex: string }).hex : pageDefault;
     const own = resolve(smp.s.backgroundColor, parentBg);
     const effBg = own ?? parentBg;
     if (own) stack.push({ depth: smp.depth, hex: own });
@@ -122,7 +143,8 @@ export interface ColorOptions {
 }
 
 export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnalysis {
-  const perSample = resolveSamples(raw);
+  const pageDefault = pageDefaultBg(raw);
+  const perSample = resolveSamples(raw, pageDefault);
 
   // ---- weights, pre-aggregated per (usage, hex) so clustering sees hundreds of entries ----
   const agg = new Map<string, number>();
@@ -144,8 +166,7 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     for (const b of c.borders) bump(agg, key('border', b.hex), b.length * b.width);
   });
   const docArea = raw.doc.w * raw.doc.h;
-  if (!bodyHasBg)
-    bump(agg, key('bg', PAGE_DEFAULT_BG), Math.max(docArea * 0.05, docArea - coveredTop));
+  if (!bodyHasBg) bump(agg, key('bg', pageDefault), Math.max(docArea * 0.05, docArea - coveredTop));
 
   const entries: ColorEntry[] = [...agg].map(([k, weight]) => {
     const [usage, color] = k.split('|') as [ColorEntry['usage'], string];
@@ -191,13 +212,13 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     }
   });
   if (!bodyHasBg) {
-    const t = tokenOf(PAGE_DEFAULT_BG);
+    const t = tokenOf(pageDefault);
     if (t) bump(topBg, t.id, Math.max(docArea * 0.05, docArea - coveredTop));
   }
   const bgId = ranked(topBg)[0]?.[0] ?? palette.find((t) => t.usage.bg > 0)?.id;
   if (bgId) roles.background = bgId;
   const bgToken = bgId ? byId.get(bgId) : undefined;
-  const bgHex = bgToken?.hex ?? PAGE_DEFAULT_BG;
+  const bgHex = bgToken?.hex ?? pageDefault;
 
   // ---- surface / surfaceAlt: card-like backgrounds close in lightness to the background ----
   const cardBg = new Map<string, number>();
@@ -219,21 +240,33 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
   if (surfaces[1]) roles.surfaceAlt = surfaces[1][0];
 
   // ---- text ----
+  // textPrimary = the highest-contrast colour among the substantially used text colours
+  // (≥ 20% of the top text weight). Pure weight picked large grey marketing copy instead.
+  const ratioOf = (t: ColorToken) => contrast(t.hex, bgHex);
   const textTokens = palette
     .filter((t) => t.usage.text > 0)
     .sort((a, b) => b.usage.text - a.usage.text);
-  const primary = textTokens[0];
-  if (primary) roles.textPrimary = primary.id;
-  const ratioOf = (t: ColorToken) => contrast(t.hex, bgHex);
+  const topText = textTokens[0]?.usage.text ?? 0;
+  const neutralText = textTokens
+    .filter((t) => t.usage.text >= topText * 0.2 && chroma(t) < 0.06)
+    .sort((a, b) => ratioOf(b) - ratioOf(a));
+  const primary = neutralText[0] ?? textTokens[0];
   if (primary) {
-    const lower = textTokens.filter(
-      (t) =>
-        t.id !== primary.id && chroma(t) < 0.06 && ratioOf(t) < ratioOf(primary) && ratioOf(t) >= 2,
-    );
-    const second = lower[0];
+    roles.textPrimary = primary.id;
+    const lower = textTokens
+      .filter(
+        (t) =>
+          t.id !== primary.id &&
+          chroma(t) < 0.06 &&
+          ratioOf(t) < ratioOf(primary) &&
+          ratioOf(t) >= 2 &&
+          t.usage.text >= topText * 0.02,
+      )
+      .sort((a, b) => ratioOf(b) - ratioOf(a));
+    const second = lower.find((t) => ratioOf(t) >= 3) ?? lower[0];
     if (second) {
       roles.textSecondary = second.id;
-      const muted = lower.find((t) => t.id !== second.id && ratioOf(t) < ratioOf(second));
+      const muted = lower.find((t) => ratioOf(t) < ratioOf(second));
       if (muted) roles.textMuted = muted.id;
     }
   }
@@ -338,8 +371,11 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     if ((role === 'background' || role === 'surface') && best.usage.bg <= 0) continue;
     roles[role] = best.id;
     hinted.add(role);
+    // Record the var only when no other role shares this token; otherwise e.g. white would
+    // show `--button-primary-text` as the source of the page background.
+    const shared = Object.entries(roles).some(([r, id]) => id === best.id && r !== role);
     const tok = tokenById.get(best.id);
-    if (tok && !tok.sourceVar) tok.sourceVar = name;
+    if (tok && !tok.sourceVar && !shared) tok.sourceVar = name;
   }
 
   // ---- accentForeground: text color on accent buttons (unless hinted) ----

@@ -14,7 +14,9 @@
       "!**/node_modules",
       "!pnpm-lock.yaml",
       "!docs",
-      "!fixtures/pages/*.html"
+      "!fixtures/pages/*.html",
+      "!fixtures/raw",
+      "!**/__snapshots__"
     ]
   },
   "formatter": {

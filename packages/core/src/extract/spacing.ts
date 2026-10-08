@@ -3,7 +3,14 @@ import { area, bump, median, px, ranked } from './util';
 
 export type Spacing = DesignScan['spacing'];
 
-const CANDIDATES = [2, 4, 5, 6, 8, 10, 12];
+/** Preferred systems, largest first: picked when they explain ≥ 70% of spacing values. */
+const PREFERRED = [8, 4];
+/** Fallback candidates when no preferred unit explains enough values. */
+const FALLBACK = [6, 5, 4, 2];
+const MIN_SHARE = 0.7;
+const isContent = (s: RawSample) =>
+  Boolean(s.text || s.heading || s.interactive) ||
+  ['img', 'svg', 'video', 'picture', 'canvas'].includes(s.tag);
 const KEYS = [
   'paddingTop',
   'paddingRight',
@@ -42,13 +49,18 @@ function sectionPadding(raw: RawPage): number {
     if (root) pad = ((px(root.s.paddingTop) ?? 0) + (px(root.s.paddingBottom) ?? 0)) / 2;
     if (pad <= 0) {
       // Padding lives on an inner wrapper: use the empty band above/below the content.
+      // Only real content counts: full-bleed backgrounds/wrappers would hide the band.
       const inner = (bySection.get(sec.index) ?? []).filter(
-        (s) => s !== root && s.s.position !== 'fixed' && s.s.position !== 'absolute',
+        (s) =>
+          s !== root && s.s.position !== 'fixed' && s.s.position !== 'absolute' && isContent(s),
       );
       if (inner.length > 0) {
-        const top = Math.min(...inner.map((s) => s.rect[1]));
-        const bottom = Math.max(...inner.map((s) => s.rect[1] + s.rect[3]));
-        pad = Math.max(0, Math.min(top - sec.rect[1], sec.rect[1] + sec.rect[3] - bottom));
+        const top = Math.max(0, Math.min(...inner.map((s) => s.rect[1])) - sec.rect[1]);
+        const bottom = Math.max(
+          0,
+          sec.rect[1] + sec.rect[3] - Math.max(...inner.map((s) => s.rect[1] + s.rect[3])),
+        );
+        pad = top > 0 && bottom > 0 ? (top + bottom) / 2 : Math.max(top, bottom);
       }
     }
     pads.push({
@@ -72,25 +84,29 @@ export function extractSpacing(raw: RawPage): Spacing {
     const w = Math.sqrt(Math.max(area(s), 1));
     for (const k of KEYS) {
       const v = px(s.s[k]);
-      if (v === null || v < 1 || v > 400) continue;
-      bump(hist, Math.round(v), w);
+      if (v === null || v < 2 || v > 400) continue;
+      bump(hist, Math.round(v * 2) / 2, w);
       if (k === 'rowGap' || k === 'columnGap') gaps.push(v);
     }
   }
   const total = [...hist.values()].reduce((a, b) => a + b, 0);
 
-  let baseUnit = 8;
-  let bestScore = Number.NEGATIVE_INFINITY;
-  if (total > 0) {
-    for (const c of CANDIDATES) {
-      let fit = 0;
-      for (const [v, w] of hist) if (off(v, c) <= 1) fit += w;
-      const score = fit / total - 0.02 * (12 / c);
-      // Ties prefer 4 or 8.
-      const better =
-        score > bestScore + 1e-9 || (Math.abs(score - bestScore) <= 1e-9 && (c === 4 || c === 8));
-      if (better) {
-        bestScore = score;
+  // A value fits unit c only if it is (within 0.5px) an exact multiple. A ±1px tolerance
+  // made c=2 match every integer, so real sites always came out as a 2px system.
+  const share = (c: number) => {
+    if (total === 0) return 0;
+    let fit = 0;
+    for (const [v, w] of hist) if (off(v, c) <= 0.5) fit += w;
+    return fit / total;
+  };
+  let baseUnit = PREFERRED.find((c) => share(c) >= MIN_SHARE);
+  if (baseUnit === undefined) {
+    baseUnit = 4;
+    let best = -1;
+    for (const c of FALLBACK) {
+      const sc = share(c) + (c === 4 ? 0.05 : 0);
+      if (sc > best) {
+        best = sc;
         baseUnit = c;
       }
     }
@@ -100,7 +116,7 @@ export function extractSpacing(raw: RawPage): Spacing {
     .slice(0, 10)
     .map(([v]) => {
       const snapped = Math.round(v / baseUnit) * baseUnit;
-      return snapped > 0 && Math.abs(snapped - v) <= 1 ? snapped : v;
+      return snapped > 0 && Math.abs(snapped - v) <= 0.5 ? snapped : v;
     });
   const scale = [...new Set(peaks)].sort((a, b) => a - b);
 

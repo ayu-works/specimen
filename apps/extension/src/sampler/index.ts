@@ -39,6 +39,7 @@ export async function samplePage(opts: SampleOptions = {}): Promise<RawPage> {
     viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
     doc: { w: docW, h: docH },
     colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    canvasBg: getComputedStyle(de).backgroundColor,
     rootVars: css.rootVars,
     mediaQueries: css.mediaQueries,
     fontFaces: css.fontFaces,
