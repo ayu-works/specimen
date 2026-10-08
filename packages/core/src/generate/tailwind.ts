@@ -1,8 +1,8 @@
 import type { DesignScan } from '../schema';
-import { fmt, type GeneratedFile, px, rem } from './common';
+import { fmt, type GeneratedFile, kebab, px, rem, roleColors, themeVariant } from './common';
 import { flattenTokens } from './tokens';
 
-/** Tailwind CSS v4: `@import "tailwindcss"` + `@theme { … }`. */
+/** Tailwind CSS v4: `@import "tailwindcss"` + `@theme { … }` (+ a `[data-theme]` block when a counterpart theme is present). */
 export function generateTailwindV4(scan: DesignScan): GeneratedFile {
   const t = flattenTokens(scan);
   const l: string[] = ['@import "tailwindcss";', '', '@theme {'];
@@ -24,6 +24,17 @@ export function generateTailwindV4(scan: DesignScan): GeneratedFile {
   if (t.breakpoints.length > 0) l.push('');
   for (const b of t.breakpoints) l.push(`  --breakpoint-${b.name}: ${px(b.px)};`);
   l.push('}');
+  const variant = themeVariant(scan);
+  if (variant) {
+    const rows = roleColors(scan, variant.colors);
+    if (rows.length > 0) {
+      const sel = `[data-theme="${variant.scheme}"]`;
+      l.push('', `@custom-variant ${variant.scheme} (&:where(${sel}, ${sel} *));`);
+      l.push('', `${sel} {`);
+      for (const { role, token } of rows) l.push(`  --color-${kebab(role)}: ${token.hex};`);
+      l.push('}');
+    }
+  }
   return { filename: 'tailwind.css', mime: 'text/css', content: `${l.join('\n')}\n` };
 }
 

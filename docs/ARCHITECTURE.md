@@ -111,7 +111,7 @@ interface RawSample {
 ### 4.2 `DesignScan` (canonical, stored, exported)
 ```ts
 interface DesignScan {
-  schemaVersion: 1; id: string; url: string; host: string; title: string;
+  schemaVersion: 2; id: string; url: string; host: string; title: string;
   scannedAt: number; viewport: { w: number; h: number }; colorScheme: 'light'|'dark';
   colors: {
     palette: ColorToken[];                       // clustered, weight-sorted
@@ -134,7 +134,7 @@ interface DesignScan {
   };
   motion?: { durationsMs: number[]; easings: string[] };
   components?: ComponentSpec[];                  // Phase 5
-  variants?: { dark?: Partial<DesignScan['colors']>; mobile?: Partial<DesignScan['layout']> }; // Phase 5
+  variants?: { dark?: Partial<DesignScan['colors']>; light?: Partial<DesignScan['colors']>; mobile?: Partial<DesignScan['layout']> }; // dark/light: counterpart theme (Phase 4: derived; Phase 5: captured)
   vibe?: { summary: string; keywords: string[]; model: string };   // AI, optional
   a11y?: { pairs: { fg: string; bg: string; ratio: number; aa: boolean; aaLarge: boolean }[] };
   cssVariables: Record<string, string>;          // filtered design-relevant vars
@@ -154,7 +154,11 @@ interface Section { index: number; kind: 'nav'|'hero'|'logos'|'features'|'stats'
 interface ComponentSpec { kind: 'button-primary'|'button-secondary'|'button-ghost'|'input'|'card'|'nav-link'|'badge';
   base: Record<string, string>; states: Partial<Record<'hover'|'focus'|'active'|'disabled', Record<string, string>>>; }
 ```
-`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read.
+`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read. v2 (Phase 4) only adds `variants.light`; the v1 → v2 migration is a no-op that sets the version.
+
+**Compose (`core/compose`).** `compose(sources: Partial<Record<Facet, DesignScan>>, base)` takes each facet (`colors`, `typography`, `spacing`, `shape` = radii + shadows + borders, `layout`) from its source, else from `base`, and returns a new valid scan (`host: 'composed'`, `meta.pages` = source URLs). After mixing it repairs contrast by moving the foreground's OKLCH lightness (`textPrimary` and `accentForeground` ≥ 4.5, `textSecondary` ≥ 3) and records each change in `meta.warnings`. In the UI, Compose is a mode inside Library, not a tab.
+
+**Themes (`core/theme`).** `deriveCounterpart(colors)` detects the scheme from the background lightness and inverts OKLCH lightness with role-aware targets (hue kept; accent stays vivid at ≥ 3:1; `textPrimary` ≥ 7 where possible; `textSecondary` ≥ 4.5; `accentForeground` ≥ 4.5). The result is stored in memory as `variants.dark` (light source) or `variants.light` (dark source). Generate's "Include dark/light theme" option (default off, persisted) attaches it with `withCounterpart` or strips variants with `withoutThemeVariants`; the generators then emit it (prompt and DESIGN.md sections, CSS vars `[data-theme]`, Tailwind v4 `@custom-variant` + block, shadcn `.dark`/`.light`).
 
 ---
 
@@ -286,14 +290,14 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 ---
 
 ## 9. Storage
-- **IndexedDB (Dexie), db `specimen`:**
-  - `scans`: `id, host, url, title, scannedAt, *tags, schemaVersion`, value = DesignScan
-  - `thumbs`: `scanId → Blob` (JPEG 640px)
-  - `chats`: `id, scanId, messages[]`
-  - `composes`: saved mixes
-- **chrome.storage.local:** `settings.promptTarget`, `settings.lastFormat`, and `settings.ai = { provider: 'none'|'webllm'|'chrome'|'byok', webllmModel, byok: { preset, baseUrl, model, keyRef, vision? }, encryptKeys, downloaded[] }`. API keys are stored separately under `secrets.<preset>` as `{ v:1, enc:false, key }` or, with the optional passphrase, `{ v:1, enc:true, salt, iv, ct, iterations }` (AES-GCM; key from PBKDF2-SHA256, 250k iterations, one random salt shared by all encrypted keys so one passphrase unlocks them). The derived raw key (never the passphrase) is cached in `chrome.storage.session` for the browser session; the side panel asks for the passphrase once. Never use `storage.sync`, because keys must not leave the device. Keys are never logged or put in URLs (Gemini uses the `x-goog-api-key` header).
+- **IndexedDB (Dexie 4), db `specimen`, version 1:**
+  - `scans`: `&id, host, url, title, scannedAt, *tags`; value = `DesignScan & { tags: string[]; favorite?: boolean }`. Every successful scan is saved automatically (re-scans add a new row). Rows are read through `migrate()`. Above 500 scans the Library offers once to export and delete the oldest (never silently).
+  - `thumbs`: `&scanId`; value = `{ scanId, blob }` (the 640px JPEG from the scan)
+  - `chats`: `&scanId`; value = `{ scanId, messages[] }` (Ask history per scan)
+  - `composes`: `&id, createdAt`; value = `{ id, name, sources: Record<Facet, scanId>, createdAt }` (the composed scan itself is also saved in `scans` with the tag `composed`)
+- **chrome.storage.local:** `settings.promptTarget`, `settings.lastFormat`, `settings.includeCounterpart`, `settings.libraryCapAsked`, and `settings.ai = { provider: 'none'|'webllm'|'chrome'|'byok', webllmModel, byok: { preset, baseUrl, model, keyRef, vision? }, encryptKeys, downloaded[] }`. API keys are stored separately under `secrets.<preset>` as `{ v:1, enc:false, key }` or, with the optional passphrase, `{ v:1, enc:true, salt, iv, ct, iterations }` (AES-GCM; key from PBKDF2-SHA256, 250k iterations, one random salt shared by all encrypted keys so one passphrase unlocks them). The derived raw key (never the passphrase) is cached in `chrome.storage.session` for the browser session; the side panel asks for the passphrase once. Never use `storage.sync`, because keys must not leave the device. Keys are never logged or put in URLs (Gemini uses the `x-goog-api-key` header).
 - **Cache Storage:** WebLLM model weights (handled by WebLLM). `unlimitedStorage` permission.
-- **Export/Import:** `.specimen.json` = `{ format: 'specimen', version, scans: DesignScan[] }`.
+- **Export/Import:** `.specimen.json` = `{ format: 'specimen', version: 1, scans: DesignScan[] }`, without thumbnails or tags. Import rejects files over 20 MB or malformed ones, migrates each scan, skips invalid ones and gives colliding ids a new id.
 
 ---
 

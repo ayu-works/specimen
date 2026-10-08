@@ -1,8 +1,8 @@
 import type { DesignScan } from '../schema';
-import { type GeneratedFile, kebab, px, roleColors } from './common';
+import { type GeneratedFile, kebab, px, roleColors, themeVariant } from './common';
 import { flattenTokens } from './tokens';
 
-/** `:root` custom properties (+ `[data-theme="dark"]` when a dark variant was captured). */
+/** `:root` custom properties (+ `[data-theme="dark|light"]` when a counterpart theme is present). */
 export function generateCssVars(scan: DesignScan): GeneratedFile {
   const t = flattenTokens(scan);
   const lines: string[] = [':root {'];
@@ -27,11 +27,11 @@ export function generateCssVars(scan: DesignScan): GeneratedFile {
   for (const s of t.shadows) lines.push(`  --shadow-${s.level}: ${s.css};`);
   lines.push('}');
 
-  const dark = scan.variants?.dark;
-  if (dark?.roles) {
-    const rows = roleColors(scan, dark);
+  const variant = themeVariant(scan);
+  if (variant) {
+    const rows = roleColors(scan, variant.colors);
     if (rows.length > 0) {
-      lines.push('', '[data-theme="dark"] {');
+      lines.push('', `[data-theme="${variant.scheme}"] {`);
       for (const { role, token } of rows) lines.push(`  --color-${kebab(role)}: ${token.hex};`);
       lines.push('}');
     }

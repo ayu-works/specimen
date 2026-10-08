@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { openSettings, useAiContext } from '@/lib/aiContext';
 import { SETUP_HINT } from '@/lib/aiRuntime';
+import { loadChat, saveChat } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { useStore } from '../store';
 
@@ -24,6 +25,20 @@ export function Ask() {
   const [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const messages = scan ? (chats[scan.id] ?? []) : [];
+
+  const scanKey = scan?.id;
+  // Load the saved transcript of this scan once (a live in-memory chat always wins).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the scan id only
+  useEffect(() => {
+    if (!scanKey || useStore.getState().chats[scanKey]) return;
+    let live = true;
+    void loadChat(scanKey).then((saved) => {
+      if (live && saved.length > 0) setChat(scanKey, (prev) => (prev.length > 0 ? prev : saved));
+    });
+    return () => {
+      live = false;
+    };
+  }, [scanKey]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll whenever the transcript grows
   useEffect(() => {
@@ -87,6 +102,7 @@ export function Ask() {
     } finally {
       controller = null;
       setBusy(false);
+      void saveChat(scanId, useStore.getState().chats[scanId] ?? []);
     }
   }
 

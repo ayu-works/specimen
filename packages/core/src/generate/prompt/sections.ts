@@ -14,6 +14,7 @@ import {
   radiusText,
   roleColors,
   table,
+  themeVariant,
 } from '../common';
 import { cornerStyle, visualDirection } from '../direction';
 import { type FontInfo, fontPhrase, fontSet } from '../fonts';
@@ -38,6 +39,22 @@ export function colorTokens(scan: DesignScan): string {
     out.push('', `Supporting colors: ${extras.map((t) => t.hex).join(', ')}.`);
   }
   return out.join('\n');
+}
+
+/** Short counterpart-theme table; empty when the scan has no dark/light variant. */
+export function themeTokens(scan: DesignScan): string {
+  const v = themeVariant(scan);
+  if (!v) return '';
+  const label = v.scheme === 'dark' ? 'Dark' : 'Light';
+  const rows = roleColors(scan, v.colors).map(({ role, token }) => [role, token.hex]);
+  if (rows.length === 0) return '';
+  return [
+    `## ${label} theme tokens`,
+    '',
+    `Apply these under \`[data-theme="${v.scheme}"]\`; everything else stays the same.`,
+    '',
+    table(['Role', 'Hex'], rows),
+  ].join('\n');
 }
 
 function fontLine(label: string, f: FontInfo): string {

@@ -110,6 +110,8 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 | 4.5 🟦 | Themes: derive dark/light counterpart from a palette (OKLCH lightness inversion) | Generated dark theme passes AA for text pairs |
 | 4.6 🟪 | Review; tag v0.3.0 | — |
 
+> **Phase 4 status:** 4.1–4.5 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 2 (adds `variants.light`; migration v1 → v2 is a no-op). Compose lives inside Library as a mode (no new tab); the dark/light theme is one checkbox in Generate; the counterpart is derived on demand rather than stored.
+
 ## Phase 5: Differentiators (≈ 4–5 days)
 | ID | Task | AC |
 |---|---|---|

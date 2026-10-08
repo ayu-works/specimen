@@ -1,4 +1,4 @@
-import { converter, formatHex, parse } from 'culori';
+import { clampChroma, converter, formatHex, parse } from 'culori';
 
 export interface Rgba {
   r: number;
@@ -45,4 +45,11 @@ export function toOklch(c: Rgba | string): [number, number, number] {
   if (!rgba) throw new Error(`Cannot convert to oklch: ${String(c)}`);
   const o = toOklchConv({ mode: 'rgb', r: rgba.r, g: rgba.g, b: rgba.b });
   return [o.l, o.c, o.h ?? 0];
+}
+
+/** OKLCH -> `#rrggbb`, reducing chroma to fit sRGB (hue and lightness are kept). */
+export function fromOklch(l: number, c: number, h: number): string {
+  const L = Math.min(1, Math.max(0, l));
+  const color = clampChroma({ mode: 'oklch', l: L, c: Math.max(0, c), h }, 'oklch');
+  return formatHex(color);
 }
