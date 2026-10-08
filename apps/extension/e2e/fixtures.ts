@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { type BrowserContext, test as base, chromium } from '@playwright/test';
 
-const extensionPath = path.resolve(import.meta.dirname, '../.output/chrome-mv3');
+const extensionPath = path.resolve(import.meta.dirname, '../.output-e2e/chrome-mv3');
 
 export const test = base.extend<{
   context: BrowserContext;

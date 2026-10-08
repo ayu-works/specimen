@@ -1,56 +1,11 @@
 import { z } from 'zod';
 
-/** Computed-style keys sampled per element (ARCHITECTURE §4.1). */
-export const STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'backgroundImage',
-  'borderTopColor',
-  'borderTopWidth',
-  'borderTopStyle',
-  'borderRightColor',
-  'borderRightWidth',
-  'borderRightStyle',
-  'borderBottomColor',
-  'borderBottomWidth',
-  'borderBottomStyle',
-  'borderLeftColor',
-  'borderLeftWidth',
-  'borderLeftStyle',
-  'borderRadius',
-  'boxShadow',
-  'fontFamily',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'letterSpacing',
-  'textTransform',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'marginTop',
-  'marginRight',
-  'marginBottom',
-  'marginLeft',
-  'gap',
-  'rowGap',
-  'columnGap',
-  'display',
-  'flexDirection',
-  'gridTemplateColumns',
-  'justifyContent',
-  'alignItems',
-  'maxWidth',
-  'width',
-  'position',
-  'opacity',
-  'transitionDuration',
-  'transitionTimingFunction',
-] as const;
+import { STYLE_KEYS } from './styleKeys';
+
+export { STYLE_KEYS };
 
 export const StyleKeySchema = z.enum(STYLE_KEYS);
-export type StyleKey = z.infer<typeof StyleKeySchema>;
+export type { StyleKey } from './styleKeys';
 
 const Rect = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 

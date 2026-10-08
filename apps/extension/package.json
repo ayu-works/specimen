@@ -9,16 +9,19 @@
     "build": "wxt build",
     "test": "wxt prepare && vitest run",
     "typecheck": "wxt prepare && tsc --noEmit",
-    "e2e": "playwright test"
+    "build:sampler": "node scripts/build-sampler.mjs",
+    "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.4.0",
+    "@specimen/core": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.53.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -27,6 +30,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@wxt-dev/module-react": "^1.2.2",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3",

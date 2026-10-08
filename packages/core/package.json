@@ -18,5 +18,11 @@
   "dependencies": {
     "culori": "^4.0.2",
     "zod": "^4.6.5"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./cssText": "./src/cssText.ts",
+    "./styleKeys": "./src/schema/styleKeys.ts"
   }
 }

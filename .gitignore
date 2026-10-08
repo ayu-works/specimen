@@ -10,3 +10,4 @@ test-results/
 .env.*
 .DS_Store
 *.log
+.output-e2e/

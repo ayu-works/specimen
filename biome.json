@@ -9,6 +9,7 @@
     "includes": [
       "**",
       "!**/.output",
+      "!**/.output-e2e",
       "!**/.wxt",
       "!**/node_modules",
       "!pnpm-lock.yaml",
