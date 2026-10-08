@@ -29,9 +29,15 @@ importers:
 
   apps/extension:
     dependencies:
+      '@mlc-ai/web-llm':
+        specifier: ^0.2.85
+        version: 0.2.85
       '@radix-ui/react-slot':
         specifier: ^1.4.0
         version: 1.4.0(@types/react@19.3.0)(react@19.3.0)
+      '@specimen/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@specimen/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -104,6 +110,13 @@ importers:
         version: 0.21.4(esbuild@0.28.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/ai:
+    dependencies:
+      '@specimen/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -459,6 +472,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mlc-ai/web-llm@0.2.85':
+    resolution: {integrity: sha512-CwUiSAvDCYnmAZlpPMkurPHDfBLq6fvdRB3vRgoA894hRG/V/BSeY9bmMm6iIIU5VpjJxfb/dLPpJX2at0L9rw==}
 
   '@oxc-project/types@0.153.0':
     resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
@@ -1374,6 +1390,10 @@ packages:
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
+
   lru-cache@11.5.3:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
     engines: {node: 20 || >=22}
@@ -2063,6 +2083,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mlc-ai/web-llm@0.2.85':
+    dependencies:
+      loglevel: 1.9.2
 
   '@oxc-project/types@0.153.0': {}
 
@@ -2769,6 +2793,8 @@ snapshots:
       quansync: 0.2.11
 
   lodash.merge@4.6.2: {}
+
+  loglevel@1.9.2: {}
 
   lru-cache@11.5.3: {}
 

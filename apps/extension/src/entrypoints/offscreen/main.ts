@@ -1,7 +1,8 @@
 /**
  * Offscreen document: a hidden page the service worker can use for DOM-only APIs.
- * It is a message router; Phase 3 adds the WebLLM routes here.
+ * It is a message router (clipboard) plus the host of the local WebLLM engine (Port `llm`).
  */
+import { llmBusy, startLlmHost } from './llmHost';
 
 type Handler = (msg: never) => Promise<unknown>;
 
@@ -22,9 +23,17 @@ async function copy(msg: { text: string }): Promise<{ ok: true }> {
   }
 }
 
+/** The background asks before closing this document: never while a model is loaded or loading. */
+async function busy(): Promise<{ busy: boolean }> {
+  return { busy: llmBusy() };
+}
+
 const ROUTES: Record<string, Handler> = {
   'offscreen.copy': copy as Handler,
+  'offscreen.busy': busy as Handler,
 };
+
+startLlmHost();
 
 // Only answer messages we own: replying to others would race the real handler in the background.
 chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
@@ -32,7 +41,7 @@ chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
   const handler = typeof type === 'string' ? ROUTES[type] : undefined;
   if (!handler) return false;
   (handler as (m: unknown) => Promise<unknown>)(msg).then(
-    () => sendResponse({ ok: true }),
+    (data) => sendResponse({ ok: true, data }),
     (e: unknown) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   );
   return true;

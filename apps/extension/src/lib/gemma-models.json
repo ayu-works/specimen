@@ -1,0 +1,29 @@
+[
+  {
+    "id": "gemma3-1b-it-q4f16_1-MLC",
+    "tier": "small",
+    "label": "Gemma 3 1B (small, fastest)",
+    "wasm": "gemma3-1b-it-q4f16_1_cs1k-webgpu.wasm",
+    "downloadGB": 0.7,
+    "vramMB": 711,
+    "contextTokens": 4096
+  },
+  {
+    "id": "gemma-2-2b-it-q4f16_1-MLC",
+    "tier": "balanced",
+    "label": "Gemma 2 2B (balanced)",
+    "wasm": "gemma-2-2b-it-q4f16_1_cs1k-webgpu.wasm",
+    "downloadGB": 1.5,
+    "vramMB": 1895,
+    "contextTokens": 4096
+  },
+  {
+    "id": "gemma-2-9b-it-q4f16_1-MLC",
+    "tier": "larger",
+    "label": "Gemma 2 9B (larger, best quality)",
+    "wasm": "gemma-2-9b-it-q4f16_1_cs1k-webgpu.wasm",
+    "downloadGB": 5.2,
+    "vramMB": 6422,
+    "contextTokens": 4096
+  }
+]

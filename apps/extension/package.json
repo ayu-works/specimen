@@ -5,16 +5,19 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "wxt",
-    "build": "wxt build",
+    "dev": "node scripts/fetch-model-libs.mjs && wxt",
+    "build": "node scripts/fetch-model-libs.mjs && wxt build",
     "test": "wxt prepare && vitest run",
     "typecheck": "wxt prepare && tsc --noEmit",
     "build:sampler": "node scripts/build-sampler.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "try": "node scripts/try.mjs"
+    "try": "node scripts/try.mjs",
+    "fetch:model-libs": "node scripts/fetch-model-libs.mjs"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.85",
     "@radix-ui/react-slot": "^1.4.0",
+    "@specimen/ai": "workspace:*",
     "@specimen/core": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

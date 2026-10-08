@@ -96,8 +96,9 @@ async function ensureOffscreen(): Promise<boolean> {
   try {
     await chrome.offscreen.createDocument({
       url: OFFSCREEN_URL,
-      reasons: ['CLIPBOARD'],
-      justification: 'Copy the generated prompt',
+      // Reasons are fixed at creation and only one offscreen document can exist, so declare both.
+      reasons: ['CLIPBOARD', 'WORKERS'],
+      justification: 'Copy the generated prompt and run the local Gemma model in a Web Worker',
     });
     return true;
   } catch (e) {
@@ -115,7 +116,22 @@ async function copyViaOffscreen(text: string): Promise<void> {
       | undefined;
     if (!res?.ok) throw new Error(res?.error ?? 'copy failed');
   } finally {
-    if (created) await chrome.offscreen.closeDocument().catch(() => {});
+    if (created && !(await offscreenBusy())) {
+      await chrome.offscreen.closeDocument().catch(() => {});
+    }
+  }
+}
+
+/** A loaded/loading local model (or a connected client) keeps the document alive. */
+async function offscreenBusy(): Promise<boolean> {
+  try {
+    const res = (await chrome.runtime.sendMessage({ type: 'offscreen.busy' })) as
+      | { ok: boolean; data?: { busy: boolean } }
+      | undefined;
+    // No answer means we can't prove it's idle: leave it open.
+    return res?.data?.busy ?? true;
+  } catch {
+    return true;
   }
 }
 
@@ -151,6 +167,10 @@ export default defineBackground(() => {
   listen({
     'scan.run': (msg) => scanRun(msg.tabId),
     'overlay.set': overlaySet,
+    'offscreen.ensure': async () => {
+      await ensureOffscreen();
+      return { ok: true };
+    },
     'css.fetch': async (msg) => ({ texts: await cssFetch(msg.urls) }),
   });
 });

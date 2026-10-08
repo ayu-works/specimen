@@ -1,3 +1,4 @@
+import { polishPrompt } from '@specimen/ai';
 import {
   GENERATORS,
   type GeneratedFile,
@@ -6,12 +7,14 @@ import {
   type PromptTarget,
   TARGET_LABELS,
 } from '@specimen/core';
-import { Code2, Copy, Download, Heart } from 'lucide-react';
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { Code2, Copy, Download, Heart, Sparkles, Square } from 'lucide-react';
+import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { type SimpleIcon, siClaude, siCursor, siV0 } from 'simple-icons';
 import { toast } from '@/components/toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
+import { openSettings, useAiContext } from '@/lib/aiContext';
+import { SETUP_HINT } from '@/lib/aiRuntime';
 import { cn } from '@/lib/utils';
 import { useStore } from '../store';
 
@@ -169,6 +172,20 @@ export function Generate() {
   const { scan, setTab } = useStore();
   const [format, setFormat] = useState<FormatId>(DEFAULT_FORMAT);
   const [target, setTarget] = useState<PromptTarget>(DEFAULT_TARGET);
+  const ai = useAiContext();
+  // An AI-polished prompt replaces the deterministic one until the scan, target or vibe changes.
+  const [polished, setPolished] = useState<{ key: string; text: string } | null>(null);
+  const [polishing, setPolishing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const polishCtl = useRef<AbortController | null>(null);
+  const polishKey = `${scan?.id}|${target}|${scan?.vibe?.summary ?? ''}`;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the inputs change
+  useEffect(() => {
+    polishCtl.current?.abort();
+    setPolished(null);
+    setNotice(null);
+  }, [polishKey, format]);
 
   useEffect(() => {
     let live = true;
@@ -202,7 +219,9 @@ export function Generate() {
     );
   }
 
-  const file = result?.file ?? null;
+  const base = result?.file ?? null;
+  const override = format === 'prompt' && polished?.key === polishKey ? polished.text : null;
+  const file = base && override !== null ? { ...base, content: override } : base;
   const approxTokens = file ? Math.round(file.content.length / 4) : 0;
 
   function pickFormat(id: FormatId) {
@@ -212,6 +231,35 @@ export function Generate() {
   function pickTarget(t: PromptTarget) {
     setTarget(t);
     void saveSetting(KEY_TARGET, t);
+  }
+
+  async function polish() {
+    const provider = ai.provider;
+    if (!scan || !base || !provider || polishing) return;
+    const key = polishKey;
+    setPolishing(true);
+    setNotice(null);
+    const ctl = new AbortController();
+    polishCtl.current = ctl;
+    try {
+      const res = await polishPrompt(provider, scan, base.content, {
+        signal: ctl.signal,
+        onText: (text) => setPolished({ key, text }),
+      });
+      if (res.polished) setPolished({ key, text: res.text });
+      else {
+        setPolished(null);
+        const why = res.reason ?? 'the AI output was unusable';
+        setNotice(`Kept the original: ${why.charAt(0).toLowerCase()}${why.slice(1)}`);
+      }
+    } catch (e) {
+      setPolished(null);
+      if ((e as { kind?: string } | null)?.kind !== 'aborted') {
+        setNotice(`Kept the original: ${e instanceof Error ? e.message : 'polish failed'}`);
+      }
+    } finally {
+      setPolishing(false);
+    }
   }
 
   async function copy() {
@@ -257,6 +305,48 @@ export function Generate() {
             </span>
           )}
         </div>
+        {format === 'prompt' &&
+          (ai.provider ? (
+            <div className="flex items-center gap-2">
+              {polishing ? (
+                <Button size="sm" variant="outline" onClick={() => polishCtl.current?.abort()}>
+                  <Square size={12} />
+                  Stop
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={polish} disabled={!base}>
+                  <Sparkles size={13} />
+                  Polish with AI
+                </Button>
+              )}
+              {override !== null && !polishing && (
+                <button
+                  type="button"
+                  className="text-[11px] text-muted-foreground underline"
+                  onClick={() => setPolished(null)}
+                >
+                  Use original
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={openSettings}
+              className="self-start text-left text-[11px] text-muted-foreground underline"
+            >
+              ✨ Polish with AI · {SETUP_HINT}
+            </button>
+          ))}
+        {notice && (
+          <p
+            role="status"
+            className="text-[11px] text-muted-foreground"
+            data-testid="polish-notice"
+          >
+            {notice}
+          </p>
+        )}
         {result?.error && (
           <p role="alert" className="rounded-md border border-destructive/40 p-2 text-destructive">
             Could not generate this format: {result.error}
