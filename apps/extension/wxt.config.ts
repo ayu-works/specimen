@@ -10,7 +10,7 @@ export default defineConfig({
   srcDir: 'src',
   outDir: e2e ? '.output-e2e' : '.output',
   modules: ['@wxt-dev/module-react'],
-  vite: () => ({ plugins: [tailwindcss()] }),
+  vite: () => ({ plugins: [tailwindcss()], define: { __SPECIMEN_E2E__: JSON.stringify(e2e) } }),
   manifest: {
     name: 'Specimen',
     description:
@@ -22,10 +22,16 @@ export default defineConfig({
       'storage',
       'offscreen',
       'unlimitedStorage',
+      // E2E build only: Playwright can't click Chrome's permission prompt, so `debugger` is
+      // pre-granted there (mobile/dark media emulation tests). Normal builds keep it optional.
+      // `clipboardWrite` is also E2E-only: without it document.execCommand('copy') in the
+      // offscreen document is rejected (no user activation there), so the Alt+Shift+C copy can
+      // only be exercised with it. See the testing-pass report: production needs a decision.
+      ...(e2e ? ['debugger' as never, 'clipboardWrite'] : []),
     ],
     // `debugger` is requested at runtime, only when the user turns on dark-mode capture.
     // (WXT's type list lacks it, though Chrome accepts it as an optional permission.)
-    optional_permissions: ['debugger'] as never[],
+    optional_permissions: (e2e ? [] : ['debugger']) as never[],
     optional_host_permissions: ['<all_urls>'],
     ...(e2e ? { host_permissions: ['<all_urls>'] } : {}),
     icons: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png', 128: 'icon/128.png' },

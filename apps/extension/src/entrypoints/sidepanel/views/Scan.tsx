@@ -109,7 +109,21 @@ function Captures({ scan }: { scan: DesignScan }) {
           </span>
         </Row>
       )}
-      {!mobile && mine && extras.mobile !== 'running' && (
+      {!mobile && mine && extras.mobile === 'wide' && (
+        <>
+          <Row label="Mobile">
+            <span data-testid="mobile-wide">not captured (Chrome kept the window too wide)</span>
+          </Row>
+          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
+            Capture with permission
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Capturing needs a one-time permission, and Chrome shows a "debugging this browser" bar
+            for a few seconds.
+          </p>
+        </>
+      )}
+      {!mobile && mine && extras.mobile !== 'running' && extras.mobile !== 'wide' && (
         <Row label="Mobile">
           <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
             capture

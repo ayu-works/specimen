@@ -12,12 +12,57 @@ export type MobileVariant = NonNullable<NonNullable<DesignScan['variants']>['mob
 export type ThemeVariant = NonNullable<NonNullable<DesignScan['variants']>['dark']>;
 
 const MOBILE_SIZE = { width: 390, height: 844 };
+/** A capture wider than this is a desktop-ish window, never a phone: it is not stored as mobile. */
+export const MOBILE_MAX_WIDTH = 480;
 const MOBILE_SETTLE_MS = 1500;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Chrome (or a headless host) kept the popup wider than a phone and we could not emulate one. */
+export class MobileTooWideError extends Error {
+  constructor(public readonly width: number) {
+    super(`Chrome kept the window too wide (${width}px)`);
+    this.name = 'MobileTooWideError';
+  }
+}
+
+async function hasDebugger(): Promise<boolean> {
+  try {
+    return await chrome.permissions.contains({
+      permissions: ['debugger' as chrome.runtime.ManifestPermission],
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Re-sample a tab under a 390x844 device-metrics override (needs the `debugger` permission). */
+async function sampleEmulatedPhone(tabId: number) {
+  const dbg = (chrome as { debugger?: typeof chrome.debugger }).debugger;
+  if (!dbg) throw new MobileTooWideError(0);
+  const target = { tabId };
+  await dbg.attach(target, '1.3');
+  try {
+    await dbg.sendCommand(target, 'Emulation.setDeviceMetricsOverride', {
+      ...MOBILE_SIZE,
+      deviceScaleFactor: 2,
+      mobile: true,
+    });
+    await sleep(MOBILE_SETTLE_MS / 3);
+    return await send('scan.run', {
+      tabId,
+      opts: { noScreenshot: true, skipComponents: true },
+    });
+  } finally {
+    await dbg.sendCommand(target, 'Emulation.clearDeviceMetricsOverride').catch(() => {});
+    await dbg.detach(target).catch(() => {});
+  }
+}
+
 /**
- * Load `url` in a temporary phone-sized popup window (no `debugger`), sample it, and close it.
- * Browsers enforce a minimum popup width, so the real viewport width is recorded on the result.
+ * Load `url` in a temporary phone-sized popup window, sample it, and close it. Browsers enforce a
+ * minimum popup width, so the real viewport width decides: <= 480px is accepted; otherwise the
+ * page is re-sampled under device-metrics emulation when the optional `debugger` permission is
+ * held. With neither, this throws `MobileTooWideError` and nothing is stored as "mobile".
  */
 export async function captureMobile(url: string, desktop: DesignScan): Promise<MobileVariant> {
   const win = await chrome.windows.create({
@@ -33,10 +78,15 @@ export async function captureMobile(url: string, desktop: DesignScan): Promise<M
     if (tabId === undefined) throw new Error('Could not open the mobile window');
     await waitForTabLoad(tabId);
     await sleep(MOBILE_SETTLE_MS);
-    const res = await send('scan.run', {
+    let res = await send('scan.run', {
       tabId,
       opts: { noScreenshot: true, skipComponents: true },
     });
+    if (res.raw.viewport.w > MOBILE_MAX_WIDTH) {
+      if (!(await hasDebugger())) throw new MobileTooWideError(res.raw.viewport.w);
+      res = await sampleEmulatedPhone(tabId);
+      if (res.raw.viewport.w > MOBILE_MAX_WIDTH) throw new MobileTooWideError(res.raw.viewport.w);
+    }
     return extractMobile(res.raw, desktop);
   } finally {
     if (win.id !== undefined) await chrome.windows.remove(win.id).catch(() => {});
