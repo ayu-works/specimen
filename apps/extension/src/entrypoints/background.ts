@@ -1,6 +1,8 @@
 import { extract, generatePrompt, PROMPT_TARGETS, type PromptTarget } from '@specimen/core';
 import { listen, type Message, type ScanOpts, type ScanResult } from '@/lib/messaging';
 
+declare const __SPECIMEN_E2E__: boolean;
+
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const OVERLAY_FILE = '/content-scripts/overlay.js';
 const THUMB_WIDTH = 640;
@@ -153,6 +155,7 @@ async function ensureOffscreen(): Promise<boolean> {
 }
 
 async function copyViaOffscreen(text: string): Promise<void> {
+  if (__SPECIMEN_E2E__) (globalThis as { __specimenLastCopy?: string }).__specimenLastCopy = text;
   const created = await ensureOffscreen();
   try {
     const res = (await chrome.runtime.sendMessage({ type: 'offscreen.copy', text })) as
@@ -198,7 +201,10 @@ async function scanAndCopy(commandTab?: chrome.tabs.Tab): Promise<void> {
     const prompt = generatePrompt(extract(raw), { target: await storedTarget() });
     await copyViaOffscreen(prompt.content);
     flashBadge('✓', '#16a34a');
-  } catch {
+  } catch (e) {
+    if (__SPECIMEN_E2E__) {
+      (globalThis as { __specimenLastError?: string }).__specimenLastError = String(e);
+    }
     flashBadge('!', '#dc2626');
   }
 }
@@ -216,5 +222,15 @@ export default defineBackground(() => {
       return { ok: true };
     },
     'css.fetch': async (msg) => ({ texts: await cssFetch(msg.urls) }),
+    // Test hook, compiled into the SPECIMEN_E2E=1 build only.
+    ...(__SPECIMEN_E2E__
+      ? {
+          'test.scanCopy': async (msg: { url: string }) => {
+            const tabs = await chrome.tabs.query({});
+            await scanAndCopy(tabs.find((t) => t.url === msg.url));
+            return { ok: true as const };
+          },
+        }
+      : {}),
   });
 });

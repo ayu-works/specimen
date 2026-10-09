@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Components fixture</title>
+<style>
+  :root { --bg: #ffffff; --text: #111827; --muted: #6b7280; --accent: #5e6ad2; --accent-hover: #3b49c9; --border: #e5e7eb; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 64px 0; }
+  h1 { font-size: 40px; line-height: 1.15; margin: 0 0 16px; }
+  h2 { font-size: 28px; margin: 0 0 16px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  .actions { display: flex; gap: 12px; margin-top: 24px; }
+  .btn { font: inherit; font-weight: 600; padding: 12px 24px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn:focus { outline: 3px solid #f59e0b; outline-offset: 2px; }
+  .btn-outline { background: transparent; color: var(--text); border-color: var(--text); }
+  .btn-outline:hover { background: #f3f4f6; }
+  .field { font: inherit; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border); width: 280px; }
+  .field:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(94, 106, 210, .3); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card { border: 1px solid var(--border); border-radius: 12px; padding: 24px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+<section><div class="container">
+  <h1>Build with confidence</h1>
+  <p>A fixture page with real buttons, an input and cards, each with hover and focus rules.</p>
+  <div class="actions">
+    <button class="btn">Get started</button>
+    <button class="btn">Start free trial</button>
+    <button class="btn btn-outline">Learn more</button>
+  </div>
+</div></section>
+<section><div class="container">
+  <h2>Stay in the loop</h2>
+  <input class="field" type="email" placeholder="you@example.com" aria-label="Email">
+</div></section>
+<section><div class="container">
+  <div class="cards">
+    <div class="card"><h2>Fast</h2><p>Measured in milliseconds, not meetings.</p></div>
+    <div class="card"><h2>Simple</h2><p>One idea per screen and a single obvious action.</p></div>
+    <div class="card"><h2>Safe</h2><p>Nothing leaves your device unless you ask.</p></div>
+  </div>
+</div></section>
+</body>
+</html>

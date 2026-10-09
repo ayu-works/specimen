@@ -15,7 +15,7 @@ export const test = base.extend<{
     const userDataDir = mkdtempSync(path.join(tmpdir(), 'specimen-e2e-'));
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium', // new headless mode, supports extensions
-      headless: true,
+      headless: process.env.SPECIMEN_HEADED !== '1',
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     await use(context);

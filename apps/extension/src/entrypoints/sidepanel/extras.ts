@@ -1,6 +1,11 @@
 import { hasMeasuredCounterpart } from '@specimen/core';
 import type { DesignScan, RawHints } from '@specimen/core/schema';
-import { captureMobile, captureTheme, requestDebugger } from '@/lib/captureFlow';
+import {
+  captureMobile,
+  captureTheme,
+  MobileTooWideError,
+  requestDebugger,
+} from '@/lib/captureFlow';
 import { updateScan } from '@/lib/db';
 import { sameUrl } from '@/lib/scanFlow';
 import { useStore } from './store';
@@ -111,15 +116,27 @@ export async function runMediaCapture(scan: DesignScan): Promise<void> {
   }
 }
 
-export async function runMobileCapture(scan: DesignScan): Promise<void> {
+/**
+ * Capture the mobile layout. `withPermission` runs inside a click handler: it requests the
+ * optional `debugger` permission first so a too-wide popup can be emulated instead.
+ */
+export async function runMobileCapture(scan: DesignScan, withPermission = false): Promise<void> {
   const { patchExtras } = useStore.getState();
   patchExtras({ mobile: 'running', note: null });
   try {
+    if (withPermission && !(await requestDebugger())) {
+      patchExtras({ mobile: 'wide', note: 'Permission not granted. Nothing was captured.' });
+      return;
+    }
     const mobile = await captureMobile(scan.url, scan);
     if (!live(scan.id)) return;
     await attach(current(scan.id) ?? scan, { mobile });
     patchExtras({ mobile: 'done' });
   } catch (e) {
+    if (e instanceof MobileTooWideError) {
+      patchExtras({ mobile: 'wide' });
+      return;
+    }
     patchExtras({
       mobile: 'failed',
       note: `Mobile capture skipped: ${e instanceof Error ? e.message : String(e)}`,
