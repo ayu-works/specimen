@@ -201,6 +201,9 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
   const roles: Partial<Record<ColorRole, string>> = {};
   const byId = new Map(palette.map((t) => [t.id, t]));
   const chroma = (t: ColorToken) => t.oklch[1];
+  // Ink: neutral text colours. Very dark text keeps a visible OKLCH chroma even when it reads
+  // as near-black (navy ink like #172b4d has c≈0.07), so the cutoff widens as lightness drops.
+  const isInk = (t: ColorToken) => chroma(t) < 0.06 || (t.oklch[0] < 0.4 && chroma(t) < 0.09);
 
   // ---- background ----
   const topBg = new Map<string, number>();
@@ -248,7 +251,7 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     .sort((a, b) => b.usage.text - a.usage.text);
   const topText = textTokens[0]?.usage.text ?? 0;
   const neutralText = textTokens
-    .filter((t) => t.usage.text >= topText * 0.2 && chroma(t) < 0.06)
+    .filter((t) => t.usage.text >= topText * 0.2 && isInk(t))
     .sort((a, b) => ratioOf(b) - ratioOf(a));
   const primary = neutralText[0] ?? textTokens[0];
   if (primary) {
@@ -258,7 +261,7 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
     const lower = textTokens.filter(
       (t) =>
         t.id !== primary.id &&
-        chroma(t) < 0.06 &&
+        isInk(t) &&
         ratioOf(t) <= ratioOf(primary) * 0.8 &&
         ratioOf(t) >= 2 &&
         t.usage.text >= topText * 0.02,
