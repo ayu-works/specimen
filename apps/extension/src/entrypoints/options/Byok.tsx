@@ -136,7 +136,8 @@ export function Byok({
       const ctl = new AbortController();
       let got = false;
       for await (const _ of provider.chat(
-        { messages: [{ role: 'user', content: 'Reply with one word.' }], maxTokens: 1 },
+        // Reasoning models (e.g. gpt-oss) spend their first tokens thinking, so allow a few.
+        { messages: [{ role: 'user', content: 'Reply with one word.' }], maxTokens: 32 },
         ctl.signal,
       )) {
         got = true;
@@ -147,7 +148,7 @@ export function Byok({
         ok: true,
         text: got
           ? `Works: ${effectiveModel} answered.${granted ? '' : ' (Browser access to this host was not granted; the call still succeeded.)'}`
-          : `Connected, but ${effectiveModel} returned no text.`,
+          : `Works: connected to ${effectiveModel}. (It returned no text for this tiny test, which is normal for reasoning models.)`,
       });
     } catch (e) {
       const kind = e instanceof ProviderError ? e.kind : 'other';
