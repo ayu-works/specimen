@@ -21,10 +21,25 @@ export function pageDataBudget(contextTokens: number): number {
  */
 export function compactScan(scan: DesignScan): string {
   const families = new Map(scan.typography.families.map((f) => [f.id, f.name]));
+  // Roles map to hex values directly: token ids mean nothing to a model.
+  const hexById = new Map(scan.colors.palette.map((c) => [c.id, c.hex]));
+  const roleHex: Record<string, string> = {};
+  for (const [role, id] of Object.entries(scan.colors.roles)) {
+    const hex = id ? hexById.get(id) : undefined;
+    if (hex) roleHex[role] = hex;
+  }
+  const roleValues = new Set(Object.values(roleHex));
   const data = {
     colorScheme: scan.colorScheme,
-    colorRoles: scan.colors.roles,
-    palette: scan.colors.palette.slice(0, 12).map((c) => c.hex),
+    colorRoles: roleHex,
+    palette: [
+      ...new Set(
+        scan.colors.palette
+          .map((c) => c.hex)
+          .filter((h) => !roleValues.has(h))
+          .slice(0, 12),
+      ),
+    ],
     gradients: scan.colors.gradients.length,
     fonts: scan.typography.families.map((f) => ({ name: f.name, role: f.role })),
     typeScale: {
