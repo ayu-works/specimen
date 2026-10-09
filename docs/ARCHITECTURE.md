@@ -72,7 +72,7 @@ AI-design website/
 |---|---|---|
 | **sampler.content** | Walk the DOM, read `getComputedStyle`, `:root` custom props, `@media`, `@font-face`, `document.fonts`, section bounding boxes → `RawPage` | Only a content script can read the live DOM |
 | **overlay.content** | Grid overlay, hover inspector, highlight of a token's usages | Draws on the page; shadow root so page CSS can't leak in |
-| **background** | Inject scripts with `activeTab`, capture screenshots, fetch cross-origin stylesheets the page blocks (CORS), manage the offscreen doc (`ensureOffscreen()`: reasons `CLIPBOARD` + `WORKERS`, never closed while a model is loaded or loading) | Privileged APIs; short-lived and stateless |
+| **background** | Inject scripts with `activeTab`, capture screenshots, fetch cross-origin stylesheets the page blocks (CORS), manage the offscreen doc (`ensureOffscreen()`: reason `WORKERS`, never closed while a model is loaded or loading) | Privileged APIs; short-lived and stateless |
 | **sidepanel** | UI, runs `core` extraction/generation, storage, BYOK calls | Long-lived while open; heavy compute stays off the page |
 | **offscreen** | WebLLM engine on WebGPU, running in a dedicated Web Worker (`llm.worker.ts`) | MV3 service workers are killed when idle and side panels close. The offscreen doc keeps the loaded model alive |
 | **options** | Model download manager, API key management | Full-page settings UI |
@@ -305,7 +305,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |
 | Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id}` \| `error{id,kind,message}` · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
-| `offscreen.busy` | background → offscreen | `{}` → `{ busy }`; the background closes a document it created for the clipboard only when not busy |
+| `offscreen.busy` | background → offscreen | `{}` → `{ busy }`; the background asks before closing the document and never closes it while busy |
 | `mcp.push` (P6) | sidepanel → ws | `{ scan }` |
 
 ---
@@ -336,7 +336,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 No `content_scripts` declared statically. Everything is injected on demand with `activeTab`, which avoids the "read all sites" install warning.
 
 ## 11. Security & privacy
-- No remote code (Chrome Web Store policy). All JS is bundled, **including WebLLM's model-library `.wasm`** (`public/models/`, referenced through the `appConfig` `model_lib` override with `chrome.runtime.getURL`). Only model weights are downloaded at runtime, and they are data. The offscreen document is created with reasons `CLIPBOARD` and `WORKERS` (fixed at creation; only one can exist).
+- No remote code (Chrome Web Store policy). All JS is bundled, **including WebLLM's model-library `.wasm`** (`public/models/`, referenced through the `appConfig` `model_lib` override with `chrome.runtime.getURL`). Only model weights are downloaded at runtime, and they are data. The offscreen document is created with the single reason `WORKERS`. There is no `clipboardWrite` permission: copying happens in the side panel with `navigator.clipboard` on a click. The `scan-generate` command (Alt+Shift+C) calls `sidePanel.open` inside the command's user gesture and writes `shortcut.pending` to `storage.session`; the panel then scans the active tab and shows Generate (Alt+Shift+S is `_execute_action`).
 - API keys are never logged, never sent anywhere except the chosen provider's host, and can be cleared with one click.
 - Content scripts are read-only on the page. Overlays live in a closed shadow root.
 - Page text in prompts is truncated and delimited in `<page_data>` with a system rule to treat it as data (see §7). Page data goes only to the provider the user chose; with none configured nothing is sent.

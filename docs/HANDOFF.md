@@ -25,17 +25,16 @@ Based on `ux-fidelity-card`. Three Sonnet agents ran in worktrees under `.claude
 - **C (apps/extension + e2e + CI)**: ✅ merged. 31 vitest + 26 e2e tests green in its worktree. Fixed mobile capture: it never stores a > 480px "mobile" variant; with the `debugger` permission granted it emulates 390px; otherwise the card says "Mobile: not captured" and offers "Capture with permission". Added `fixtures/pages/{components,dark-mode}.html`, a `test.scanCopy` hook (E2E build only), and `gate` → `check-ids --all`.
 - `pnpm check-ids --all`: **all 87 phase 0–5 IDs present.**
 
-### ⚠️ Decision needed (user)
-**The Alt+Shift+C copy fails in the real extension.** The offscreen `execCommand('copy')` needs the `clipboardWrite` permission, which isn't in the manifest (ARCHITECTURE §10 and T0.03 pin the list). The E2E build pre-grants it, so tests pass there. Options: add `clipboardWrite` (a low-risk permission that shows no install warning), or drop the copy and have the shortcut open the panel on Generate. Recommendation: add `clipboardWrite`, then update §10 and T0.03.
+### Resolved
+- **Alt+Shift+C**: no `clipboardWrite` (user decision). The shortcut now opens the side panel, scans and shows Generate; the user clicks Copy. The offscreen document's reason is `WORKERS` only.
+- **Full `pnpm gate` is green** on `testing-pass`: 170 unit, 26 e2e, 87/87 IDs.
+- **Live AI (Groq, `gpt-oss-20b`)**: Ask ✅ `#533afd` for Stripe, Vibe ✅, no brand leaks. Polish fell back (the model changed hexes; the guard kept the original). The free tier rate-limits at 8k TPM, and the raw Groq error (with the org id) reaches the UI, so it needs a friendlier message.
 
 ### Next steps
-1. Resolve the `clipboardWrite` decision above.
-2. Run the **full `pnpm gate`** on the merged `testing-pass` (it hasn't run on the combined branch yet; each agent was green on its own) on `testing-pass` and fix failures in batches. Report the real output.
-3. **Live AI re-check** with the user's key: `.env` at the repo root (git-ignored, mode 600; `GROQ_API_KEY` is set). Never print the key. Last live result: Ask returned `#533afd` for Stripe ✅, and `gpt-oss-20b` was picked ✅.
-4. Open a PR for `testing-pass` and get **CI green** (it has been red since Phase 1 because of deferred tests).
-5. Manual items for the user: the Alt+Shift+C shortcut, the Gemma download, and a real "AI builds page → Fidelity check".
-6. Then: rethink MCP, then Phase 7, then launch.
-7. Clean up worktrees when done: `git worktree remove` for each one, after merging.
+1. Get CI green on the `testing-pass` PR; merge when the user says so (it includes PR #8).
+2. Manual items for the user: the Alt+Shift+C shortcut, the Gemma download, and a real "AI builds page → Fidelity check".
+3. Optional cleanup: the unused `offscreen.busy` route; a friendlier rate-limit error.
+4. Then: rethink MCP, then Phase 7, then launch. Remove the `.claude/worktrees/*` worktrees.
 
 ## How the user likes to work
 - Opus plans and reviews; Sonnet builds. Opus makes small fixes itself.

@@ -7,6 +7,7 @@ import { unlockKeys } from '@/lib/aiSettings';
 import { cn } from '@/lib/utils';
 import { sampleScan } from './dev/sampleScan';
 import { type TabId, useStore } from './store';
+import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
 import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
@@ -94,6 +95,7 @@ export default function App() {
 
 function Panel() {
   const { activeTab, setTab, scan, succeed } = useStore();
+  useShortcut();
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('demo') === '1') {

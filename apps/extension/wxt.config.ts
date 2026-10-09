@@ -24,10 +24,7 @@ export default defineConfig({
       'unlimitedStorage',
       // E2E build only: Playwright can't click Chrome's permission prompt, so `debugger` is
       // pre-granted there (mobile/dark media emulation tests). Normal builds keep it optional.
-      // `clipboardWrite` is also E2E-only: without it document.execCommand('copy') in the
-      // offscreen document is rejected (no user activation there), so the Alt+Shift+C copy can
-      // only be exercised with it. See the testing-pass report: production needs a decision.
-      ...(e2e ? ['debugger' as never, 'clipboardWrite'] : []),
+      ...(e2e ? ['debugger' as never] : []),
     ],
     // `debugger` is requested at runtime, only when the user turns on dark-mode capture.
     // (WXT's type list lacks it, though Chrome accepts it as an optional permission.)
@@ -41,9 +38,9 @@ export default defineConfig({
     },
     commands: {
       _execute_action: { suggested_key: { default: 'Alt+Shift+S' } },
-      'scan-copy': {
+      'scan-generate': {
         suggested_key: { default: 'Alt+Shift+C' },
-        description: 'Scan this page and copy the AI prompt',
+        description: 'Scan this page and open the prompt',
       },
     },
   },

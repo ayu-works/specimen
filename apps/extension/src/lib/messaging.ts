@@ -34,10 +34,8 @@ export interface MessageMap {
   'offscreen.ensure': { req: Record<string, never>; res: { ok: boolean } };
   /** Background -> offscreen document: is a model loaded/loading or a client connected? */
   'offscreen.busy': { req: Record<string, never>; res: { busy: boolean } };
-  /** E2E build only: run the Alt+Shift+C scan-and-copy flow on the tab with this URL. */
-  'test.scanCopy': { req: { url: string }; res: { ok: true } };
-  /** Background -> offscreen document: write text to the clipboard. */
-  'offscreen.copy': { req: { text: string }; res: { ok: true } };
+  /** E2E build only: do what Alt+Shift+C does minus opening the panel (no user gesture in tests). */
+  'test.shortcut': { req: Record<string, never>; res: { ok: true } };
 }
 
 /** Payload streamed over Port `inspector` (content -> side panel). */

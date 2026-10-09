@@ -179,7 +179,7 @@ function Preview({ file }: { file: GeneratedFile }) {
 }
 
 export function Generate() {
-  const { scan, setTab } = useStore();
+  const { scan, status, setTab } = useStore();
   const [format, setFormat] = useState<FormatId>(DEFAULT_FORMAT);
   const [target, setTarget] = useState<PromptTarget>(DEFAULT_TARGET);
   const [theme, setTheme] = useState(false);
@@ -222,6 +222,17 @@ export function Generate() {
       return { file: null, error: e instanceof Error ? e.message : String(e) };
     }
   }, [scan, format, target, theme]);
+
+  if (!scan && status === 'scanning') {
+    return (
+      <div className="flex flex-col items-center gap-3 py-10 text-center" role="status">
+        <p className="text-muted-foreground">Scanning…</p>
+        <div className="h-1 w-32 overflow-hidden rounded bg-muted">
+          <div className="h-full w-1/3 animate-pulse rounded bg-primary" />
+        </div>
+      </div>
+    );
+  }
 
   if (!scan) {
     return (

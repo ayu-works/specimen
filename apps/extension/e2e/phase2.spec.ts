@@ -45,38 +45,28 @@ test.describe('Phase 2 generate flows (full extension)', () => {
     expect(swErrors).toEqual([]);
   });
 
-  test('T2.14 the scan-copy command scans the tab and copies the prompt', async ({
+  test('T2.14 Alt+Shift+C opens the panel, scans, and shows Generate', async ({
     context,
     extensionId,
     swErrors,
   }) => {
     const url = `${fixtures.url}/landing-basic.html`;
     const target = await openTarget(context, url);
-    const panel = await openPanel(context, extensionId);
-    await target.bringToFront();
-    let [sw] = context.serviceWorkers();
-    if (!sw) sw = await context.waitForEvent('serviceworker');
+    const panel = await openPanel(context, extensionId, { shimUrl: url });
+    await target.bringToFront(); // captureVisibleTab needs the tab to be visible
 
-    // Test-only message (E2E build): runs exactly the code the Alt+Shift+C command runs.
-    const res = await panel.evaluate(
-      (u) => chrome.runtime.sendMessage({ type: 'test.scanCopy', url: u }),
-      url,
-    );
+    // Test-only message (E2E build): the same storage write the command makes, minus sidePanel.open.
+    const res = await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'test.shortcut' }));
     expect(res).toEqual({ ok: true, data: { ok: true } });
 
-    // The offscreen copy was called with a real prompt...
-    const copied = await sw.evaluate(
-      () => (globalThis as { __specimenLastCopy?: string }).__specimenLastCopy,
+    await expect(panel.getByRole('tab', { name: 'Generate', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
     );
-    expect(copied, 'offscreen copy text').toBeTruthy();
-    expect(copied).toContain('#5e6ad2');
-    expect(copied).not.toContain('Northwind');
-    // ...and the success badge is showing (it clears itself after 2 s).
-    const failure = await sw.evaluate(
-      () => (globalThis as { __specimenLastError?: string }).__specimenLastError,
-    );
-    expect(failure, 'scan-copy error').toBeUndefined();
-    expect(await sw.evaluate(() => chrome.action.getBadgeText({}))).toBe('✓');
+    const preview = panel.getByTestId('generate-preview');
+    await expect(preview).toBeVisible({ timeout: 25_000 });
+    await expect(preview).toContainText('#5e6ad2');
+    await expect(preview).not.toContainText('Northwind');
     expect(swErrors).toEqual([]);
   });
 });

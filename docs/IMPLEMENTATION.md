@@ -81,7 +81,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 | 2.4 🟦 | `tailwind` (v4 `@theme` + v3 config), `cssvars`, `shadcn` | `core/src/generate/{tailwind.ts,cssvars.ts,shadcn.ts}` | Output compiles (test: run tailwind v4 on it in CI) |
 | 2.5 🟦 | `dtcg`, `figma` | `core/src/generate/{dtcg.ts,figma.ts}` | Validates against the DTCG JSON schema |
 | 2.6 🟦 | Generate view: format picker, target picker, preview (syntax-highlighted), Copy, Download | `sidepanel/views/Generate.tsx` | Copy puts the exact output on the clipboard; Download saves a file |
-| 2.7 🟦 | Keyboard shortcut Alt+Shift+S: scan + copy the prompt | `background.ts` | Works on any tab |
+| 2.7 🟦 | Keyboard shortcut Alt+Shift+C (`scan-generate`): open the panel, scan, show Generate | `background.ts` | Works on any tab |
 | 2.8 🟪👤 | **Dogfood test**: scan linear.app → Claude Code builds a page → judge it | — | Looks like "same family". Tune the template |
 | 2.9 🟦 | README with GIF, install-from-source steps; tag **v0.1.0** | `README.md` | Release on GitHub |
 
