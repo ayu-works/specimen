@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dark mode fixture</title>
+<style>
+  :root { --bg: #ffffff; --surface: #f4f4f5; --text: #18181b; --muted: #52525b; --accent: #2563eb; --border: #e4e4e7; }
+  html.dark { --bg: #0b0d12; --surface: #161a22; --text: #f4f4f5; --muted: #a1a1aa; --accent: #60a5fa; --border: #2a2f3a; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, sans-serif; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+  nav { padding: 20px 0; border-bottom: 1px solid var(--border); }
+  section { padding: 72px 0; }
+  .alt { background: var(--surface); }
+  h1 { font-size: 44px; line-height: 1.1; margin: 0 0 16px; }
+  h2 { font-size: 28px; margin: 0 0 12px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  .btn { font: inherit; font-weight: 600; padding: 12px 24px; border-radius: 8px; border: 0; background: var(--accent); color: var(--bg); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+</style>
+</head>
+<body>
+<nav><div class="container"><strong>Nightshift</strong></div></nav>
+<section><div class="container">
+  <h1>Works in the dark too</h1>
+  <p>This page switches theme with a class on the html element.</p>
+  <button class="btn">Try it</button>
+</div></section>
+<section class="alt"><div class="container">
+  <h2>Two palettes, one layout</h2>
+  <div class="card"><p>Cards sit on the surface color in both themes.</p></div>
+</div></section>
+<section><div class="container"><h2>Ready when you are</h2><p>Nothing else to configure.</p></div></section>
+</body>
+</html>

@@ -4,10 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
 import { Inspect } from '../src/entrypoints/sidepanel/views/Inspect';
+import { AiProvider } from '../src/lib/aiContext';
+import { installChrome } from './helpers/chrome';
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
 
 beforeEach(() => {
+  installChrome();
   writeText.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText },
@@ -16,12 +19,26 @@ beforeEach(() => {
   useStore.setState({ scan: sampleScan, status: 'done', activeTab: 'inspect' });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+// The real provider, with no AI configured: the Vibe card inside Inspect needs the context.
+const renderInspect = () =>
+  render(
+    <AiProvider>
+      <Inspect />
+    </AiProvider>,
+  );
+
+/** The card (rounded box) that holds a heading; the heading may sit in a header row. */
+const cardOf = (title: string) => screen.getByText(title).closest('div.rounded-lg') as HTMLElement;
 
 describe('Inspect view (component)', () => {
   it('T1.29 Palette renders swatches with role labels; clicking copies the hex', () => {
-    render(<Inspect />);
-    const section = within(screen.getByText('Palette').parentElement as HTMLElement);
+    renderInspect();
+    const section = within(cardOf('Palette'));
 
     for (const [role, id] of Object.entries(sampleScan.colors.roles)) {
       const hex = sampleScan.colors.palette.find((t) => t.id === id)?.hex as string;
@@ -38,7 +55,7 @@ describe('Inspect view (component)', () => {
   });
 
   it('T1.30 Type scale renders each style with size and weight labels', () => {
-    render(<Inspect />);
+    renderInspect();
     for (const s of sampleScan.typography.styles) {
       const label = `${s.role} · ${s.size}px · ${s.weight} · lh ${s.lineHeight}`;
       expect(screen.getByText(label), label).toBeTruthy();
@@ -50,8 +67,8 @@ describe('Inspect view (component)', () => {
   });
 
   it('T1.31 Blueprint lists sections in order with their kinds', () => {
-    render(<Inspect />);
-    const card = screen.getByText('Blueprint').parentElement as HTMLElement;
+    renderInspect();
+    const card = cardOf('Blueprint');
     const items = within(card).getAllByRole('listitem');
     expect(items).toHaveLength(sampleScan.layout.blueprint.length);
     const kinds = items.map((li) => li.querySelector('span.font-medium')?.textContent);

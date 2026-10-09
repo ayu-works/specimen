@@ -300,7 +300,7 @@ extTest.describe('full extension', () => {
   );
 
   extTest(
-    'Scan button in the side panel shows counts and thumbnail',
+    'Scan this page button shows the sample count and thumbnail',
     async ({ context, extensionId }) => {
       const target = await context.newPage();
       await target.goto(`${fixtures.url}/landing-basic.html`);
@@ -315,9 +315,12 @@ extTest.describe('full extension', () => {
       await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
       await target.bringToFront();
       await panel
-        .getByRole('button', { name: 'Scan', exact: true })
+        .getByRole('button', { name: /Scan this page/ })
         .evaluate((b) => (b as HTMLElement).click());
-      await expect(panel.getByTestId('section-count')).toHaveText('8');
+      await expect(panel.getByTestId('scan-result')).toBeVisible({ timeout: 20_000 });
+      const count = Number(await panel.getByTestId('sample-count').innerText());
+      expect(count).toBeGreaterThan(50);
+      expect(count).toBeLessThanOrEqual(4000);
       await expect(panel.getByAltText('Page thumbnail')).toBeVisible();
     },
   );

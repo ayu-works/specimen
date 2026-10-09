@@ -14,7 +14,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check-ids": "tsx scripts/check-test-ids.ts",
-    "gate": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm e2e && pnpm check-ids --phase ${SPECIMEN_PHASE:-0}",
+    "gate": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm e2e && pnpm check-ids --all",
     "capture": "tsx scripts/capture.ts",
     "fixtures:raw": "tsx scripts/fixtures-raw.ts",
     "fixtures:summary": "tsx scripts/fixtures-summary.ts"
