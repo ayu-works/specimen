@@ -17,3 +17,6 @@ test-results/
 
 # Raw screen recordings for store images (large, local only)
 store/recordings/
+
+# Local Claude Code config (preview launch, agent worktrees)
+.claude/
