@@ -203,8 +203,7 @@ export function analyzeColors(raw: RawPage, opts: ColorOptions = {}): ColorAnaly
   const chroma = (t: ColorToken) => t.oklch[1];
   // Ink: neutral text colours. Very dark text keeps a visible OKLCH chroma even when it reads
   // as near-black (navy ink like #172b4d has c≈0.07), so the cutoff widens as lightness drops.
-  const isInk = (t: ColorToken) =>
-    chroma(t) < 0.06 || (t.oklch[0] < 0.4 && chroma(t) < 0.09);
+  const isInk = (t: ColorToken) => chroma(t) < 0.06 || (t.oklch[0] < 0.4 && chroma(t) < 0.09);
 
   // ---- background ----
   const topBg = new Map<string, number>();

@@ -56,7 +56,8 @@ function mergeColors(scans: DesignScan[], mult: number[]): Colors {
       if (!any && t.weight > 0) entries.push({ color: t.hex, weight: t.weight * m, usage: 'fill' });
     }
   });
-  const palette: ColorToken[] = clusterColors(entries);
+  // Same neutral threshold as extract(), so merging a page with itself keeps its palette.
+  const palette: ColorToken[] = clusterColors(entries, { neutralThreshold: 0.8 });
   const keepVars = new Map<string, string>();
   for (const s of scans) {
     for (const t of s.colors.palette) {

@@ -76,7 +76,6 @@ function classify(
   if (sec.landmark === 'footer') set('footer', 0.97);
   else if (idx === ctx.raw.sections.length - 1 && links.length >= 8) set('footer', 0.7);
 
-
   const media = samples.filter((s) => MEDIA.has(s.tag) && s.rect[3] <= 80 && s.rect[3] >= 12);
   const rowMedia = new Map<number, RawSample[]>();
   for (const m of media)
@@ -122,14 +121,20 @@ function classify(
   // A hero needs a button, or a headline >= 2x the base size. Large numerals with no button
   // make it a stats band instead (stats win over hero).
   if (idx === heroIdx) {
-    const maxText = Math.max(0, ...samples.map((s) => (s.heading || (s.text?.len ?? 0) > 0 ? (px(s.s.fontSize) ?? 0) : 0)));
+    const maxText = Math.max(
+      0,
+      ...samples.map((s) => (s.heading || (s.text?.len ?? 0) > 0 ? (px(s.s.fontSize) ?? 0) : 0)),
+    );
     const primaryBtn = buttons.some((b) => {
       const bg = ctx.perSample[b.i]?.ownBg;
       return bg !== undefined && ctx.roleOf(bg) === 'accent';
     });
     const heroish = primaryBtn || maxText >= ctx.baseSize * 2;
     if (heroish && !(statsSignal && !primaryBtn)) {
-      set('hero', 0.75 + (maxH >= largestHeading * 0.95 ? 0.1 : 0) + (buttons.length > 0 ? 0.1 : 0));
+      set(
+        'hero',
+        0.75 + (maxH >= largestHeading * 0.95 ? 0.1 : 0) + (buttons.length > 0 ? 0.1 : 0),
+      );
     }
   }
 

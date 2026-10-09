@@ -22,7 +22,8 @@ describe('schemas', () => {
 
     const { colors: _colors, ...scanNoColors } = minimalScan;
     expect(DesignScanSchema.safeParse(scanNoColors).success).toBe(false);
-    expect(DesignScanSchema.safeParse({ ...minimalScan, schemaVersion: SCHEMA_VERSION - 1 }).success,
+    expect(
+      DesignScanSchema.safeParse({ ...minimalScan, schemaVersion: SCHEMA_VERSION - 1 }).success,
     ).toBe(false);
 
     // older stored scans (v1, v2) upgrade to the current version
