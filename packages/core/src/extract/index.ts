@@ -44,6 +44,18 @@ function designVars(vars: Record<string, string>): Record<string, string> {
   return out;
 }
 
+/** Replace `-0` with `0` everywhere (e.g. letterSpacingEm), so JSON round trips are exact. */
+function normalizeZeros<T>(v: T): T {
+  if (typeof v === 'number') return (Object.is(v, -0) ? 0 : v) as T;
+  if (Array.isArray(v)) {
+    for (let i = 0; i < v.length; i++) v[i] = normalizeZeros(v[i]);
+  } else if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    for (const k of Object.keys(o)) o[k] = normalizeZeros(o[k]);
+  }
+  return v;
+}
+
 /** RawPage -> DesignScan (ARCHITECTURE §5). Deterministic apart from `durationMs`. */
 export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
   const t0 = performance.now();
@@ -99,5 +111,6 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
   };
   const components = extractComponents(raw.components);
   if (components.length > 0) scan.components = components;
-  return opts.validate === false ? scan : DesignScanSchema.parse(scan);
+  const out = opts.validate === false ? scan : DesignScanSchema.parse(scan);
+  return normalizeZeros(out);
 }
