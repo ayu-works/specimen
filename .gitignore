@@ -14,3 +14,6 @@ test-results/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Raw screen recordings for store images (large, local only)
+store/recordings/
