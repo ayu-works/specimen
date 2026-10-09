@@ -14,7 +14,12 @@ export default defineConfig({
   manifest: {
     name: 'Specimen',
     description:
-      'Measure any website’s design system and export an agent-ready prompt, DESIGN.md and tokens.',
+      'Measure any website’s design system and turn it into an agent-ready prompt and DESIGN.md.',
+    homepage_url: 'https://github.com/ayu-works/specimen',
+    // Chrome 116: `chrome.sidePanel.open` (the Alt+Shift+C shortcut) and `chrome.runtime.getContexts`
+    // (offscreen document lookup) both arrived in 116. The side panel itself needs 114, offscreen
+    // documents 109, `storage.session` 102 and WebGPU (local Gemma) 113.
+    minimum_chrome_version: '116',
     permissions: [
       'activeTab',
       'scripting',

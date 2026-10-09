@@ -1,50 +1,264 @@
-# Specimen (working name)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
+    <img src=".github/assets/banner-light.svg" alt="Specimen: scan any website's design, hand it to your AI." width="720">
+  </picture>
+</p>
 
-Open-source Chrome extension that measures any website's design system (colors, type, spacing, radii, layout) and turns it into an agent-ready prompt, `DESIGN.md` and design tokens. No account, no backend, no telemetry.
+<p align="center">
+  An open-source Chrome extension that measures a website's design system and turns it into a prompt your AI agent can use.<br>
+  No account, no backend, no telemetry.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-7C6CF5"></a>
+  <a href="https://chromewebstore.google.com/detail/specimen/TODO"><img alt="Chrome Web Store, coming soon" src="https://img.shields.io/badge/Chrome%20Web%20Store-coming%20soon-FFD166"></a>
+  <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-4D96FF">
+  <img alt="No tracking" src="https://img.shields.io/badge/tracking-none-06D6A0">
+  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-FF6B6B"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#ai-optional">AI</a> ·
+  <a href="#privacy">Privacy</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
 <!-- demo gif -->
 
-## Features
-- **Scan**: one click measures the page you are on, in your browser.
-- **Inspect**: palette with roles, type scale, spacing, radii and shadows, plus a layout blueprint.
-- **Overlays**: a baseline grid overlay, a live element inspector and an eyedropper on the page.
-- **Exports**: an AI prompt (generic, Claude Code, Cursor, v0, Lovable), `DESIGN.md`, Tailwind v4 and v3, CSS variables, shadcn/ui theme, W3C design tokens (DTCG) and Figma variables.
-- **Shortcut**: `Alt+Shift+C` scans the current page and copies the prompt (a check mark appears on the toolbar icon). `Alt+Shift+S` opens the side panel.
+<!-- screenshots: a row of 3 side-panel shots (Scan, Inspect, Generate) goes here -->
 
-## Install from source
-Requires Node 22+ and pnpm (`corepack enable`; the version is pinned in `package.json`).
+## Meet Specimen
+
+Hi, I'm Specimen. Point me at a website you like and I'll measure how it is built: the colors and what they are used for, the type, the spacing, the corners and shadows, the layout.
+
+Then I write it all down as a prompt or a `DESIGN.md` that your coding agent can follow. I only report what I measure, and I ask your agent to make something new, not a copy.
+
+## How it works
+
+| | Step | What happens |
+|---|---|---|
+| 🔍 | **Scan** | Open the side panel on any page and click **Scan this page**. Specimen measures the page, and can also capture mobile and the other color theme. |
+| 🧪 | **Inspect** | Browse the palette with roles, contrast checks, type scale, spacing, shapes, components and a layout blueprint. |
+| ✨ | **Generate** | Pick **Prompt** (Claude Code, Cursor, v0, Lovable or generic) or **DESIGN.md**. |
+| 📋 | **Paste** | Copy it into your agent and start building. Then use the fidelity check to compare what you built with the original. |
+
+## Features
+
+<table>
+<tr>
+<td valign="top" width="33%">
+
+**Measure**
+- Colors with roles
+- Type scale
+- Spacing, radii, shadows, borders
+- Layout blueprint
+- Mobile capture
+- Dark or light theme
+- Multi-page scans
+
+</td>
+<td valign="top" width="33%">
+
+**Inspect**
+- Contrast pairs against WCAG AA
+- Components and their states
+- Baseline **Grid** overlay
+- Live element **Inspect** card
+- **Eyedropper** on the page
+
+</td>
+<td valign="top" width="33%">
+
+**Generate**
+- Prompt for Claude Code, Cursor, v0, Lovable or generic
+- `DESIGN.md`
+- Optional second theme
+- Copy or download
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Library and Compose**
+- Every scan saved on your device
+- Search, rename, tag, favorite
+- Re-scan, delete
+- Export and import as JSON
+- **Compose** mixes colors, typography, spacing, shape and layout from different scans
+
+</td>
+<td valign="top">
+
+**Check your build**
+- Compare a page you built (for example `localhost:3000`) with the original
+- Get a prompt that fixes the differences
+- Also available for saved scans in the Library
+
+</td>
+<td valign="top">
+
+**Optional AI**
+- **Ask** about a scanned design
+- **Polish with AI** (rejected if it changes measured values)
+- **Vibe** summary
+- Local Gemma, Chrome built-in or your own key
+
+</td>
+</tr>
+</table>
+
+## Install
+
+**Chrome Web Store:** [Specimen](https://chromewebstore.google.com/detail/specimen/TODO) (link goes live after review).
+
+**From source.** Requires Node 22+ and pnpm via corepack (the version is pinned in `package.json`).
 
 ```bash
+corepack enable
 pnpm i
 pnpm build
 ```
 
-Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick `apps/extension/.output/chrome-mv3`.
-
-For development with hot reload, run `pnpm dev`, or scan a URL in a throwaway Chrome profile with `pnpm -F @specimen/extension try <url>`.
+Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick `apps/extension/.output/chrome-mv3`. Chrome 116 or newer is required.
 
 ## Usage
-1. Open the site you want to study and click the Specimen icon (or press `Alt+Shift+S`).
-2. **Scan** the page. The first time, Chrome asks for access to the site; it is used only when you scan.
-3. **Inspect** the result: colors, type, spacing, shapes, layout.
-4. **Generate** the output you need, then **Copy** or **Download** it.
-5. Paste the prompt into Claude Code, Cursor, v0 or Lovable, or drop the tokens into your project.
+
+<details open>
+<summary><b>Using the side panel, tab by tab</b></summary>
+
+Open the side panel from the toolbar icon (or press `Alt+Shift+S`). It has five tabs.
+
+1. **Scan.** Click **Scan this page**. The first scan asks for one-time access to sites (see [Permissions](#permissions)). The result shows a thumbnail and warnings. From here you can:
+   - **Also capture mobile** (on by default): re-measures the page at phone width in a small window. If Chrome keeps that window too wide, you can grant the optional `debugger` permission to emulate a 390px phone.
+   - **Dark or light mode**: if the site defines the other theme, Specimen measures it. If the site only follows your system setting, you can capture it with the optional `debugger` permission.
+   - **Add another page**: open a second page of the same site in your tab and merge it into the scan.
+2. **Inspect.** Palette with roles, accessibility (contrast pairs against WCAG AA), type scale, spacing, shapes (radii, shadows, borders), components and their states, and a layout blueprint. Toolbar buttons turn on a baseline **Grid** overlay, a live element **Inspect** card and an **Eyedropper** on the page.
+3. **Generate.** Pick **Prompt** or **DESIGN.md**. For the prompt, pick a target: Claude Code, Cursor, v0, Lovable or generic. Optionally include the other theme. **Copy** or **Download**.
+4. **Ask.** Chat about the scanned design. Needs an AI provider.
+5. **Library.** Every scan is saved on your device. Search, rename, tag, favorite, re-scan, delete, export and import as JSON. **Compose** mixes facets (colors, typography, spacing, shape, layout) from different scans into a new design.
+
+**Fidelity check.** In Generate, the card "Already built a page from this?" compares a page you built (for example `localhost:3000`) with the original and gives a prompt that fixes the differences. The Library menu has "Check a build against this" for saved scans.
+
+The token exports (Tailwind v4 and v3, CSS variables, shadcn/ui, W3C design tokens, Figma variables) exist as generators in `packages/core`. The side panel does not offer them yet.
+
+</details>
+
+<details>
+<summary><b>Keyboard shortcuts</b></summary>
+
+| Shortcut | What it does |
+|---|---|
+| `Alt+Shift+S` | Opens the side panel. |
+| `Alt+Shift+C` | Opens the side panel, scans the current page and shows Generate. You then click **Copy**. (Copying needs a click, so the extension has no `clipboardWrite` permission.) |
+
+If you have not granted site access yet, `Alt+Shift+C` opens the Scan tab so you can click **Scan this page**. You can change shortcuts at `chrome://extensions/shortcuts`.
+
+</details>
+
+## AI (optional)
+
+Everything above works with no AI. AI adds three things: **Ask**, **Polish with AI** (rewrites the generated prompt, and the result is rejected if it changes your measured values) and a **Vibe** summary in Inspect. Pick a provider in the extension's Settings page (the AI chip in the panel header opens it). The default is None.
+
+<details>
+<summary><b>Provider options and the Gemma model table</b></summary>
+
+- **Local Gemma.** Runs in your browser on your GPU through WebLLM and WebGPU. Private and works offline once downloaded. You choose a model and click Download (one time, from Hugging Face; you can delete it later):
+
+  | Model | Download | Notes |
+  |---|---|---|
+  | Gemma 3 1B | about 0.7 GB | fastest, default |
+  | Gemma 2 2B | about 1.5 GB | balanced |
+  | Gemma 2 9B | about 5.2 GB | best quality, needs about 6.4 GB of GPU memory |
+
+- **Chrome built-in.** Shown only when your Chrome exposes its built-in Prompt API model.
+- **Your own API key.** Presets: Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, Groq, Together, Mistral, DeepSeek, xAI, Ollama (local), LM Studio (local) and any custom OpenAI-compatible endpoint. Keys are stored in `chrome.storage.local` only, can be encrypted with a passphrase, and are sent only to the provider you chose. Chrome asks for access to that provider's address when you save the key.
+
+</details>
+
+## Permissions
+
+Specimen declares no content scripts and no always-on site access.
+
+<details>
+<summary><b>Every permission, why, and when</b></summary>
+
+| Permission | Why | When |
+|---|---|---|
+| `activeTab` | Read the tab you act on. | Granted by Chrome when you use the toolbar icon or a shortcut on a tab. |
+| `scripting` | Inject the sampler and overlays into the page on demand. | When you scan or turn on an overlay. |
+| `sidePanel` | Show the Specimen panel. | Always (it is the UI). |
+| `storage` | Settings, API keys and the shortcut hand-off. | Always. |
+| `unlimitedStorage` | Library (IndexedDB) and downloaded model weights can be large. | Always. |
+| `offscreen` | Host a hidden page that runs the local Gemma model in a Web Worker. | Only when you use local Gemma. |
+| optional: all sites (`<all_urls>`) | Opening the panel from the toolbar does not grant `activeTab`, so scanning needs this. Also used for thumbnails and to read cross-origin stylesheets so measurements are complete. | One-time prompt on your first scan. You can revoke it at `chrome://extensions`. |
+| optional: `debugger` | Emulate a phone viewport or the dark color scheme. Chrome shows a "debugging this browser" bar for a few seconds. | Only when you click a capture button that needs it. |
+| optional: a provider's address | Call the API of the AI provider you configured. | When you save a key. |
+
+</details>
+
+Specimen reads a page only when you scan it. The code is bundled; nothing is loaded remotely. Only local model weights are downloaded, and they are data.
 
 ## Privacy
-Specimen has no backend, no analytics and no telemetry. It reads a page only when you scan it (through the `activeTab` permission or the optional site access you grant), and everything stays on your device. Nothing is sent anywhere unless you later configure your own AI provider.
+
+No backend, no analytics, no telemetry. Scans are saved in your browser. Page data leaves your device only if you configure an AI provider, and only to that provider when you use an AI feature. Details are in [PRIVACY.md](PRIVACY.md).
 
 ## Ethics
+
 Specimen reads visual design (measured values), not content. Generated prompts contain colors, type, spacing and layout structure only: no logos, brand names or headline copy, and they ask the agent to build something original. Use the output as inspiration, not for copying someone else's brand or text.
 
-## Roadmap
-See [docs/PLAN.md](docs/PLAN.md). Architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the build plan in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+## FAQ
 
-## Development
+**Does it send my data anywhere?**
+No. There is no backend and no telemetry. Page data leaves your device only if you set up an AI provider, and then only to that provider, when you use an AI feature.
+
+**Do I need AI?**
+No. Scanning, inspecting, generating, the Library and Compose all work with no AI. AI adds Ask, Polish with AI and a Vibe summary.
+
+**Is this for copying sites?**
+No. Specimen measures visual design and leaves out logos, brand names and headline copy. The prompt asks your agent to build something original. Use it as inspiration.
+
+**Which browsers?**
+Chrome 116 or newer.
+
+<details>
+<summary><b>Development</b></summary>
+
 ```bash
+pnpm i
 pnpm dev                 # WXT dev: launches Chrome with HMR
+pnpm build               # production build into apps/extension/.output/chrome-mv3
+pnpm zip                 # store-ready zip in apps/extension/.output/
+pnpm test                # Vitest, all packages
+pnpm e2e                 # Playwright, loads the built extension in Chromium
 pnpm typecheck && pnpm lint
-pnpm gate                # typecheck + lint + unit + build + e2e + test-ID check
+pnpm gate                # everything above plus the test-ID check
+pnpm capture <url>       # save a real site's RawPage into fixtures/raw/
+pnpm -F @specimen/extension try <url>   # open Chromium with the built extension on a URL
 ```
 
+Layout:
+- `packages/core`: pure TypeScript, no `chrome.*`. Schema (zod), color math, extractors, generators, compose, diff, accessibility.
+- `packages/ai`: the `LLMProvider` interface, provider adapters and the AI features.
+- `apps/extension`: the WXT + React extension (background, sampler and overlay scripts, offscreen page, side panel, options).
+- `fixtures`: test pages with ground-truth JSON, and captured real sites.
+- `docs`: [PLAN](docs/PLAN.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [IMPLEMENTATION](docs/IMPLEMENTATION.md), [TESTING](docs/TESTING.md).
+
+</details>
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: [SECURITY.md](SECURITY.md). Release notes: [CHANGELOG.md](CHANGELOG.md).
+
 ## License
+
 [MIT](LICENSE)
+
+<p align="center">
+  <img src=".github/assets/specimen-critter.svg" alt="" width="48"><br>
+  <sub>Made with care, MIT licensed.<br>If Specimen helps you, a star on the repo is always nice.</sub>
+</p>

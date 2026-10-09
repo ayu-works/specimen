@@ -1,6 +1,6 @@
 {
   "name": "@specimen/extension",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -9,6 +9,7 @@
     "build": "node scripts/fetch-model-libs.mjs && wxt build",
     "test": "wxt prepare && vitest run",
     "typecheck": "wxt prepare && tsc --noEmit",
+    "zip": "node scripts/fetch-model-libs.mjs && wxt zip",
     "build:sampler": "node scripts/build-sampler.mjs",
     "e2e": "node scripts/e2e.mjs",
     "try": "node scripts/try.mjs",

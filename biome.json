@@ -15,6 +15,7 @@
       "!.claude",
       "!pnpm-lock.yaml",
       "!docs",
+      "!design",
       "!fixtures/pages/*.html",
       "!fixtures/raw",
       "!**/__snapshots__"

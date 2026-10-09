@@ -1,6 +1,6 @@
 {
   "name": "specimen",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@10.34.6",
@@ -9,6 +9,7 @@
     "dev": "pnpm -F @specimen/extension dev",
     "build": "pnpm -F @specimen/extension build",
     "test": "pnpm -r --if-present test",
+    "zip": "pnpm -F @specimen/extension zip",
     "e2e": "pnpm -F @specimen/extension e2e",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "biome check .",

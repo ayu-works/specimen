@@ -305,7 +305,6 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |
 | Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id}` \| `error{id,kind,message}` · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
-| `offscreen.busy` | background → offscreen | `{}` → `{ busy }`; the background asks before closing the document and never closes it while busy |
 | `mcp.push` (P6) | sidepanel → ws | `{ scan }` |
 
 ---

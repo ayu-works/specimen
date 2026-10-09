@@ -125,20 +125,24 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 
 > **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
 
-## Phase 6: MCP bridge & release (≈ 2 days)
+## Phase 6: Release (open source + Chrome Web Store) (≈ 1–2 days)
+MCP is **dropped from v1** (user decision 2026-10-09). The `phase-6-mcp` branch is kept for reference.
+
 | ID | Task | AC |
 |---|---|---|
-| 6.1 🟦 | `packages/mcp`: stdio MCP server (`@modelcontextprotocol/sdk`) + local WS listener on 127.0.0.1 with pairing token; tools `list_scans`, `get_scan`, `get_prompt`, `get_tokens(format)` | Claude Code `claude mcp add specimen -- npx specimen-mcp` lists scans |
-| 6.2 🟦 | Extension "Coding agents" panel: pair, push scans, copy MCP config for Claude Code / Cursor | Pairing works; no unauthenticated access |
-| 6.3 🟦👤 | Chrome Web Store assets (icons, screenshots, privacy policy, description); you submit with your developer account | Submitted |
-| 6.4 🟦 | Docs: README, CONTRIBUTING (adding a generator / provider), issue templates; release v1.0.0 + npm publish 👤 | — |
+| 6.1 🟦 | Open-source docs: README (store + source install, AI setup, permissions table, privacy, FAQ), CONTRIBUTING (adding a generator / provider / extractor), CODE_OF_CONDUCT, SECURITY, issue + PR templates | A new contributor can build, load and test from the README alone |
+| 6.2 🟦 | Release plumbing: version 1.0.0, `homepage_url`, `minimum_chrome_version`, `pnpm zip` (WXT zip), a GitHub Action that builds the zip on a `v*` tag and attaches it to a GitHub Release | `pnpm zip` produces a store-ready zip; no `<all_urls>` host permission, no `debugger` required permission in it |
+| 6.3 🟦 | Store listing kit in `store/`: listing copy (name, ≤132-char summary, description), permission justifications, single purpose, data-use disclosures, `PRIVACY.md`, promo tile 440×280, screenshot plan | Every field of the CWS dashboard has ready-to-paste text |
+| 6.4 🟦👤 | Screenshots (1280×800) planned from the user's own usage captures; the user submits with their developer account | Submitted |
 
-## Phase 7: Website & video (≈ 2–3 days)
+## Phase 7: Website (≈ 1–2 days)
+The video is deferred (user decision 2026-10-09). The site goes live on **Vercel** and hosts `/privacy` for the store listing.
+
 | ID | Task | AC |
 |---|---|---|
 | 7.1 🟪 | Site design: scan 2–3 reference sites with our own tool and Compose the look | Design approved 👤 |
-| 7.2 🟦 | `apps/web` Astro landing page (hero demo, how-it-works, features, privacy/local AI, OSS CTA, Add to Chrome), deploy (GitHub Pages / Vercel) | Lighthouse ≥ 95 |
-| 7.3 🟦 | Remotion video in `apps/web/video`: **3 s loop** (scan → prompt → built page), plus an optional 30 s walkthrough (length to confirm 👤) | MP4 + GIF rendered, embedded on the site |
+| 7.2 🟦 | `apps/web` Astro landing page (hero demo, how-it-works, features, privacy/local AI, OSS CTA, Add to Chrome), `/privacy`, deploy to Vercel | Lighthouse ≥ 95 |
+| 7.3 ⏸ | Remotion video: deferred until after launch | — |
 
 ---
 
@@ -147,7 +151,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 - [ ] v0.2.0: local Gemma + BYOK + Ask
 - [ ] v0.3.0: Library + Compose + Themes
 - [ ] v0.4.0: Diff, components, responsive/dark, a11y
-- [ ] v1.0.0: MCP + Web Store + website + video
+- [ ] v1.0.0: Web Store + open source + website
 
 ## Risks & mitigations
 | Risk | Mitigation |

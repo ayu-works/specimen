@@ -2,6 +2,7 @@ import { isChromeBuiltinAvailable } from '@specimen/ai';
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import '@/assets/tailwind.css';
+import { Mascot } from '@/components/Mascot';
 import { Card, CardTitle } from '@/components/ui/card';
 import {
   type AiProviderId,
@@ -45,7 +46,10 @@ function Options() {
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-4 p-8 text-[13px]">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <div className="flex items-center gap-3">
+        <Mascot size={48} />
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      </div>
       <Card className="flex flex-col gap-3">
         <CardTitle className="mb-0">AI provider</CardTitle>
         <p className="text-muted-foreground">
