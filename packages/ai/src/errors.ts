@@ -29,8 +29,13 @@ export async function httpError(res: Response): Promise<ProviderError> {
       `This model isn't available for your key. In Settings, click "Fetch models" and pick one${suffix}`,
     );
   }
-  if (res.status === 429)
-    return new ProviderError('rate', `Rate limited, try again shortly${suffix}`);
+  // Never echo the body here: rate-limit responses can carry org ids and account details.
+  if (res.status === 429 || /rate[_ -]?limit/i.test(detail)) {
+    return new ProviderError(
+      'rate',
+      'The provider is rate-limiting requests. Wait a minute and try again, or pick a smaller model.',
+    );
+  }
   if (res.status >= 500)
     return new ProviderError('other', `The provider had a server error${suffix}`);
   return new ProviderError('other', `Request failed with HTTP ${res.status}${suffix}`);
