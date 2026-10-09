@@ -1,5 +1,6 @@
 import { Download, Layers, Search, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Mascot } from '@/components/Mascot';
 import { toast } from '@/components/toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -181,6 +182,7 @@ export function Library() {
       )}
       {scans.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <Mascot size={48} />
           <p className="text-muted-foreground">Scans you make are saved here</p>
           <Button onClick={() => setTab('scan')}>Scan a page</Button>
           <button
@@ -247,12 +249,13 @@ export function Library() {
         </div>
       )}
       {error && (
-        <p
+        <div
           role="alert"
-          className="rounded-md border border-destructive/40 p-2 text-xs text-destructive"
+          className="flex items-center gap-2 rounded-md border border-destructive/40 p-2 text-xs text-destructive"
         >
-          {error}
-        </p>
+          <Mascot size={32} mood="sad" />
+          <span className="min-w-0">{error}</span>
+        </div>
       )}
       {scans.length > 0 && shown.length === 0 && (
         <p className="py-6 text-center text-muted-foreground">No scans match "{query}".</p>

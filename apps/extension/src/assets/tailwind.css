@@ -5,12 +5,12 @@
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #6657e0; /* mascot purple, 5.2:1 with white text */
+  --primary-foreground: #fff;
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --border: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #8b7ef0;
   --destructive: oklch(0.577 0.245 27);
 }
 
@@ -18,12 +18,12 @@
   :root {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
+    --primary: #a99bff; /* mascot highlight */
+    --primary-foreground: #1b1b2f;
     --muted: oklch(0.269 0 0);
     --muted-foreground: oklch(0.708 0 0);
     --border: oklch(1 0 0 / 10%);
-    --ring: oklch(0.556 0 0);
+    --ring: #8b7ef0;
     --destructive: oklch(0.704 0.191 22);
   }
 }
@@ -44,4 +44,54 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: system-ui, sans-serif;
+}
+
+/* Mascot: pixel-crisp, steps() timing only. */
+.mascot {
+  image-rendering: pixelated;
+}
+.mascot-gaze-left {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mascot-bounce {
+    animation: mascot-hop 0.9s steps(1, end) infinite;
+  }
+  .mascot-scanning .mascot-gaze-left {
+    display: inline;
+    animation: mascot-gaze-left 1.6s steps(1, end) infinite;
+  }
+  .mascot-scanning .mascot-gaze-right {
+    animation: mascot-gaze-right 1.6s steps(1, end) infinite;
+  }
+}
+@keyframes mascot-hop {
+  0%,
+  50% {
+    transform: translateY(0);
+  }
+  50.01%,
+  100% {
+    transform: translateY(calc(var(--mascot-hop) * -1));
+  }
+}
+@keyframes mascot-gaze-right {
+  0%,
+  49.99% {
+    visibility: visible;
+  }
+  50%,
+  100% {
+    visibility: hidden;
+  }
+}
+@keyframes mascot-gaze-left {
+  0%,
+  49.99% {
+    visibility: hidden;
+  }
+  50%,
+  100% {
+    visibility: visible;
+  }
 }

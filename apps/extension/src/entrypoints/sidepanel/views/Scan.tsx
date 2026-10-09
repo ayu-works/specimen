@@ -2,6 +2,7 @@ import { counterpartKey, hasMeasuredCounterpart, mergeScans } from '@specimen/co
 import type { DesignScan } from '@specimen/core/schema';
 import { FilePlus2, ScanLine } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { Mascot } from '@/components/Mascot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -186,14 +187,34 @@ export function Scan() {
 
   const run = runTabScan;
 
+  // Happy for a moment after a fresh scan lands, then settle to idle.
+  const scanId = scan?.id;
+  const [cheer, setCheer] = useState(false);
+  useEffect(() => {
+    if (!scanId) return;
+    setCheer(true);
+    const t = setTimeout(() => setCheer(false), 2500);
+    return () => clearTimeout(t);
+  }, [scanId]);
+
   const scanning = status === 'scanning';
   return (
     <div className="flex flex-col gap-3">
       {!scan && (
-        <Button size="lg" className="h-14 text-base" onClick={run} disabled={scanning}>
-          <ScanLine size={18} />
-          {scanning ? 'Scanning…' : 'Scan this page'}
-        </Button>
+        <div className="flex flex-col items-center gap-2 pt-4 text-center" data-testid="scan-empty">
+          <Mascot
+            size={96}
+            mood={scanning ? 'scanning' : status === 'error' ? 'sad' : 'idle'}
+            bounce={scanning}
+          />
+          <p className="mb-2 text-muted-foreground">
+            {scanning ? 'Measuring this page…' : 'Open any site and I will measure its design.'}
+          </p>
+          <Button size="lg" className="h-14 w-full text-base" onClick={run} disabled={scanning}>
+            <ScanLine size={18} />
+            {scanning ? 'Scanning…' : 'Scan this page'}
+          </Button>
+        </div>
       )}
       {scanning && (
         <div className="h-1 overflow-hidden rounded bg-muted">
@@ -201,13 +222,21 @@ export function Scan() {
         </div>
       )}
       {status === 'error' && error && (
-        <p role="alert" className="rounded-md border border-destructive/40 p-2 text-destructive">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/40 p-2 text-destructive"
+        >
+          {scan && <Mascot size={32} mood="sad" />}
+          <span className="min-w-0">{error}</span>
+        </div>
       )}
       {scan && (
         <Card className="flex flex-col gap-2.5" data-testid="scan-result">
           <div className="flex items-center gap-2">
+            {/* Only a brief reaction: at rest the favicon alone identifies the scan. */}
+            {(scanning || cheer) && (
+              <Mascot size={32} mood={scanning ? 'scanning' : 'happy'} bounce />
+            )}
             {favicon ? (
               <img src={favicon} alt="" className="size-6 rounded" />
             ) : (

@@ -1,6 +1,7 @@
 import { ask } from '@specimen/ai';
 import { Send, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Mascot } from '@/components/Mascot';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { openSettings, useAiContext } from '@/lib/aiContext';
@@ -48,6 +49,7 @@ export function Ask() {
   if (!scan) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
+        <Mascot size={48} />
         <p className="text-muted-foreground">Scan a page first, then ask questions about it.</p>
         <Button onClick={() => setTab('scan')}>Go to Scan</Button>
       </div>
@@ -57,6 +59,7 @@ export function Ask() {
     const waiting = ai.state === 'locked' || ai.state === 'loading';
     return (
       <Card className="flex flex-col items-center gap-3 py-8 text-center" data-testid="ask-setup">
+        <Mascot size={48} />
         <p className="text-muted-foreground">
           {ai.state === 'locked'
             ? 'Unlock your API key above to ask questions.'
@@ -136,7 +139,18 @@ export function Ask() {
                 : 'self-start bg-muted',
             )}
           >
-            {m.error ? <span className="text-destructive">{m.error}</span> : m.content || '…'}
+            {m.error ? (
+              <span className="flex items-center gap-2 text-destructive">
+                <Mascot size={32} mood="sad" />
+                {m.error}
+              </span>
+            ) : m.content ? (
+              m.content
+            ) : (
+              <span className="flex items-center gap-2">
+                <Mascot size={32} mood="thinking" bounce />…
+              </span>
+            )}
           </div>
         ))}
         <div ref={bottom} />
