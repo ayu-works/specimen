@@ -12,6 +12,7 @@
       "!**/.output-e2e",
       "!**/.wxt",
       "!**/node_modules",
+      "!.claude",
       "!pnpm-lock.yaml",
       "!docs",
       "!fixtures/pages/*.html",
