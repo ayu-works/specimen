@@ -66,7 +66,7 @@ export const PRESETS: readonly Preset[] = [
     label: 'Groq',
     kind: 'openai',
     baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-20b',
     needsKey: true,
     editableBaseUrl: false,
     vision: false,

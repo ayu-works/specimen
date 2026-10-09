@@ -1,5 +1,5 @@
 import { diffScans, FACET_NAMES, type FidelityReport, generateFixPrompt } from '@specimen/core';
-import { ClipboardCopy, ScanSearch } from 'lucide-react';
+import { ArrowRight, ChevronDown, ClipboardCopy, ScanSearch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from '@/components/toast';
 import { Button } from '@/components/ui/button';
@@ -65,7 +65,31 @@ export function FidelityCheck() {
   const [error, setError] = useState<string | null>(null);
   const [all, setAll] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
+
+  // Track the active tab while open, so the card can say what it will check before the click.
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    const refresh = () =>
+      void chrome.tabs
+        .query({ active: true, currentWindow: true })
+        .then(([t]) => live && setActiveUrl(t?.url ?? null))
+        .catch(() => {});
+    refresh();
+    const onUpdated = (_id: number, info: { url?: string; status?: string }) => {
+      if (info.url || info.status === 'complete') refresh();
+    };
+    chrome.tabs.onActivated.addListener(refresh);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      live = false;
+      chrome.tabs.onActivated.removeListener(refresh);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, [open]);
 
   // A new target invalidates the previous result.
   useEffect(() => {
@@ -78,6 +102,7 @@ export function FidelityCheck() {
   useEffect(() => {
     if (!checkPending) return;
     clearCheck();
+    setOpen(true);
     box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setFlash(true);
     setTimeout(() => setFlash(false), 1600);
@@ -94,11 +119,13 @@ export function FidelityCheck() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id === undefined || !tab.url || !/^https?:/.test(tab.url)) {
         throw new Error(
-          'Open your build (for example http://localhost:3000) in this window first.',
+          'Open the page you built (for example http://localhost:3000) in a tab of this window first.',
         );
       }
       if (sameUrl(tab.url, target.url)) {
-        setWarn('Switch to the tab with your build.');
+        setWarn(
+          'This tab is the original site. Switch to the tab with the page you built, then click Check.',
+        );
         return;
       }
       setRunning(true);
@@ -127,107 +154,172 @@ export function FidelityCheck() {
   }
 
   const shown = report ? (all ? report.deltas : report.deltas.slice(0, TOP_DELTAS)) : [];
+  const targetName = target.host === 'composed' ? 'your composed design' : target.host;
+  const activeHost = (() => {
+    if (!activeUrl || !/^https?:/.test(activeUrl)) return null;
+    try {
+      return new URL(activeUrl).host;
+    } catch {
+      return null;
+    }
+  })();
+  const onOriginal = !!activeUrl && sameUrl(activeUrl, target.url);
+  const expanded = open || !!report;
+
   return (
     <div ref={box} data-testid="fidelity-card">
       <Card className={cn('flex flex-col gap-3 transition-shadow', flash && 'ring-2 ring-ring')}>
-        <div>
-          <CardTitle className="mb-1">Built it? Check your build</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Open your build (for example localhost:3000) in this window, then click Check.
-          </p>
-        </div>
-        <Button onClick={() => void check()} disabled={running}>
-          <ScanSearch size={14} />
-          {running ? 'Checking…' : report ? 'Check again' : 'Check'}
-        </Button>
-        {warn && (
-          <p role="alert" className="rounded-md border border-amber-500/50 p-2 text-xs">
-            {warn}
-          </p>
-        )}
-        {error && (
-          <p
-            role="alert"
-            className="rounded-md border border-destructive/40 p-2 text-xs text-destructive"
-          >
-            {error}
-          </p>
-        )}
-        {report && (
-          <div className="flex flex-col gap-3" data-testid="fidelity-report">
-            <div className="flex items-center gap-3">
-              <ScoreRing score={report.score} />
-              <div className="min-w-0 flex-1">
-                <div className={cn('text-sm font-semibold', tone(report.score).text)}>
-                  {tone(report.score).label}
-                </div>
-                <p className="mb-2 truncate text-[11px] text-muted-foreground">
-                  {buildHost} vs the target design
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  {FACET_ORDER.map((f) => {
-                    const v = report.facets[f].score;
-                    return (
-                      <div key={f} className="flex items-center gap-2 text-[11px]">
-                        <span className="w-14 shrink-0 text-muted-foreground">
-                          {FACET_NAMES[f]}
-                        </span>
-                        <div className="h-1.5 flex-1 overflow-hidden rounded bg-muted">
-                          <div
-                            className={cn('h-full rounded', tone(v).bar)}
-                            style={{ width: `${v}%` }}
-                          />
-                        </div>
-                        <span className="w-6 text-right tabular-nums">{v}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setOpen(!expanded)}
+          className="flex items-start justify-between gap-2 text-left"
+        >
+          <span>
+            <CardTitle className="mb-1">Already built a page from this?</CardTitle>
+            <span className="block text-xs text-muted-foreground">
+              See how close it is to the original, and get a prompt that fixes the differences.
+            </span>
+          </span>
+          <ChevronDown
+            size={16}
+            className={cn(
+              'mt-0.5 shrink-0 text-muted-foreground transition-transform',
+              expanded && 'rotate-180',
+            )}
+          />
+        </button>
+        {expanded && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Open the page you built in a tab of this window (for example localhost:3000), then
+              click Check.
+            </p>
+            <div
+              className="flex items-center gap-2 rounded-md bg-muted/60 px-2.5 py-2 text-xs"
+              data-testid="fidelity-pair"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Original
+                </span>
+                <span className="block truncate font-medium">{targetName}</span>
+              </span>
+              <ArrowRight size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Your build
+                </span>
+                <span
+                  className={cn(
+                    'block truncate font-medium',
+                    (onOriginal || !activeHost) && 'text-muted-foreground',
+                  )}
+                >
+                  {onOriginal ? 'switch tabs' : (activeHost ?? 'open it in a tab')}
+                </span>
+              </span>
             </div>
-            {report.deltas.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No meaningful differences. Nice work.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  What to fix first
+            <Button onClick={() => void check()} disabled={running || onOriginal || !activeHost}>
+              <ScanSearch size={14} />
+              {running
+                ? 'Checking…'
+                : onOriginal || !activeHost
+                  ? 'Check'
+                  : `${report ? 'Check again' : 'Check'}: ${activeHost}`}
+            </Button>
+            {warn && (
+              <p role="alert" className="rounded-md border border-amber-500/50 p-2 text-xs">
+                {warn}
+              </p>
+            )}
+            {error && (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 p-2 text-xs text-destructive"
+              >
+                {error}
+              </p>
+            )}
+            {report && (
+              <div className="flex flex-col gap-3" data-testid="fidelity-report">
+                <div className="flex items-center gap-3">
+                  <ScoreRing score={report.score} />
+                  <div className="min-w-0 flex-1">
+                    <div className={cn('text-sm font-semibold', tone(report.score).text)}>
+                      {tone(report.score).label}
+                    </div>
+                    <p className="mb-2 truncate text-[11px] text-muted-foreground">
+                      {buildHost} vs the target design
+                    </p>
+                    <div className="flex flex-col gap-1.5">
+                      {FACET_ORDER.map((f) => {
+                        const v = report.facets[f].score;
+                        return (
+                          <div key={f} className="flex items-center gap-2 text-[11px]">
+                            <span className="w-14 shrink-0 text-muted-foreground">
+                              {FACET_NAMES[f]}
+                            </span>
+                            <div className="h-1.5 flex-1 overflow-hidden rounded bg-muted">
+                              <div
+                                className={cn('h-full rounded', tone(v).bar)}
+                                style={{ width: `${v}%` }}
+                              />
+                            </div>
+                            <span className="w-6 text-right tabular-nums">{v}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <ol className="flex flex-col gap-1.5" data-testid="fidelity-deltas">
-                  {shown.map((d) => (
-                    <li
-                      key={`${d.facet}-${d.item}`}
-                      className="flex gap-2 rounded-md border border-border p-2 text-xs"
-                    >
-                      <span
-                        title={`${d.severity} priority`}
-                        className={cn(
-                          'mt-1 size-2 shrink-0 rounded-full',
-                          SEVERITY_DOT[d.severity],
-                        )}
-                      />
-                      <span className="min-w-0">
-                        <span className="block font-medium">{d.item}</span>
-                        <span className="block text-muted-foreground">{d.hint}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {report.deltas.length > TOP_DELTAS && (
-                  <button
-                    type="button"
-                    className="self-start text-[11px] text-muted-foreground underline"
-                    onClick={() => setAll(!all)}
-                  >
-                    {all ? 'Show fewer' : `Show all ${report.deltas.length}`}
-                  </button>
+                {report.deltas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No meaningful differences. Nice work.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      What to fix first
+                    </div>
+                    <ol className="flex flex-col gap-1.5" data-testid="fidelity-deltas">
+                      {shown.map((d) => (
+                        <li
+                          key={`${d.facet}-${d.item}`}
+                          className="flex gap-2 rounded-md border border-border p-2 text-xs"
+                        >
+                          <span
+                            title={`${d.severity} priority`}
+                            className={cn(
+                              'mt-1 size-2 shrink-0 rounded-full',
+                              SEVERITY_DOT[d.severity],
+                            )}
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-medium">{d.item}</span>
+                            <span className="block text-muted-foreground">{d.hint}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {report.deltas.length > TOP_DELTAS && (
+                      <button
+                        type="button"
+                        className="self-start text-[11px] text-muted-foreground underline"
+                        onClick={() => setAll(!all)}
+                      >
+                        {all ? 'Show fewer' : `Show all ${report.deltas.length}`}
+                      </button>
+                    )}
+                  </div>
                 )}
+                <Button variant="outline" onClick={() => void copyFix()}>
+                  <ClipboardCopy size={14} />
+                  Copy fix prompt
+                </Button>
               </div>
             )}
-            <Button variant="outline" onClick={() => void copyFix()}>
-              <ClipboardCopy size={14} />
-              Copy fix prompt
-            </Button>
-          </div>
+          </>
         )}
       </Card>
     </div>

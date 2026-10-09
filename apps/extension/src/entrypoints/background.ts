@@ -1,5 +1,6 @@
-import { extract, generatePrompt, PROMPT_TARGETS, type PromptTarget } from '@specimen/core';
 import { listen, type Message, type ScanOpts, type ScanResult } from '@/lib/messaging';
+
+declare const __SPECIMEN_E2E__: boolean;
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const OVERLAY_FILE = '/content-scripts/overlay.js';
@@ -118,20 +119,7 @@ async function overlaySet(msg: Extract<Message, { type: 'overlay.set' }>): Promi
   return { ok: true };
 }
 
-const DEFAULT_TARGET: PromptTarget = 'claude-code';
 const OFFSCREEN_URL = 'offscreen.html';
-const BADGE_MS = 2000;
-
-async function storedTarget(): Promise<PromptTarget> {
-  try {
-    const got = await chrome.storage.local.get('settings.promptTarget');
-    const v = got['settings.promptTarget'] as PromptTarget | undefined;
-    if (v && PROMPT_TARGETS.includes(v)) return v;
-  } catch {
-    /* storage unavailable: use the default */
-  }
-  return DEFAULT_TARGET;
-}
 
 /** Create the offscreen document unless one exists. Returns true when we created it. */
 async function ensureOffscreen(): Promise<boolean> {
@@ -140,9 +128,8 @@ async function ensureOffscreen(): Promise<boolean> {
   try {
     await chrome.offscreen.createDocument({
       url: OFFSCREEN_URL,
-      // Reasons are fixed at creation and only one offscreen document can exist, so declare both.
-      reasons: ['CLIPBOARD', 'WORKERS'],
-      justification: 'Copy the generated prompt and run the local Gemma model in a Web Worker',
+      reasons: ['WORKERS'],
+      justification: 'Run the local Gemma model in a Web Worker',
     });
     return true;
   } catch (e) {
@@ -152,60 +139,20 @@ async function ensureOffscreen(): Promise<boolean> {
   }
 }
 
-async function copyViaOffscreen(text: string): Promise<void> {
-  const created = await ensureOffscreen();
-  try {
-    const res = (await chrome.runtime.sendMessage({ type: 'offscreen.copy', text })) as
-      | { ok: boolean; error?: string }
-      | undefined;
-    if (!res?.ok) throw new Error(res?.error ?? 'copy failed');
-  } finally {
-    if (created && !(await offscreenBusy())) {
-      await chrome.offscreen.closeDocument().catch(() => {});
-    }
-  }
-}
+/** Key the side panel watches: a recent timestamp means "the shortcut asked for a scan". */
+const SHORTCUT_KEY = 'shortcut.pending';
 
-/** A loaded/loading local model (or a connected client) keeps the document alive. */
-async function offscreenBusy(): Promise<boolean> {
-  try {
-    const res = (await chrome.runtime.sendMessage({ type: 'offscreen.busy' })) as
-      | { ok: boolean; data?: { busy: boolean } }
-      | undefined;
-    // No answer means we can't prove it's idle: leave it open.
-    return res?.data?.busy ?? true;
-  } catch {
-    return true;
-  }
-}
-
-function flashBadge(text: string, color: string): void {
-  void chrome.action.setBadgeBackgroundColor({ color });
-  void chrome.action.setBadgeText({ text });
-  setTimeout(() => void chrome.action.setBadgeText({ text: '' }), BADGE_MS);
-}
-
-/** Keyboard shortcut: scan the active tab and copy the AI prompt to the clipboard. */
-async function scanAndCopy(commandTab?: chrome.tabs.Tab): Promise<void> {
-  try {
-    const tab =
-      commandTab?.id !== undefined
-        ? commandTab
-        : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-    if (tab?.id === undefined) throw new Error('No active tab');
-    if (!tab.url || !/^https?:/.test(tab.url)) throw new Error('Unsupported page');
-    const { raw } = await scanRun(tab.id);
-    const prompt = generatePrompt(extract(raw), { target: await storedTarget() });
-    await copyViaOffscreen(prompt.content);
-    flashBadge('✓', '#16a34a');
-  } catch {
-    flashBadge('!', '#dc2626');
-  }
+function markShortcut(): void {
+  chrome.storage.session.set({ [SHORTCUT_KEY]: Date.now() }).catch(() => {});
 }
 
 export default defineBackground(() => {
   chrome.commands.onCommand.addListener((command, tab) => {
-    if (command === 'scan-copy') void scanAndCopy(tab);
+    if (command !== 'scan-generate') return;
+    markShortcut();
+    // No await before this: opening the panel needs the shortcut's user gesture.
+    if (tab?.windowId !== undefined)
+      chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
   });
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   listen({
@@ -216,5 +163,14 @@ export default defineBackground(() => {
       return { ok: true };
     },
     'css.fetch': async (msg) => ({ texts: await cssFetch(msg.urls) }),
+    // Test hook, compiled into the SPECIMEN_E2E=1 build only.
+    ...(__SPECIMEN_E2E__
+      ? {
+          'test.shortcut': async () => {
+            markShortcut();
+            return { ok: true as const };
+          },
+        }
+      : {}),
   });
 });

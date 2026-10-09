@@ -11,3 +11,6 @@ test-results/
 .DS_Store
 *.log
 .output-e2e/
+
+# Claude Code agent worktrees
+.claude/worktrees/

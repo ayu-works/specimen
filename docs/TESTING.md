@@ -93,7 +93,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T2.11 | U | Generators are pure: same scan in → byte-identical output |
 | T2.12 | C | Generate view: format/target pickers update the preview; Copy writes the exact output to the clipboard (mocked) |
 | T2.13 | E | Download produces a file with the right name and MIME |
-| T2.14 | E | Alt+Shift+S scans and copies the prompt |
+| T2.14 | E | Alt+Shift+C opens the panel, scans, and shows Generate |
 | T2.15 | 🖐 | **Dogfood**: linear.app prompt → Claude Code builds a page → "same family" judgement with screenshots |
 
 ## Phase 3: AI layer

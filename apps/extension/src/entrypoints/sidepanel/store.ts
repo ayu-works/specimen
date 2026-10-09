@@ -16,7 +16,8 @@ export interface Extras {
   /** The tab that was scanned; dark capture and "Add another page" use it. */
   tabId: number | null;
   hints: RawHints | null;
-  mobile: 'idle' | 'running' | 'done' | 'failed';
+  /** `wide` = Chrome kept the popup wider than a phone and the debugger permission isn't held. */
+  mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide';
   /** `offer` = the page only reacts to the OS setting: needs the one-time debugger permission. */
   theme: 'idle' | 'running' | 'measured' | 'none' | 'offer' | 'failed';
   page: 'idle' | 'running';
