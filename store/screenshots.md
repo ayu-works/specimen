@@ -6,16 +6,18 @@
 - **Marquee promo tile (optional):** 1400x560.
 - Show the real UI. Do not add misleading claims or other brands' logos.
 
-Final shots will be built from the user's own usage screenshots.
+## Final shot list (done)
+Built from the user's screen recording (`store/recordings/session.mov`) with the scanned site's name, logo, thumbnail and sample text blurred or replaced. Sources and scripts live in `design/store-images/` (`shots.mjs`, `promos.mjs`, `lib.mjs`).
 
-## Draft shot list
-| # | Screen | Caption (6 words or fewer) |
+| # | File (in `store/images/`) | Caption |
 |---|---|---|
-| 1 | Scan tab after a scan: thumbnail, site name, sample count, mobile and dark capture rows | Scan any site in one click |
-| 2 | Inspect tab: palette with roles, then type scale and spacing | See the whole design system |
-| 3 | Generate tab: prompt preview with the Claude Code, Cursor, v0, Lovable and generic icons | Paste straight into your AI agent |
-| 4 | Library with a few scan cards, or Compose with facet pickers and a preview | Save scans. Mix them into new designs |
-| 5 | Settings page with Local Gemma selected (model list, GPU status) beside the Generate tab | Private by default. AI is optional |
+| 1 | `screenshot-1-scan.png` | Scan any website's design |
+| 2 | `screenshot-2-palette.png` | Colors with their roles |
+| 3 | `screenshot-3-type-spacing.png` | Type, spacing and shapes, measured |
+| 4 | `screenshot-4-prompt.png` | A prompt for your AI agent |
+| 5 | `screenshot-5-design-md.png` | Copy. Paste. Build. (+ No account, No tracking, Open source) |
+
+Also done: `promo-small-440x280.png`, `promo-marquee-1400x560.png`, `icon-128.png` (transparent, art 96x96 inside 128).
 
 ## Promo tile (440x280)
 Wordmark and the line "Design system to AI prompt" on a plain background that uses the extension's palette. No site screenshots, no third-party logos.

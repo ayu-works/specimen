@@ -126,6 +126,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 > **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
 
 ## Phase 6: Release (open source + Chrome Web Store) (≈ 1–2 days)
+> **Status:** 6.1–6.3 merged (PR #10), plus the pixel-critter icon, mascot UI and README banner. 6.4: screenshots and promo tiles are done (`store/images/`); the submission is on hold (user decision).
 MCP is **dropped from v1** (user decision 2026-10-09). The `phase-6-mcp` branch is kept for reference.
 
 | ID | Task | AC |
@@ -136,13 +137,13 @@ MCP is **dropped from v1** (user decision 2026-10-09). The `phase-6-mcp` branch 
 | 6.4 🟦👤 | Screenshots (1280×800) planned from the user's own usage captures; the user submits with their developer account | Submitted |
 
 ## Phase 7: Website (≈ 1–2 days)
-The video is deferred (user decision 2026-10-09). The site goes live on **Vercel** and hosts `/privacy` for the store listing.
+The promo video is done (PR #11, `apps/video`); the approved cut is `mix`. The site goes live on **Vercel** and hosts `/privacy` for the store listing.
 
 | ID | Task | AC |
 |---|---|---|
 | 7.1 🟪 | Site design: scan 2–3 reference sites with our own tool and Compose the look | Design approved 👤 |
 | 7.2 🟦 | `apps/web` Astro landing page (hero demo, how-it-works, features, privacy/local AI, OSS CTA, Add to Chrome), `/privacy`, deploy to Vercel | Lighthouse ≥ 95 |
-| 7.3 ⏸ | Remotion video: deferred until after launch | — |
+| 7.3 ✅ | Remotion promo video (`apps/video`): four cuts × three formats; `mix` approved | Approved 👤 |
 
 ---
 

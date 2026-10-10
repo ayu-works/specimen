@@ -32,6 +32,7 @@ pnpm capture <url>     # save a real site's RawPage into fixtures/raw/
 ## Layout
 - `packages/core`: **pure TS, no `chrome.*`, no live DOM.** Schema (zod), color math, extractors, generators, compose, diff, a11y. Most logic and most tests live here.
 - `packages/ai`: `LLMProvider` interface + adapters (webllm, chromeBuiltin, openaiCompat, anthropic, gemini).
+- `apps/video`: Remotion promo video with a code-synthesized soundtrack; see its README. Not part of the extension build.
 - `apps/extension`: WXT + React 19 + Tailwind v4 + shadcn/ui. Entrypoints: background, sampler/overlay content scripts (injected on demand), offscreen (WebLLM), sidepanel, options.
 - `fixtures/`: `pages/*.html` with `*.expected.json` ground truth; `raw/*.json` captured real sites.
 
