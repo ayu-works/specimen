@@ -1,43 +1,39 @@
-# Session handoff (2026-10-09)
+# Session handoff (2026-10-10)
 
 Read `CLAUDE.md` first. It holds the workflow and rules. This file says where things stand.
 
-## Done and merged to `main`
-| Phase | What | PR |
-|---|---|---|
-| 0 | Monorepo scaffold, WXT extension, CI | #1 |
-| 1 | Sampler + extractors + Scan/Inspect UI, overlays, eyedropper | #2 |
-| 2 | Prompt (5 targets) + DESIGN.md + token generators; Generate view is **Prompt / DESIGN.md + target logos** only | #3 |
-| 3 | AI layer: local Gemma (WebLLM, bundled .wasm), any API key, Ask, Polish, Vibe, "Fetch models" | #4 |
-| 4 | Library (Dexie), Compose (inside Library), Themes; schema v2 | #5 |
-| 5 | Fidelity check, components + states, mobile/dark capture, a11y, multi-page; schema v3 | #6 |
+## Done
+| What | PR |
+|---|---|
+| Phases 0–5: scaffold, extraction, outputs, AI, Library/Compose, fidelity/mobile/dark/a11y | #1–#6 |
+| Testing pass: 170 unit + 26 e2e tests, 87/87 test IDs, fixes; includes the fidelity card (#8) | #9 |
+| Phase 6 release kit: README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, PRIVACY, templates, v1.0.0, `pnpm zip`, `release.yml`, `store/` listing kit, pixel-critter icon and mascot moods | #10 |
+| Promo video: `apps/video` (Remotion + code synth), four cuts × three formats | #11 |
+| Store images (`store/images/`: 5 screenshots 1280×800, promo 440×280, marquee 1400×560, icon 128) and repo cleanup | `repo-cleanup` PR |
 
-## Open / paused
-- **PR #8 `ux-fidelity-card`** (open): Fidelity card is "Already built a page from this?", collapsed, shows Original → Your build. It's included in `testing-pass`.
-- **Phase 6 MCP**: built, then **cancelled by the user** to rethink. PR #7 is closed; the branch `phase-6-mcp` is kept. Open questions (from the chat): is the value only the self-check loop (`check_build`)? How much browser control should agents get? Should it be a standalone headless CLI instead? Should it come before or after launch?
-- **Phase 7** (website + Remotion video) is not started. The video length is still unconfirmed: the user said "3 sec"; it could be a 3 s loop and/or 30 s.
-- **Launch** (Chrome Web Store, npm, v1.0) only **after** the testing pass.
+## Promo video
+- The approved cut is **`mix`**: the 30 s picture with the user's Suno song mixed into the chiptune, opening on "love this site?" (31.3 s). Use it for the website and the store.
+- Render: `pnpm -F @specimen/video render Promomix-16x9` (or `-1x1`, `-9x16`). Output lands in `apps/video/out/1-main-mix/` (gitignored). Details in `apps/video/README.md`.
+- The Suno song (`design/video/audio/specimen-suno.webm`) is gitignored. Its commercial use depends on the user's Suno plan: remind them before publishing.
+- The "scanned" site in the video is made up. No real brands, logos or copy.
 
-## Testing pass (in progress) on branch `testing-pass` (pushed)
-Based on `ux-fidelity-card`. Three Sonnet agents ran in worktrees under `.claude/worktrees/`:
-- **B (packages/ai)**: ✅ merged. 75 tests plus 7 extension AI tests (`apps/extension/test/ai`). Fixed: `compactScan` sent token ids instead of hexes (Ask answered the wrong colours); model ranking and filtering (Groq picked `allam`/`orpheus`); Groq preset default is now `openai/gpt-oss-20b`. Mock provider: `@specimen/ai/testing`.
-- **A (packages/core)**: ✅ merged. 57 tests. Fixed: dense-app navy ink (`isInk`), stats wins over hero, -0 normalisation, merge used the wrong cluster threshold. `scripts/check-test-ids.ts --all` (phases 0–5). T1.27 snapshots committed.
-- **C (apps/extension + e2e + CI)**: ✅ merged. 31 vitest + 26 e2e tests green in its worktree. Fixed mobile capture: it never stores a > 480px "mobile" variant; with the `debugger` permission granted it emulates 390px; otherwise the card says "Mobile: not captured" and offers "Capture with permission". Added `fixtures/pages/{components,dark-mode}.html`, a `test.scanCopy` hook (E2E build only), and `gate` → `check-ids --all`.
-- `pnpm check-ids --all`: **all 87 phase 0–5 IDs present.**
+## Open
+- **Chrome Web Store submission is on hold** (user decision). Everything is ready: `pnpm zip`, `store/SUBMIT.md`, `store/images/`. The user submits with their own developer account. The README store badge still points to `…/detail/specimen/TODO`.
+- **Website (Phase 7.1–7.2)** not started. Host: Vercel. It must serve `/privacy` so the store listing can link to it.
+- **Branch `phase-6-mcp`**: the cancelled MCP bridge, kept on purpose. Don't delete it. Open questions: is the value only the self-check loop (`check_build`)? How much browser control should agents get? Standalone headless CLI instead? Before or after launch?
+- Code leftovers: the unused `offscreen.busy` route; the raw Groq rate-limit error (with the org id) reaches the UI and needs a friendlier message.
+- Manual items still with the user: the Alt+Shift+C shortcut, the Gemma download, a real "AI builds page → Fidelity check".
 
-### Resolved
-- **Alt+Shift+C**: no `clipboardWrite` (user decision). The shortcut now opens the side panel, scans and shows Generate; the user clicks Copy. The offscreen document's reason is `WORKERS` only.
-- **Full `pnpm gate` is green** on `testing-pass`: 170 unit, 26 e2e, 87/87 IDs.
-- **Live AI (Groq, `gpt-oss-20b`)**: Ask ✅ `#533afd` for Stripe, Vibe ✅, no brand leaks. Polish fell back (the model changed hexes; the guard kept the original). The free tier rate-limits at 8k TPM, and the raw Groq error (with the org id) reaches the UI, so it needs a friendlier message.
+## Brand assets
+Mascot `design/logo/final/specimen-critter.svg` (never alter it); mood variants in `apps/extension/src/components/Mascot.tsx`; wordmark and banners in `.github/assets/`; store visuals in `store/images/`. Colors: body `#7C6CF5`, shine `#A99BFF`, tuft `#FF6B6B #FFD166 #06D6A0 #4D96FF`, ink `#1b1b2f`, store background `#0e0e16`.
 
-### Next steps
-1. Get CI green on the `testing-pass` PR; merge when the user says so (it includes PR #8).
-2. Manual items for the user: the Alt+Shift+C shortcut, the Gemma download, and a real "AI builds page → Fidelity check".
-3. Optional cleanup: the unused `offscreen.busy` route; a friendlier rate-limit error.
-4. Then: rethink MCP, then Phase 7, then launch. Remove the `.claude/worktrees/*` worktrees.
+## Notes
+- Token exports (Tailwind, CSS vars, shadcn, DTCG, Figma) exist in `packages/core`, but the side panel only offers Prompt and DESIGN.md. Don't market tokens.
+- The first scan requests optional `<all_urls>` (the side panel opened from the toolbar doesn't get activeTab). The justification is in `store/privacy-practices.md`.
+- Delete merged branches after each merge (GitHub auto-delete is off).
 
 ## How the user likes to work
-- Opus plans and reviews; Sonnet builds. Opus makes small fixes itself.
-- **Reduce cognitive load**: no new tabs, fewer choices, plain-language copy.
-- Plain-language status updates; merge only when the user says so.
-- Manual testing: `pnpm dev` + `pnpm -F @specimen/extension try <url>` opens Chromium with the extension.
+- Opus plans and reviews; Sonnet builds. Opus makes small fixes itself (the video was an exception: Opus built it).
+- Reduce cognitive load: plain language, fewer choices, short updates.
+- Ask before creative changes; leave existing renders untouched when making a new variant.
+- Merge, delete or commit only when the user says so.

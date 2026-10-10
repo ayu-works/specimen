@@ -1,9 +1,9 @@
 # Promo video
 
-The Specimen promo, in two cuts (30 s and 40 s), each in three formats, made entirely in code: [Remotion](https://www.remotion.dev) draws the picture, and a small chiptune synth (`scripts/music.ts`) writes the soundtrack. The sound is baked into each MP4.
+The Specimen promo, in four cuts (mix, suno, 30s, 40s), each in three formats, made entirely in code: [Remotion](https://www.remotion.dev) draws the picture, and a small chiptune synth (`scripts/music.ts`) writes the soundtrack. The sound is baked into each MP4.
 
 ```bash
-pnpm -F @specimen/video render                  # all six → apps/video/out/
+pnpm -F @specimen/video render                  # all twelve → apps/video/out/
 pnpm -F @specimen/video render Promo30s-1x1     # just one
 pnpm -F @specimen/video studio                  # live preview in the browser
 ```
