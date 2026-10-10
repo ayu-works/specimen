@@ -11,21 +11,20 @@
     "test": "pnpm -r --if-present test",
     "zip": "pnpm -F @specimen/extension zip",
     "e2e": "pnpm -F @specimen/extension e2e",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm -r --filter '!@specimen/video' --if-present typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check-ids": "tsx scripts/check-test-ids.ts",
     "gate": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm e2e && pnpm check-ids --all",
     "capture": "tsx scripts/capture.ts",
     "fixtures:raw": "tsx scripts/fixtures-raw.ts",
-    "fixtures:summary": "tsx scripts/fixtures-summary.ts"
+    "fixtures:summary": "tsx scripts/fixtures-summary.ts",
+    "typecheck:video": "pnpm -F @specimen/video typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "tsx": "^4.23.15"
   }
 }

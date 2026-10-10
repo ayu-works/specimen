@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to the same branch cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gate:
     runs-on: ubuntu-latest
@@ -14,6 +19,44 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm i --frozen-lockfile
-      - run: pnpm -F @specimen/extension exec playwright install --with-deps chromium
+      # The promo video (Remotion) isn't part of the gate; skip installing it.
+      - run: pnpm i --frozen-lockfile --filter '!@specimen/video'
+      - id: pw
+        run: echo "version=$(pnpm -F @specimen/extension exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm -F @specimen/extension exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm -F @specimen/extension exec playwright install-deps chromium
       - run: xvfb-run --auto-servernum pnpm gate
+
+  video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Skip unless apps/video changed
+        id: changed
+        run: |
+          base=${{ github.event.pull_request.base.sha || github.event.before }}
+          if git diff --quiet "$base" HEAD -- apps/video pnpm-lock.yaml 2>/dev/null; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.changed.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.changed.outputs.run == 'true'
+        run: pnpm i --frozen-lockfile --filter @specimen/video
+      - if: steps.changed.outputs.run == 'true'
+        run: pnpm typecheck:video
