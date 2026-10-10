@@ -1,0 +1,4 @@
+# Suno recording: license depends on the Suno plan; keep it local.
+audio/
+# Frames from the third-party reference video.
+ref/

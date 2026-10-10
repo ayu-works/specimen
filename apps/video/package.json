@@ -1,0 +1,29 @@
+{
+  "name": "@specimen/video",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "music": "tsx scripts/music.ts 30s && tsx scripts/music.ts 40s && tsx scripts/music.ts suno && tsx scripts/music.ts mix",
+    "studio": "pnpm music && remotion studio src/index.ts",
+    "render": "pnpm music && tsx scripts/render.ts",
+    "still": "remotion still src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.534",
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "4.0.534"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
