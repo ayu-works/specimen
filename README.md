@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-7C6CF5"></a>
-  <a href="https://chromewebstore.google.com/detail/specimen/TODO"><img alt="Chrome Web Store, coming soon" src="https://img.shields.io/badge/Chrome%20Web%20Store-coming%20soon-FFD166"></a>
+  <a href="https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp"><img alt="Available in the Chrome Web Store" src="https://img.shields.io/badge/Chrome%20Web%20Store-available-FFD166"></a>
   <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-4D96FF">
   <img alt="No tracking" src="https://img.shields.io/badge/tracking-none-06D6A0">
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-FF6B6B"></a>
@@ -114,7 +114,7 @@ Then I write it all down as a prompt or a `DESIGN.md` that your coding agent can
 
 ## Install
 
-**Chrome Web Store:** [Specimen](https://chromewebstore.google.com/detail/specimen/TODO) (link goes live after review).
+**Chrome Web Store:** [Add Specimen to Chrome](https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp).
 
 **From source.** Requires Node 22+ and pnpm via corepack (the version is pinned in `package.json`).
 
