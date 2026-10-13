@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Specimen</title>
+<meta name="description" content="Specimen is an open-source Chrome extension that measures a website's design system and turns it into a prompt or DESIGN.md your AI agent can follow. No backend, no account, no telemetry.">
+<meta name="theme-color" content="#0e0e16">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cg shape-rendering='crispEdges' fill='%237C6CF5'%3E%3Crect x='40' y='16' width='48' height='8'/%3E%3Crect x='24' y='24' width='80' height='8'/%3E%3Crect x='16' y='32' width='96' height='48'/%3E%3Crect x='24' y='80' width='80' height='16'/%3E%3Crect x='32' y='96' width='16' height='8'/%3E%3Crect x='80' y='96' width='16' height='8'/%3E%3C/g%3E%3Crect x='48' y='8' width='8' height='8' fill='%23FF6B6B'/%3E%3Crect x='56' y='8' width='8' height='8' fill='%23FFD166'/%3E%3Crect x='64' y='8' width='8' height='8' fill='%2306D6A0'/%3E%3Crect x='72' y='8' width='8' height='8' fill='%234D96FF'/%3E%3Crect x='32' y='48' width='8' height='16' fill='%231b1b2f'/%3E%3Crect x='88' y='48' width='8' height='16' fill='%231b1b2f'/%3E%3Crect x='56' y='68' width='16' height='8' fill='%231b1b2f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#0e0e16; --ink:#1b1b2f; --ink2:#2a2747; --paper:#f4f1ff; --mute:#b7b1dd;
+  --p:#7C6CF5; --pl:#A99BFF; --r:#FF6B6B; --y:#FFD166; --g:#06D6A0; --b:#4D96FF; --blush:#FF9FB8;
+  --cr:#DD0033; --cr2:#BB4455;
+  --ol0:#20240f; --ol1:#4d5626; --ol2:#7e873d; --ol3:#AFB45D; --ol4:#dfe3a8;
+  --px:4px;
+  --display:"Press Start 2P", ui-monospace, monospace;
+  --body:"VT323", ui-monospace, monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+html{background:var(--night)}
+body{margin:0;background:var(--night);color:var(--paper);font-family:var(--body);font-size:24px;line-height:1.15;-webkit-font-smoothing:none;overflow:hidden}
+a{color:inherit}
+img,svg,canvas{display:block}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:4px solid var(--y);outline-offset:4px}
+
+/* ---------- pixel primitives ---------- */
+.notch{clip-path:polygon(var(--px) 0,calc(100% - var(--px)) 0,calc(100% - var(--px)) var(--px),100% var(--px),100% calc(100% - var(--px)),calc(100% - var(--px)) calc(100% - var(--px)),calc(100% - var(--px)) 100%,var(--px) 100%,var(--px) calc(100% - var(--px)),0 calc(100% - var(--px)),0 var(--px),var(--px) var(--px))}
+.win{position:relative;background:var(--ink);border:4px solid var(--paper);box-shadow:inset 0 0 0 4px var(--ink),inset 0 0 0 8px var(--ink2);padding:20px 22px}
+.drop{filter:drop-shadow(8px 8px 0 rgba(0,0,0,.55))}
+.btn{--bg:var(--y);--fg:var(--ink);display:inline-flex;align-items:center;gap:12px;font-family:var(--display);font-size:13px;line-height:1;letter-spacing:.02em;text-decoration:none;color:var(--fg);background:var(--bg);padding:18px 20px 18px;border:0;cursor:pointer;box-shadow:inset -4px -4px 0 rgba(0,0,0,.28),inset 4px 4px 0 rgba(255,255,255,.4);transition:transform 80ms steps(1)}
+.btn:hover{transform:translateY(-4px)}
+.btn:active{transform:translateY(4px);box-shadow:inset 4px 4px 0 rgba(0,0,0,.28)}
+.btn.ghost{--bg:var(--ink);--fg:var(--paper);box-shadow:inset 0 0 0 4px var(--paper)}
+.btn small{font-family:var(--body);font-size:20px;background:var(--ink);color:var(--y);padding:2px 6px;margin:-8px -6px -8px 0}
+.tag{font-family:var(--display);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;line-height:1.25}
+h2{font-size:clamp(18px,3.4vw,34px);text-shadow:4px 4px 0 var(--ink)}
+h3{font-size:13px;line-height:1.5}
+p{margin:0}
+.lead{font-size:clamp(24px,2.4vw,30px);line-height:1.1}
+kbd,code{font-family:var(--body);font-size:1em;background:rgba(255,255,255,.08);padding:0 6px}
+
+/* ---------- top bar ---------- */
+.bar{position:fixed;inset:0 0 auto 0;z-index:50;display:flex;align-items:center;gap:20px;padding:10px 20px;background:rgba(14,14,22,.92);border-bottom:4px solid var(--ink2)}
+.bar .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-size:12px;text-decoration:none}
+.bar nav{display:flex;gap:18px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+.bar nav a{font-family:var(--display);font-size:10px;text-decoration:none;color:var(--mute);white-space:nowrap;padding:6px 0}
+.bar nav a:hover,.bar nav a.on{color:var(--y)}
+.bar nav a.on::before{content:"▶ "}
+.bar .btn{font-size:10px;padding:10px 12px}
+@media (max-width:860px){.bar nav{display:none}.bar .btn{margin-left:auto}}
+
+/* ---------- scenes ---------- */
+main{display:flex;width:100vw;height:100svh;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain}
+main::-webkit-scrollbar{display:none}
+.scene{position:relative;flex:0 0 100vw;width:100vw;height:100svh;overflow:hidden;isolation:isolate}
+.inner{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:112px 20px 72px;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--ink2) transparent}
+.inner>*{margin-top:auto;margin-bottom:auto}
+.inner>*~*{margin-top:0}
+.scene>canvas{position:absolute;left:0;top:0;z-index:-2;image-rendering:pixelated;image-rendering:crisp-edges}
+.scene::after{content:"";position:absolute;inset:0;z-index:40;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 3px,rgba(0,0,0,.13) 3px 4px)}
+.wrap{width:100%;max-width:1160px;margin:0 auto;position:relative}
+.hud{position:absolute;top:76px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-family:var(--display);font-size:10px;letter-spacing:.06em;text-shadow:2px 2px 0 #000;z-index:5}
+.hud .lives{display:flex;gap:4px}
+.hud .hl{color:var(--y)}
+
+/* title */
+#title .inner{padding-bottom:120px}
+.title-grid{display:grid;grid-template-columns:1.25fr .75fr;align-items:center;gap:24px}
+.kicker{color:var(--g);font-family:var(--display);font-size:11px;letter-spacing:.08em;margin-bottom:22px;text-shadow:2px 2px 0 #000}
+.logo{font-size:clamp(34px,8.2vw,104px);letter-spacing:.02em;color:var(--paper);text-shadow:
+  4px 4px 0 var(--p),8px 8px 0 var(--b),12px 12px 0 var(--ink);margin-bottom:34px}
+.logo span{display:inline-block}
+.title-copy .lead{max-width:30ch;text-shadow:3px 3px 0 #000;margin-bottom:12px}
+.title-copy .sub{color:var(--mute);max-width:46ch}
+.pitch{background:rgba(14,14,22,.82);padding:16px 18px;margin-bottom:28px;max-width:560px;box-shadow:inset 4px 0 0 var(--g)}
+.ctas{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.press{display:block;margin-top:34px;font-family:var(--display);font-size:13px;color:var(--y);text-decoration:none;text-shadow:3px 3px 0 #000;animation:blink 1.2s steps(1) infinite}
+.hero-critter{justify-self:center;position:relative}
+.hero-critter .shadow{width:120px;height:12px;background:rgba(0,0,0,.45);margin:-6px auto 0;animation:shadow 1.6s steps(2) infinite}
+.bubble{position:absolute;top:-34px;right:-10px;background:var(--paper);color:var(--ink);font-family:var(--display);font-size:10px;padding:10px 12px;white-space:nowrap}
+.bubble::after{content:"";position:absolute;left:18px;bottom:-8px;width:8px;height:8px;background:var(--paper);box-shadow:-4px 4px 0 var(--paper)}
+.ticker{position:absolute;left:0;right:0;bottom:26px;display:flex;justify-content:center;gap:28px;flex-wrap:wrap;font-family:var(--display);font-size:10px;color:var(--pl);text-shadow:2px 2px 0 #000;z-index:2;padding:0 20px}
+.ticker b{color:var(--g);font-weight:400}
+@media (max-width:820px){.kicker{font-size:8px}.title-grid{grid-template-columns:1fr}.hero-critter{order:-1;margin-top:20px}.hero-critter svg{width:128px;height:128px}.bubble{right:-60px}}
+
+/* world 1-1 */
+#how .inner{padding-bottom:150px}
+#how h2{text-align:center;margin-bottom:12px}
+.subhead{text-align:center;text-shadow:2px 2px 0 rgba(0,0,0,.6);margin-bottom:56px;color:#fff}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;list-style:none;padding:0;margin:0}
+.step{display:flex;flex-direction:column;align-items:center;text-align:center;gap:18px}
+.qblock{position:relative;width:72px;height:72px;background:var(--y);color:var(--ink);display:grid;place-items:center;font-family:var(--display);font-size:26px;box-shadow:inset -6px -6px 0 #c9921f,inset 6px 6px 0 #fff0b8,0 0 0 4px var(--ink);border:0;cursor:pointer}
+.qblock::before{content:"";position:absolute;inset:6px;background:radial-gradient(circle at 3px 3px,var(--ink) 2px,transparent 2.5px) 0 0/54px 54px no-repeat,radial-gradient(circle at calc(100% - 3px) 3px,var(--ink) 2px,transparent 2.5px);opacity:.6}
+.qblock.hit{animation:bump .36s steps(3)}
+.qblock.used{background:#b2753b;box-shadow:inset -6px -6px 0 #7a4a20,inset 6px 6px 0 #d49a5d,0 0 0 4px var(--ink);color:transparent}
+.pop{position:absolute;bottom:100%;left:50%;transform:translate(-50%,8px);opacity:0;pointer-events:none}
+.qblock.used .pop{animation:pop .6s steps(6) forwards}
+.step .win{background:rgba(27,27,47,.92);width:100%}
+.step h3{color:var(--y);margin-bottom:10px}
+.step p{font-size:22px}
+.runner{position:absolute;left:0;bottom:96px;z-index:3;animation:run 16s steps(160) infinite;pointer-events:none}
+.runner>div{animation:hop .5s steps(4) infinite}
+@media (max-width:900px){.steps{grid-template-columns:repeat(2,1fr);row-gap:40px}}
+@media (max-width:520px){.steps{grid-template-columns:1fr}}
+
+/* inventory */
+.rpg{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:24px;align-items:stretch}
+.rpg h2{margin-bottom:8px}
+.items{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px}
+.item{position:relative;aspect-ratio:1;background:#14122a;border:0;box-shadow:inset 0 0 0 4px var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.item svg{width:56%;height:56%}
+.item[aria-selected="true"]{background:#241f4a;box-shadow:inset 0 0 0 4px var(--y)}
+.item[aria-selected="true"]::after{content:"";position:absolute;left:-14px;top:50%;width:8px;height:12px;margin-top:-6px;background:var(--y);clip-path:polygon(0 0,100% 50%,0 100%);animation:nudge .6s steps(2) infinite}
+.detail{display:flex;flex-direction:column;gap:14px}
+.detail .icon{width:96px;height:96px;background:#14122a;box-shadow:inset 0 0 0 4px var(--ink2);display:grid;place-items:center}
+.detail .icon svg{width:64px;height:64px}
+.detail .kind{color:var(--g)}
+.detail h3{font-size:16px;color:var(--y)}
+.detail ul{margin:0;padding:0;list-style:none}
+.detail li::before{content:"▪ ";color:var(--pl)}
+.stat{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px;font-family:var(--display);font-size:9px}
+.meter{height:12px;background:#0b0a16;box-shadow:inset 0 0 0 2px var(--ink2);position:relative}
+.meter i{position:absolute;inset:2px auto 2px 2px;background:repeating-linear-gradient(90deg,var(--g) 0 8px,transparent 8px 10px);transition:width .4s steps(8)}
+.hint{color:var(--mute);font-size:20px;margin-top:auto}
+@media (max-width:860px){.rpg{grid-template-columns:1fr}}
+
+/* cartridge */
+#loot{color:var(--ol0)}
+.cart-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:40px;align-items:center}
+.cart-copy h2{color:var(--ol0);text-shadow:4px 4px 0 var(--ol3)}
+.cart-copy .lead{margin:18px 0 18px;color:var(--ol0)}
+.cart-copy .win{background:var(--ol4);border-color:var(--ol0);box-shadow:inset 0 0 0 4px var(--ol4),inset 0 0 0 8px var(--ol3);color:var(--ol0)}
+.cart-copy li{margin:4px 0}
+.cart-copy ul{padding-left:0;list-style:none;margin:0}
+.cart-copy li::before{content:"► "}
+.handheld{justify-self:center;width:min(100%,440px);background:#c9c6be;padding:26px 26px 34px;border-radius:14px 14px 56px 14px;box-shadow:inset -8px -8px 0 #a19e96,inset 8px 8px 0 #e6e3dc,12px 12px 0 rgba(32,36,15,.5);color:#3b3a52}
+.handheld .bezel{background:#55546a;padding:18px 26px 14px;border-radius:8px 8px 32px 8px}
+.handheld .led{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:7px;color:#bdbbd2;margin-bottom:10px}
+.handheld .led i{width:8px;height:8px;background:var(--cr);box-shadow:0 0 6px var(--cr)}
+.lcd{background:var(--ol3);color:var(--ol0);height:316px;padding:10px 12px;overflow:hidden;font-size:19px;line-height:1.02;white-space:pre;box-shadow:inset 4px 4px 0 var(--ol2)}
+.lcd .cur{display:inline-block;width:10px;height:18px;background:var(--ol0);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+.lcd .hd{color:var(--ol0);background:var(--ol2);display:block;margin:0 -12px 6px;padding:0 12px}
+.bezel .model{font-family:var(--display);font-size:9px;color:#bdbbd2;margin-top:10px;font-style:italic}
+.controls{display:flex;justify-content:space-between;align-items:center;margin-top:28px}
+.dpad{position:relative;width:96px;height:96px}
+.dpad button{position:absolute;width:32px;height:32px;background:#2a2938;border:0;cursor:pointer;color:#8b89a0;font-size:14px}
+.dpad .u{left:32px;top:0}.dpad .d{left:32px;bottom:0}.dpad .l{left:0;top:32px}.dpad .r{right:0;top:32px}
+.dpad::after{content:"";position:absolute;left:32px;top:32px;width:32px;height:32px;background:#2a2938}
+.ab{display:flex;gap:14px;align-items:flex-start}.ab label{display:flex;flex-direction:column;align-items:center;gap:8px;font-family:var(--display);font-size:7px}.ab label:last-child{margin-top:-22px}
+.ab button{width:52px;height:52px;border-radius:50%;background:var(--cr);border:0;color:#fff;font-family:var(--display);font-size:12px;cursor:pointer;box-shadow:inset -4px -4px 0 #8f0022,inset 4px 4px 0 #ff5a7e}
+.ab button[aria-pressed="true"]{box-shadow:inset 4px 4px 0 #8f0022;background:var(--cr2)}
+.ss{display:flex;gap:18px;justify-content:center;margin-top:20px;font-family:var(--display);font-size:7px;color:#6d6b84}
+.ss span::before{content:"";display:block;width:36px;height:8px;background:#8b89a0;border-radius:4px;margin:0 auto 6px;transform:rotate(-20deg)}
+.target{font-family:var(--display);font-size:9px;text-align:center;margin-top:16px;color:#3b3a52}
+@media (max-width:900px){.cart-grid{grid-template-columns:1fr}}
+@media (max-width:420px){.lcd{font-size:17px;height:270px}.handheld{padding:18px}}
+
+/* choose ai */
+#ai h2{text-align:center}
+#ai .subhead{margin-bottom:40px}
+.roster{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.fighter{position:relative;background:rgba(14,14,22,.92);border:0;box-shadow:inset 0 0 0 4px var(--ink2);padding:22px 14px 16px;cursor:pointer;color:var(--paper);display:flex;flex-direction:column;align-items:center;gap:14px;font-family:var(--display);font-size:10px;line-height:1.5}
+.fighter svg{width:96px;height:96px}
+.fighter .plat{width:110px;height:10px;background:radial-gradient(ellipse at center,rgba(169,155,255,.55),transparent 70%)}
+.fighter[aria-checked="true"]{box-shadow:inset 0 0 0 4px var(--y);background:rgba(36,31,74,.88)}
+.fighter[aria-checked="true"]::before{content:"P1";position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--y);color:var(--ink);padding:6px 8px;font-size:9px}
+.fighter[aria-checked="true"] svg{animation:hop .5s steps(2) infinite}
+.fighter .def{font-family:var(--body);font-size:18px;color:var(--g)}
+.ai-detail{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.ai-detail h3{color:var(--y);margin-bottom:10px;font-size:15px}
+.ai-detail .stats{display:flex;flex-direction:column;gap:12px;justify-content:center}
+.moves{margin-top:12px;color:var(--mute);font-size:21px}
+@media (max-width:860px){.roster{grid-template-columns:repeat(2,1fr)}.ai-detail{grid-template-columns:1fr}}
+
+/* boss */
+#privacy .arena{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:end;min-height:320px}
+.foe,.hero-side{display:flex;flex-direction:column;gap:12px}
+.foe{align-items:flex-end;align-self:start}
+.hpbox{background:rgba(27,27,47,.94);padding:12px 16px;min-width:280px;font-family:var(--display);font-size:11px;box-shadow:inset 0 0 0 4px var(--paper)}
+.hpbox .row{display:flex;justify-content:space-between;margin-bottom:8px}
+.hp{height:12px;background:#0b0a16;box-shadow:inset 0 0 0 2px var(--ink2);display:flex;align-items:center;gap:8px}
+.hp i{display:block;height:8px;margin-left:2px;background:var(--g);transition:width .5s steps(10),background .2s steps(1)}
+.hp.low i{background:var(--r)}
+#boss{width:min(260px,40vw);height:auto;animation:float 2s steps(4) infinite}
+#boss.hurt{animation:hurt .4s steps(2) 2}
+#boss.down{animation:faint 1.2s steps(8) forwards}
+.hero-side{align-items:flex-start}
+.battle{margin-top:20px;display:grid;grid-template-columns:1.5fr 1fr;gap:0}
+.battle .log{min-height:168px;font-size:24px;line-height:1.25}
+.battle .log p{margin:0 0 4px}
+.battle .log p::before{content:"> ";color:var(--y)}
+.battle .menu{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;align-content:center;font-family:var(--display);font-size:11px;border-left:0}
+.battle .menu a,.battle .menu button{background:none;border:0;color:var(--paper);text-align:left;font:inherit;padding:8px 0 8px 18px;cursor:pointer;text-decoration:none;position:relative}
+.battle .menu a:hover::before,.battle .menu button:hover::before,.battle .menu :focus-visible::before{content:"▶";position:absolute;left:0;color:var(--y)}
+@media (max-width:820px){#privacy .arena{grid-template-columns:1fr}.foe{align-items:center}.battle{grid-template-columns:1fr}.hpbox{min-width:0;width:100%}}
+
+/* continue */
+#start{text-align:center}#start .inner{padding-bottom:40px}
+.count{font-family:var(--display);font-size:clamp(64px,14vw,160px);color:var(--y);text-shadow:8px 8px 0 var(--cr);line-height:1;margin:26px 0 10px}
+#start h2{font-size:clamp(22px,5vw,48px)}
+#start .ctas{justify-content:center;margin:34px 0 26px}
+.source{max-width:620px;margin:0 auto;text-align:left}
+.source pre{margin:10px 0 0;font-family:var(--body);font-size:22px;color:var(--g);white-space:pre-wrap}
+.credits{margin-top:70px;display:flex;flex-direction:column;gap:12px;align-items:center;font-family:var(--display);font-size:9px;color:var(--mute);line-height:1.8}
+.credits nav{display:flex;gap:22px;flex-wrap:wrap;justify-content:center}
+.credits a{color:var(--pl)}
+.credits .fine{font-family:var(--body);font-size:20px;line-height:1.15;max-width:58ch}
+
+/* ---------- pet ---------- */
+.petbtn{display:flex;align-items:center;gap:8px;margin-left:8px;background:none;border:0;box-shadow:inset 0 0 0 3px var(--ink2);color:var(--mute);font-family:var(--display);font-size:9px;padding:8px 10px;cursor:pointer}
+.petbtn[aria-pressed="true"]{color:var(--y);box-shadow:inset 0 0 0 3px var(--y)}
+@media (max-width:860px){.petbtn{margin-left:auto}.bar .btn{margin-left:0}}
+@media (max-width:520px){.bar{gap:10px;padding:10px 12px}.bar .brand{font-size:0;gap:0}.bar .btn{font-size:9px;padding:10px}.petbtn{font-size:8px}}
+body.pet-on #heroHome,body.pet-on.pet-away .hero-critter .shadow{visibility:hidden}
+#pet{position:fixed;left:0;top:0;z-index:70;width:64px;height:64px;transform-origin:0 0;pointer-events:none;will-change:transform}
+#pet .body{width:64px;height:64px;pointer-events:auto;cursor:grab}
+#pet .body:active{cursor:grabbing}
+#pet .body svg{width:64px;height:64px}
+#petSay{position:fixed;left:0;top:0;z-index:71;pointer-events:none;background:var(--paper);color:var(--ink);font-family:var(--display);font-size:9px;line-height:1.4;padding:8px 10px;max-width:220px;white-space:normal;opacity:0;box-shadow:4px 4px 0 rgba(0,0,0,.45)}
+#petSay.on{opacity:1}
+#petSay::after{content:"";position:absolute;left:var(--tail,24px);bottom:-8px;width:8px;height:8px;background:var(--paper)}
+#petSay.below::after{bottom:auto;top:-8px}
+.fx{position:fixed;z-index:72;pointer-events:none;font-family:var(--display);font-size:12px;animation:fx 1s steps(6) forwards}
+@keyframes fx{to{transform:translateY(-36px);opacity:0}}
+body:not(.pet-on) #pet,body:not(.pet-on) #petSay{display:none}
+
+/* ---------- stage pager ---------- */
+.pager{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:6px;background:rgba(14,14,22,.92);padding:6px;box-shadow:inset 0 0 0 4px var(--ink2);font-family:var(--display);font-size:10px}
+.pager button{width:36px;height:36px;border:0;background:var(--y);color:var(--ink);font-family:var(--display);font-size:12px;cursor:pointer;box-shadow:inset -3px -3px 0 rgba(0,0,0,.28),inset 3px 3px 0 rgba(255,255,255,.4)}
+.pager button:disabled{background:var(--ink2);color:var(--mute);cursor:default;box-shadow:none}
+.pager span{min-width:64px;text-align:center;color:var(--paper)}
+.pager .dots{display:flex;gap:4px;min-width:0}
+.pager .dots i{width:8px;height:8px;background:var(--ink2)}
+.pager .dots i.on{background:var(--y)}
+@media (max-width:520px){.pager span{display:none}}
+
+/* ---------- motion ---------- */
+@keyframes blink{50%{opacity:0}}
+@keyframes bob{50%{transform:translateY(-8px)}}
+@keyframes shadow{50%{transform:scaleX(.8)}}
+@keyframes bump{50%{transform:translateY(-14px)}}
+@keyframes pop{0%{opacity:0;transform:translate(-50%,8px)}20%{opacity:1}100%{opacity:1;transform:translate(-50%,-14px)}}
+@keyframes run{from{transform:translateX(-120px)}to{transform:translateX(calc(100vw + 40px))}}
+@keyframes hop{50%{transform:translateY(-8px)}}
+@keyframes nudge{50%{transform:translateX(4px)}}
+@keyframes float{50%{transform:translateY(-10px)}}
+@keyframes hurt{50%{opacity:.15;transform:translateX(8px)}}
+@keyframes faint{to{opacity:0;transform:translateY(40px) scaleY(.3)}}
+.bob{animation:bob 1.6s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  main{scroll-behavior:auto}
+  .runner{display:none}
+}
+</style>
+</head>
+<body>
+<a class="sr" href="#how">Skip to content</a>
+
+<header class="bar">
+  <a class="brand" href="#title"><span data-critter="idle" data-size="32"></span>SPECIMEN</a>
+  <nav aria-label="Sections">
+    <a href="#how">HOW</a><a href="#items">ITEMS</a><a href="#loot">OUTPUT</a><a href="#ai">AI</a><a href="#privacy">PRIVACY</a><a href="https://github.com/ayu-works/specimen">GITHUB</a>
+  </nav>
+  <button class="petbtn" type="button" id="petToggle" aria-pressed="true" title="Turn the pet on or off"><span data-critter="happy" data-size="16"></span>PET</button>
+  <a class="btn" href="https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp">ADD TO CHROME</a>
+</header>
+
+<main>
+<!-- ============ 1. TITLE SCREEN ============ -->
+<section class="scene" id="title" data-scene="title" aria-labelledby="t-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>1UP <span class="hl">000000</span></span><span class="lives" data-lives></span></div>
+  <div class="inner">
+  <div class="wrap title-grid">
+    <div class="title-copy">
+      <p class="kicker">CHROME EXTENSION · OPEN SOURCE</p>
+      <h1 class="logo" id="t-h">SPECIMEN</h1>
+      <div class="pitch notch"><p class="lead">Scan any website's design. Hand it to your AI.</p>
+      <p class="sub">Specimen measures colors and what they're used for, type, spacing, corners, shadows and layout. Then it writes a prompt or a <code>DESIGN.md</code> your coding agent can follow.</p></div>
+      <div class="ctas">
+        <a class="btn" href="https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp">▶ ADD TO CHROME <small>FREE</small></a>
+        <a class="btn ghost" href="https://github.com/ayu-works/specimen">★ GITHUB</a>
+      </div>
+      <a class="press" href="#how">PRESS START ▶</a>
+    </div>
+    <div class="hero-critter" aria-hidden="true">
+            <div class="bob" id="heroHome"><span data-critter="scanning" data-size="192"></span></div>
+      <div class="shadow"></div>
+    </div>
+  </div>
+  </div>
+  <p class="ticker"><span><b>✓</b> NO BACKEND</span><span><b>✓</b> NO ACCOUNT</span><span><b>✓</b> NO TELEMETRY</span><span><b>✓</b> MIT LICENSE</span></p>
+</section>
+
+<!-- ============ 2. WORLD 1-1 / HOW ============ -->
+<section class="scene" id="how" data-scene="world" aria-labelledby="h-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>WORLD <span class="hl">1-1</span></span><span>COINS ×4</span></div>
+  <div class="inner">
+  <div class="wrap">
+    <h2 id="h-h">HOW TO PLAY</h2>
+    <p class="subhead lead">Four blocks from a page you like to a page your agent builds.</p>
+    <ol class="steps">
+      <li class="step">
+        <button class="qblock" type="button" aria-label="Step 1, Scan">?<span class="pop" data-icon="eye"></span></button>
+        <div class="win notch"><h3>1 · SCAN</h3><p>Open the side panel on any page and click <b>Scan this page</b>. It can also capture mobile and the other color theme.</p></div>
+      </li>
+      <li class="step">
+        <button class="qblock" type="button" aria-label="Step 2, Inspect">?<span class="pop" data-icon="lens"></span></button>
+        <div class="win notch"><h3>2 · INSPECT</h3><p>Palette with roles, contrast checks, type scale, spacing, shapes, components and a layout blueprint.</p></div>
+      </li>
+      <li class="step">
+        <button class="qblock" type="button" aria-label="Step 3, Generate">?<span class="pop" data-icon="scroll"></span></button>
+        <div class="win notch"><h3>3 · GENERATE</h3><p>Pick a <b>Prompt</b> for Claude Code, Cursor, v0, Lovable or generic, or a <b>DESIGN.md</b>.</p></div>
+      </li>
+      <li class="step">
+        <button class="qblock" type="button" aria-label="Step 4, Paste">?<span class="pop" data-icon="star"></span></button>
+        <div class="win notch"><h3>4 · PASTE</h3><p>Hand it to your agent and build. Then the fidelity check compares your build with the original.</p></div>
+      </li>
+    </ol>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 3. INVENTORY / FEATURES ============ -->
+<section class="scene" id="items" data-scene="shop" aria-labelledby="i-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>STAGE <span class="hl">2</span> · ITEM SHOP</span><span>ITEMS 12/12</span></div>
+  <div class="inner">
+  <div class="wrap rpg">
+    <div class="win notch drop">
+      <h2 id="i-h">INVENTORY</h2>
+      <p>Everything Specimen measures, checks and makes. Pick an item.</p>
+      <div class="items" role="listbox" aria-label="Features" id="itemGrid"></div>
+    </div>
+    <div class="win notch drop detail" aria-live="polite" id="itemDetail"></div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 4. CARTRIDGE / OUTPUT ============ -->
+<section class="scene" id="loot" data-scene="cart" aria-labelledby="l-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true" style="color:var(--ol4)"><span>STAGE <span style="color:#fff">3</span> · THE LOOT</span><span>A: PROMPT · B: DESIGN.MD</span></div>
+  <div class="inner">
+  <div class="wrap cart-grid">
+    <div class="cart-copy">
+      <h2 id="l-h">NUMBERS,<br>NOT VIBES.</h2>
+      <p class="lead">Your agent gets measured values with their roles, so it builds with the real system instead of guessing from a screenshot.</p>
+      <div class="win notch">
+        <ul>
+          <li>Prompts for Claude Code, Cursor, v0, Lovable or generic</li>
+          <li><code>DESIGN.md</code>, with the other theme if you want it</li>
+          <li>Asks your agent for something new, never a copy</li>
+          <li>Built it? The fidelity check writes the fix-up prompt</li>
+        </ul>
+      </div>
+    </div>
+    <div class="handheld" role="figure" aria-label="Example output">
+      <div class="bezel">
+        <div class="led"><i></i>BATTERY</div>
+        <div class="lcd" id="lcd" aria-live="off"></div>
+        <div class="model">SPECIMEN BOY</div>
+      </div>
+      <div class="controls">
+        <div class="dpad"><button class="u" type="button" aria-label="Previous target" data-dir="-1">▲</button><button class="l" type="button" aria-label="Previous target" data-dir="-1">◀</button><button class="r" type="button" aria-label="Next target" data-dir="1">▶</button><button class="d" type="button" aria-label="Next target" data-dir="1">▼</button></div>
+        <div class="ab"><label><button type="button" id="btnB" aria-pressed="false" aria-label="Show DESIGN.md">B</button><span>DESIGN</span></label><label><button type="button" id="btnA" aria-pressed="true" aria-label="Show prompt">A</button><span>PROMPT</span></label></div>
+      </div>
+      <p class="target" id="target">◀ TARGET: CLAUDE CODE ▶</p>
+      <div class="ss" aria-hidden="true"><span>SELECT</span><span>START</span></div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 5. CHOOSE YOUR AI ============ -->
+<section class="scene" id="ai" data-scene="arena" aria-labelledby="a-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>STAGE <span class="hl">4</span> · SELECT</span><span>CREDITS 00</span></div>
+  <div class="inner">
+  <div class="wrap">
+    <h2 id="a-h">CHOOSE YOUR AI</h2>
+    <p class="subhead lead">Optional. Every feature above works with none.</p>
+    <div class="roster" role="radiogroup" aria-label="AI provider" id="roster"></div>
+    <div class="ai-detail win notch drop" id="aiDetail" aria-live="polite"></div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 6. BOSS / PRIVACY ============ -->
+<section class="scene" id="privacy" data-scene="lair" aria-labelledby="p-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>STAGE <span class="hl">5</span> · BOSS</span><span class="lives" data-lives></span></div>
+  <div class="inner">
+  <div class="wrap">
+    <h2 id="p-h" class="sr">Privacy</h2>
+    <div class="arena">
+      <div class="foe">
+        <div class="hpbox notch"><div class="row"><span>TRACKER</span><span>LV 99</span></div><div class="hp" id="bossHp"><i style="width:calc(100% - 4px)"></i></div></div>
+        <span id="boss" aria-hidden="true"></span>
+      </div>
+      <div class="hero-side">
+        <span data-critter="idle" data-size="128" id="heroCritter" aria-hidden="true"></span>
+        <div class="hpbox notch"><div class="row"><span>SPECIMEN</span><span>LV 1</span></div><div class="hp"><i style="width:calc(100% - 4px)"></i></div></div>
+      </div>
+    </div>
+    <div class="battle">
+      <div class="win notch log" id="log" aria-live="polite"></div>
+      <div class="win notch menu">
+        <button type="button" id="refight">FIGHT</button>
+        <a href="/privacy/">POLICY</a>
+        <a href="https://github.com/ayu-works/specimen#permissions">PERMS</a>
+        <a href="#start">RUN</a>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 7. CONTINUE / CTA ============ -->
+<section class="scene" id="start" data-scene="void" aria-labelledby="s-h">
+  <canvas aria-hidden="true"></canvas>
+  <div class="hud" aria-hidden="true"><span>GAME <span class="hl">PAUSED</span></span><span>INSERT COIN</span></div>
+  <div class="inner">
+  <div class="wrap">
+    <span data-critter="thinking" data-size="96" id="endCritter" aria-hidden="true" style="display:inline-block"></span>
+    <h2 id="s-h">CONTINUE?</h2>
+    <p class="count" aria-hidden="true" id="count">9</p>
+    <p class="lead">Free and open source. Chrome 116 or newer.</p>
+    <div class="ctas" id="endCtas">
+      <a class="btn" href="https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp">▶ ADD TO CHROME <small>FREE</small></a>
+      <a class="btn ghost" href="https://github.com/ayu-works/specimen">★ STAR ON GITHUB</a>
+    </div>
+    <div class="win notch source">
+      <h3 style="color:var(--y)">OR BUILD IT FROM SOURCE</h3>
+      <pre>corepack enable
+pnpm i && pnpm build
+# chrome://extensions → Developer mode → Load unpacked
+# pick apps/extension/.output/chrome-mv3</pre>
+    </div>
+    <footer class="credits">
+      <span>— CREDITS —</span>
+      <nav aria-label="Footer"><a href="https://github.com/ayu-works/specimen">SOURCE</a><a href="/privacy/">PRIVACY</a><a href="https://github.com/ayu-works/specimen/blob/main/LICENSE">MIT LICENSE</a><a href="https://github.com/ayu-works/specimen/blob/main/CONTRIBUTING.md">CONTRIBUTE</a></nav>
+      <p class="fine">This page has no cookies, no analytics and no trackers either. Specimen reports what it measures and asks your agent to make something new.</p>
+    </footer>
+  </div>
+  </div>
+</section>
+</main>
+<div id="pet" aria-hidden="true"><div class="body"></div></div>
+<div id="petSay" aria-live="polite"></div>
+<nav class="pager" aria-label="Stages"><button type="button" id="prev" aria-label="Previous stage">◀</button><span id="stageNo">1 / 7</span><span class="dots" id="dots" aria-hidden="true"></span><button type="button" id="next" aria-label="Next stage">▶</button></nav>
+
+<script>
+(() => {
+"use strict";
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ================= palette ================= */
+const C = {
+  night:"#0e0e16", ink:"#1b1b2f", ink2:"#2a2747", paper:"#f4f1ff",
+  p:"#7C6CF5", pl:"#A99BFF", r:"#FF6B6B", y:"#FFD166", g:"#06D6A0", b:"#4D96FF", blush:"#FF9FB8", tear:"#8FC1FF",
+  cr:"#DD0033", cr2:"#BB4455", ol0:"#20240f", ol1:"#4d5626", ol2:"#7e873d", ol3:"#AFB45D", ol4:"#dfe3a8",
+};
+
+/* ================= the critter (art from design/logo/final, moods from Mascot.tsx) ================= */
+const BODY=[[40,16,48,8],[24,24,80,8],[16,32,96,8],[16,40,96,8],[16,48,96,8],[16,56,96,8],[16,64,96,8],[16,72,96,8],[24,80,80,8],[24,88,80,8],[32,96,16,8],[80,96,16,8]];
+const TUFT=[[48,8,"#FF6B6B"],[56,8,"#FFD166"],[64,8,"#06D6A0"],[72,8,"#4D96FF"]];
+const BL=[[24,64,8,8],[96,64,8,8]];
+const FACES={
+  idle:[[C.ink,[[32,48,8,16],[88,48,8,16],[56,68,16,8]]],[C.blush,BL]],
+  scanning:[[C.ink,[[40,48,8,16],[96,48,8,16],[56,72,16,8]]]],
+  happy:[[C.ink,[[32,48,8,8],[24,56,8,8],[40,56,8,8],[88,48,8,8],[80,56,8,8],[96,56,8,8],[48,72,8,8],[72,72,8,8],[56,80,16,8]]],[C.blush,BL]],
+  thinking:[[C.ink,[[40,40,8,16],[96,40,8,16],[72,72,8,8]]],[C.blush,BL]],
+  sad:[[C.ink,[[32,56,8,8],[88,56,8,8],[56,76,16,8],[48,84,8,8],[72,84,8,8]]],[C.tear,[[32,64,8,8]]],[C.blush,BL.map(([x,y,w,h])=>[x,y+8,w,h])]],
+};
+const R=(l,f)=>l.map(([x,y,w,h])=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`).join("");
+function critter(mood="idle",size=64){
+  const face=(FACES[mood]||FACES.idle).map(([f,l])=>R(l,f)).join("");
+  return `<svg viewBox="0 0 128 128" width="${size}" height="${size}" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${R(BODY,"#7C6CF5")}${TUFT.map(([x,y,f])=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${f}"/>`).join("")}<rect x="24" y="16" width="16" height="8" fill="#A99BFF"/>${face}</svg>`;
+}
+function paintCritter(el,mood){el.innerHTML=critter(mood||el.dataset.critter,+el.dataset.size||64);}
+document.querySelectorAll("[data-critter]").forEach(el=>paintCritter(el));
+
+/* ================= sprite helper: rows of chars -> crisp SVG ================= */
+const PAL={k:C.ink,w:"#ffffff",W:C.paper,p:C.p,l:C.pl,r:C.r,y:C.y,g:C.g,b:C.b,s:"#9a97b8",d:"#4a4670",o:C.blush,C:C.cr,m:C.cr2,D:"#8f0022",G:"#049e76",B:"#2f6fe0",Y:"#c9921f",n:"#6b4428"};
+function sprite(rows,pal=PAL){
+  const h=rows.length,w=Math.max(...rows.map(r=>r.length));let out="";
+  rows.forEach((row,y)=>{let x=0;while(x<row.length){const c=row[x];if(c==="."||c===" "){x++;continue}let n=1;while(row[x+n]===c)n++;out+=`<rect x="${x}" y="${y}" width="${n}" height="1" fill="${pal[c]}"/>`;x+=n;}});
+  return `<svg viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${out}</svg>`;
+}
+const HEART=[".rr.rr.","rwrrrrr","rrrrrrr",".rrrrr.","..rrr..","...r..."];
+document.querySelectorAll("[data-lives]").forEach(el=>{el.innerHTML=Array(4).fill(`<span style="width:21px;height:18px;display:block">${sprite(HEART)}</span>`).join("");});
+
+const ICON={
+  palette:["....kkkkk...","..kkwwwwwkk.",".kwwrrwwyywk",".kwwrrwwyywk","kwwwwwwwwwwk","kwggwwkkwwwk","kwggwk..kwwk","kwwwwk..kwk.",".kwbbwkkwwk.",".kwbbwwwwk..","..kkwwwkk...","....kkk....."],
+  type:["............","....kkkk....","...kwwwwk...","..kwwkkwwk..","..kwwkkwwk..","..kwwwwwwk..","..kwwkkwwk..","..kwwkkwwk..",".kwwwkkwwwk.",".kkkk..kkkk.","............","pppppppppppp"],
+  spacing:["............","............","k..........k","kk........kk","kwwwwwwwwwwk","kk........kk","k..........k","............","yyyyyyyyyyyy","ykykkkykkkyk","ykyyykyyykyk","yyyyyyyyyyyy"],
+  radius:["............",".....bbbbbbb","...bbllllll.","..bll.......",".bl.........",".bl.........","bl..........","bl.....y....","bl....yyy...","bl.....y....","bl..........","bl.........."],
+  shadow:["............",".kkkkkkkk...",".kwwwwwwk...",".kwppwwwkd..",".kwwwwwwkd..",".kwwwwwwkd..",".kwwggwwkd..",".kwwwwwwkd..",".kkkkkkkkd..","..ddddddddd.","...ddddddd..","............"],
+  layout:["kkkkkkkkkkkk","kppppppppppk","kkkkkkkkkkkk","kggkyyyyyyyk","kggkyyyyyyyk","kggkkkkkkkkk","kggkbbbkbbbk","kggkbbbkbbbk","kggkkkkkkkkk","kggkbbbkbbbk","kggkbbbkbbbk","kkkkkkkkkkkk"],
+  contrast:["....kkkk....","..kkwwkkkk..",".kwwwwkkkkk.",".kwwwwkkkkk.","kwwwwwkkkkkk","kwwwwwkgkkkk","kwwwwwgkkkkk","kwgwwgwkkkkk",".kwggwkkkkk.",".kwwgwkkkkk.","..kkwwkkkk..","....kkkk...."],
+  dropper:[".........kk.","........kssk",".......ksssk","......kssk..",".....kwwk...","....kwwk....","...kwwk.....","..kppk......",".kppk.......",".kpk........","..p.........","..p........."],
+  grid:["p..p..p..p..","pppppppppppp","p..p..p..p..","p..p..p..p..","pppppppppppp","p..p..p..p..","p..p..p..p..","pppppppppppp","p..p..p..p..","p..p..p..p..","pppppppppppp","p..p..p..p.."],
+  phone:["..kkkkkkkk..","..kssssssk..","..kbbbbbbk..","..kwwwwwwk..","..kwppwwwk..","..kwwwwwwk..","..kwggggwk..","..kwwwwwwk..","..kwwwwwwk..","..ksssssk...","..kssksssk..","..kkkkkkkk.."],
+  chest:["............","..kkkkkkkk..",".knnnnnnnnk.","knnnnnnnnnnk","kyyyyyyyyyyk","knnnnkknnnnk","knnnkyykknnk","knnnnkknnnnk","knnnnnnnnnnk","kyyyyyyyyyyk","kkkkkkkkkkkk","............"],
+  potion:["....kkkk....","....kssk....",".....ss.....","....kwwk....","...kwwwwk...","..kpppppwk..",".kprrrylpk..",".kprryygpk..",".kpbbggppk..","..kppppppk..","...kkkkkk...","............"],
+  lens:["..kkkk......",".kwwwwk.....","kwllwwwk....","kwlwwwwk....","kwwwwwwk....","kwwwwwwk....",".kwwwwk.....","..kkkkkk....",".......kk...","........kk..",".........kk.","..........k."],
+  eye:["............","............","....kkkk....","..kkwwwwkk..",".kwwwbbwwwk.","kwwwbkkbwwwk","kwwwbkkbwwwk",".kwwwbbwwwk.","..kkwwwwkk..","....kkkk....","............","............"],
+  scroll:[".kkkkkkkkk..","kwwwwwwwwwk.","kwkkkkwwwwk.","kwwwwwwwwwk.","kwkkkkkkwwk.","kwwwwwwwwwk.","kwkkkkkwwwk.","kwwwwwwwwwk.","kwkkkkkkkwk.","kwwwwwwwwwk.",".kkkkkkkkk..","............"],
+  star:[".....yy.....",".....yy.....","....yyyy....","yyyyyyyyyyyy",".yyyykkyyyy.","..yyykkyyy..","...yyyyyy...","...yyyyyy...","..yyy..yyy..","..yy....yy..",".yy......yy.","............"],
+};
+document.querySelectorAll("[data-icon]").forEach(el=>{el.innerHTML=`<span style="display:block;width:44px;height:44px">${sprite(ICON[el.dataset.icon])}</span>`;});
+
+/* ================= seeded rng ================= */
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const between=(r,a,b)=>a+Math.floor(r()*(b-a+1));
+
+/* ================= canvas scene engine ================= */
+const PX=4;
+const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v=>(v+.5)/16);
+const hex=c=>{const n=parseInt(c.slice(1),16);return[n>>16,n>>8&255,n&255]};
+function dither(img,W,x0,y0,w,h,cols){
+  const n=cols.length-1,rgb=cols.map(hex),d=img.data;
+  for(let y=Math.max(0,y0);y<Math.min(img.height,y0+h);y++){
+    const t=(y-y0)/Math.max(1,h-1)*n,i=Math.min(n-1,Math.floor(t)),f=t-i;
+    for(let x=x0;x<x0+w;x++){const c=f>BAYER[(y&3)*4+(x&3)]?rgb[i+1]:rgb[i];const k=(y*W+x)*4;d[k]=c[0];d[k+1]=c[1];d[k+2]=c[2];d[k+3]=255;}
+  }
+}
+const rect=(c,x,y,w,h,f)=>{c.fillStyle=f;c.fillRect(Math.round(x),Math.round(y),w,h)};
+function disc(c,cx,cy,r,f){c.fillStyle=f;for(let y=-r;y<=r;y++){const w=Math.round(Math.sqrt(r*r-y*y));c.fillRect(Math.round(cx-w),Math.round(cy+y),w*2+1,1);}}
+const FONT3={"0":"111101101101111","1":"010110010010111","2":"111001111100111","3":"111001111001111","4":"101101111001001","5":"111100111001111","6":"111100111101111","7":"111001001001001","8":"111101111101111","9":"111101111001111","A":"010101111101101","B":"110101110101110","C":"111100100100111","D":"110101101101110","E":"111100111100111","F":"111100111100100","#":"101111101111101"};
+function glyph(c,ch,x,y,f){const g=FONT3[ch];if(!g)return;c.fillStyle=f;for(let i=0;i<15;i++)if(g[i]==="1")c.fillRect(x+i%3,y+(i/3|0),1,1);}
+
+const SCENES={
+  /* --- title: dusk city of websites, a scan beam measuring each building --- */
+  title:{
+    build(c,W,H,r,S){
+      const hz=Math.floor(H*.8),img=c.createImageData(W,H);
+      dither(img,W,0,0,W,hz,["#08070f","#110e26","#1e1748","#33256f","#5a3fb0","#9a6fd8","#FF9FB8"]);
+      dither(img,W,0,hz,W,H-hz,["#120f24","#08070f"]);c.putImageData(img,0,0);
+      const mx=Math.round(W*.8),my=Math.round(H*.2),mr=Math.max(9,Math.round(H*.07));
+      disc(c,mx,my,mr+3,"rgba(255,209,102,.12)");disc(c,mx,my,mr,"#fff1c1");disc(c,mx+3,my-2,mr-2,"#ffe39a");disc(c,mx-mr/3,my+mr/4,2,"#f1cf7c");disc(c,mx+mr/3,my-mr/3,1,"#f1cf7c");
+      for(const [col,amp,base,step] of [["#2b2160",.18,.62,3],["#1e1747",.12,.7,2]]){let h=H*base;for(let x=0;x<W;x++){h+=(r()-.5)*step;h=Math.max(H*(base-amp),Math.min(hz-6,h));rect(c,x,h,1,hz-h,col);}}
+      S.stars=[];for(let i=0;i<W*H/420;i++)S.stars.push([between(r,0,W),between(r,0,Math.floor(H*.55)),r()*6.28,r()]);
+      S.blds=[];S.win=[];let x=-4;
+      while(x<W){const bw=between(r,16,34),bh=between(r,Math.floor(H*.12),Math.floor(H*.34)),top=hz-bh;
+        rect(c,x,top,bw,bh,"#16122c");rect(c,x,top,bw,1,"#3a3170");rect(c,x,top,1,bh,"#2e2860");
+        rect(c,x+1,top+1,bw-1,3,"#2a2452");rect(c,x+2,top+2,1,1,C.r);rect(c,x+4,top+2,1,1,C.y);rect(c,x+6,top+2,1,1,C.g);
+        const accent=[C.p,C.b,C.g,C.r][between(r,0,3)];
+        rect(c,x+2,top+5,bw-4,3,r()<.5?accent:"#3d2a86");
+        for(let wy=top+10;wy<hz-3;wy+=4)for(let wx=x+2;wx<x+bw-3;wx+=4){const on=r()<.35;S.win.push([wx,wy,on,r()<.15?accent:C.y]);}
+        S.blds.push([x,top,bw,bh]);x+=bw+between(r,1,5);}
+      for(let y=hz;y<H;y++){const k=(y-hz)/(H-hz);if(((y-hz)%Math.max(2,Math.round(2+k*6)))===0)rect(c,0,y,W,1,"#221a47");}
+      for(let i=-24;i<=24;i++){for(let y=hz;y<H;y+=1){const x=W/2+i*10*(y-hz)/(H-hz)*3;rect(c,x,y,1,1,"#221a47");}}
+      rect(c,0,hz,W,1,"#5a3fb0");S.hz=hz;
+    },
+    frame(c,W,H,t,S,r){
+      for(const [x,y,ph,b] of S.stars){const v=Math.sin(t/600+ph*3);if(v>-.2)rect(c,x,y,1,1,v>.75&&b>.7?"#ffffff":b>.5?"#c9c0ff":"#6b5fb8");if(v>.95&&b>.85){rect(c,x-1,y,3,1,"#c9c0ff");rect(c,x,y-1,1,3,"#c9c0ff");}}
+      for(const w of S.win){if(r()<.004)w[2]=!w[2];rect(c,w[0],w[1],2,2,w[2]?w[3]:"#241f45");}
+      const sp=(t/1000*7)%9;if(sp<1){const sx=W*.15+sp*W*.5,sy=H*.08+sp*H*.15;for(let i=0;i<10;i++)rect(c,sx-i,sy-i/2,1,1,i<3?"#fff":"#A99BFF");}
+      const bx=Math.floor((t/1000*28)%(W+60))-30;
+      const b=S.blds.find(([x,,w])=>bx>=x&&bx<x+w);
+      c.fillStyle="rgba(6,214,160,.12)";c.fillRect(bx-14,0,14,S.hz);c.fillStyle="rgba(6,214,160,.25)";c.fillRect(bx-4,0,4,S.hz);rect(c,bx,0,1,S.hz,C.g);
+      if(b){const [x,y,w,h]=b,k=C.y,L=4;for(const [cx,cy,dx,dy] of [[x-2,y-2,1,1],[x+w+1,y-2,-1,1],[x-2,y+h-1,1,-1],[x+w+1,y+h-1,-1,-1]]){rect(c,Math.min(cx,cx+dx*(L-1)),cy,L,1,k);rect(c,cx,Math.min(cy,cy+dy*(L-1)),1,L,k);}
+        const lab=String(w*4);let lx=x+Math.floor(w/2)-lab.length*2;rect(c,lx-1,y-9,lab.length*4+1,7,C.ink);for(const ch of lab){glyph(c,ch,lx,y-8,C.y);lx+=4;}}
+    }
+  },
+  /* --- world 1-1: bright platformer day --- */
+  world:{
+    build(c,W,H,r,S){
+      const gy=H-24,img=c.createImageData(W,H);dither(img,W,0,0,W,gy,["#2f6fe0","#4D96FF","#7fb2ff","#bfdcff","#e3f0ff"]);c.putImageData(img,0,0);
+      const hill=(col,shade,base,amp,freq,ph)=>{for(let x=0;x<W;x++){const h=Math.round(gy-base-amp*Math.abs(Math.sin(x*freq+ph)));rect(c,x,h,1,gy-h,col);if((x+h)%3===0)rect(c,x,h+2,1,1,shade);rect(c,x,h,1,1,shade);}};
+      hill("#9ad8ec","#b9e4f2",H*.28,H*.16,.018,1.3);hill("#3fc59a","#77e0bd",H*.12,H*.14,.03,.4);
+      for(let x=0;x<W;x+=between(r,30,60)){const s=between(r,5,9);for(let i=0;i<3;i++)disc(c,x+i*s,gy-3,s-i%2*2,"#049e76");disc(c,x+s,gy-5,2,"#38e0b0");}
+      const px=W-Math.max(40,Math.round(W*.08)),ph=Math.round(H*.16);rect(c,px,gy-ph,16,ph,"#5a4bd6");rect(c,px+2,gy-ph,4,ph,C.pl);rect(c,px+13,gy-ph,2,ph,"#3a2fa0");rect(c,px-2,gy-ph-8,20,8,"#7C6CF5");rect(c,px,gy-ph-8,4,8,C.pl);rect(c,px+16,gy-ph-8,2,8,"#3a2fa0");rect(c,px-2,gy-ph-8,20,1,C.ink);rect(c,px-2,gy-ph-1,20,1,"#3a2fa0");
+      rect(c,0,gy,W,4,C.g);rect(c,0,gy,W,1,"#8af0cf");rect(c,0,gy+3,W,1,"#049e76");
+      for(let y=gy+4;y<H;y+=5)for(let x=-((y/5|0)%2)*4;x<W;x+=8){rect(c,x,y,8,5,"#7a3520");rect(c,x,y,7,4,"#c4643f");rect(c,x,y,7,1,"#e08a5f");}
+      S.clouds=[];for(let i=0;i<Math.max(4,W/70|0);i++){const cw=between(r,22,44),cv=document.createElement("canvas");cv.width=cw+6;cv.height=16;const cc=cv.getContext("2d");const lobes=between(r,3,5);for(let j=0;j<lobes;j++){disc(cc,4+j*cw/lobes+2,10-(j%2)*2,between(r,4,6),"#cfe3ff");}for(let j=0;j<lobes;j++){disc(cc,4+j*cw/lobes+2,9-(j%2)*2,between(r,3,5),"#ffffff");}S.clouds.push([cv,r()*W,between(r,4,Math.floor(H*.4)),.3+r()*.8]);}
+    },
+    frame(c,W,H,t,S){for(const [cv,x0,y,sp] of S.clouds){const x=Math.floor((x0+t/1000*sp*4)%(W+60))-50;c.drawImage(cv,x,y);}}
+  },
+  /* --- item shop: brick wall, shelves, torches --- */
+  shop:{
+    build(c,W,H,r,S){
+      const fy=H-20,img=c.createImageData(W,H);dither(img,W,0,0,W,fy,["#120f22","#1d1838","#262046","#1d1838"]);c.putImageData(img,0,0);
+      for(let y=0;y<fy;y+=6){rect(c,0,y,W,1,"#0d0b1b");for(let x=((y/6|0)%2)*8;x<W;x+=16){rect(c,x,y,1,6,"#0d0b1b");if(r()<.12)rect(c,x+1,y+1,15,5,"#2a2350");if(r()<.06)rect(c,x+1,y+1,15,1,"#3a3270");}}
+      const shelf=(x0,w,y)=>{rect(c,x0,y,w,3,"#6b4428");rect(c,x0,y,w,1,"#9a6a42");rect(c,x0,y+3,w,1,"#2b1a10");let x=x0+2;while(x<x0+w-6){const col=[C.r,C.y,C.g,C.b,C.p,C.blush][between(r,0,5)],jh=between(r,5,9),jw=between(r,4,6);rect(c,x,y-jh,jw,jh,col);rect(c,x+1,y-jh+1,1,jh-3,"#ffffffaa");rect(c,x+1,y-jh-2,jw-2,2,"#d8d2ff");x+=jw+between(r,1,3);}};
+      const sw=Math.min(64,Math.round(W*.16));for(const y of [H*.3,H*.52,H*.74])if(y<fy-6){shelf(4,sw,Math.round(y));shelf(W-sw-4,sw,Math.round(y));}
+      for(let y=fy;y<H;y+=4){rect(c,0,y,W,4,y%8?"#4a2f22":"#56382a");rect(c,0,y,W,1,"#2b1a10");for(let x=between(r,0,20);x<W;x+=between(r,18,40))rect(c,x,y,1,4,"#2b1a10");}
+      S.torches=[[Math.round(sw/2)+4,Math.round(H*.14)],[W-Math.round(sw/2)-4,Math.round(H*.14)]];
+      S.dust=Array.from({length:40},()=>[r()*W,r()*fy,r()]);
+    },
+    frame(c,W,H,t,S,r){
+      for(const [x,y] of S.torches){const f=Math.floor(t/120)%3;c.fillStyle="rgba(255,209,102,.07)";for(let i=1;i<=3;i++)c.fillRect(x-6*i,y-6*i,12*i+1,12*i+4);rect(c,x-1,y+2,3,8,"#6b4428");rect(c,x-2,y+1,5,2,"#3a2a20");rect(c,x-1,y-3-f%2,3,4,C.r);rect(c,x,y-5-f,1,4,C.y);rect(c,x-(f===1?1:0),y-1,2,2,"#fff3c4");}
+      for(const d of S.dust){d[1]-=.05+d[2]*.08;d[0]+=Math.sin(t/900+d[2]*9)*.06;if(d[1]<0)d[1]=H-24;rect(c,d[0],d[1],1,1,d[2]>.6?"#d8cfff66":"#8a7fd055");}
+    }
+  },
+  /* --- cartridge: olive LCD world, hex rain --- */
+  cart:{
+    build(c,W,H,r,S){
+      const img=c.createImageData(W,H);dither(img,W,0,0,W,H,["#7e873d","#AFB45D","#c5ca7c","#AFB45D","#7e873d"]);c.putImageData(img,0,0);
+      for(let x=-H;x<W;x+=14)for(let y=0;y<H;y++){rect(c,x+y,y,3,1,"#9ea551");}
+      S.drops=Array.from({length:Math.max(14,W/12|0)},()=>[between(r,0,W),r()*H,.4+r()*.9,Array.from({length:between(r,3,7)},()=>"0123456789ABCDEF#"[between(r,0,16)])]);
+    },
+    frame(c,W,H,t,S){for(const d of S.drops){d[1]+=d[2]*.6;if(d[1]>H+40)d[1]=-40;d[3].forEach((ch,i)=>glyph(c,ch,d[0],Math.floor(d[1])+i*7,i===d[3].length-1?"#c5ca7c":i%2?"#97a04c":"#8f984a"));}}
+  },
+  /* --- arena: synth sun, moving grid floor --- */
+  arena:{
+    build(c,W,H,r,S){
+      const hz=Math.floor(H*.52),img=c.createImageData(W,H);dither(img,W,0,0,W,hz,["#07060f","#120e2a","#2a1f5c","#5a3fb0","#b06ad8"]);dither(img,W,0,hz,W,H-hz,["#1a1236","#07060f"]);c.putImageData(img,0,0);
+      const sr=Math.round(H*.2),sx=Math.round(W/2);for(let y=-sr;y<=0;y++){const w=Math.round(Math.sqrt(sr*sr-y*y));const k=(y+sr)/sr;if(y>-sr*.5&&((-y)%5)<Math.floor(k*3))continue;rect(c,sx-w,hz+y,w*2+1,1,k<.4?C.y:k<.75?"#ffa07a":C.r);}
+      for(let x=0;x<W;x++){const h=Math.round(6+5*Math.abs(Math.sin(x*.05))+3*Math.sin(x*.17));rect(c,x,hz-h,1,h,"#140f2c");}
+      S.hz=hz;S.st=Array.from({length:25},()=>[between(r,0,W),between(r,0,hz-30)]);
+    },
+    frame(c,W,H,t,S){
+      const hz=S.hz,D=H-hz;for(const [x,y] of S.st)rect(c,x,y,1,1,"#8a7fd0");
+      rect(c,0,hz,W,1,C.pl);
+      for(let i=-30;i<=30;i++){for(let y=hz;y<H;y+=1){const x=W/2+i*14*(y-hz)/D*2.2;if(x>=0&&x<W)rect(c,x,y,1,1,"#5a3fb0");}}
+      const off=(t/1000*.6)%1;for(let k=0;k<12;k++){const z=(k+off)/12,y=Math.round(hz+D*z*z);rect(c,0,y,W,1,z>.5?C.pl:"#5a3fb0");}
+    }
+  },
+  /* --- the lair: crimson castle, lava --- */
+  lair:{
+    build(c,W,H,r,S){
+      const ly=H-22,img=c.createImageData(W,H);dither(img,W,0,0,W,ly,["#0c0306","#1e0610","#3a0a1a","#6e0f27","#a3122f"]);c.putImageData(img,0,0);
+      const cols=Math.max(3,Math.round(W/90));for(let i=0;i<cols;i++){const x=Math.round((i+.5)*W/cols)-10,w=20;rect(c,x,0,w,ly,"#16040b");for(let y=0;y<ly;y+=5){rect(c,x,y,w,1,"#2a0912");rect(c,x+((y/5|0)%2?10:4),y,1,5,"#2a0912");}rect(c,x-3,ly-8,w+6,8,"#22060f");rect(c,x-3,ly-8,w+6,1,"#4a0d1d");
+        for(let y=0;y<between(r,10,40);y+=3){rect(c,x+w+6,y,1,2,"#3a0a1a");rect(c,x+w+5,y+2,3,1,"#3a0a1a");}}
+      for(let x=0;x<W;x+=3){const h=between(r,2,8);rect(c,x,0,3,h,"#0c0306");}
+      S.ly=ly;S.em=Array.from({length:50},()=>[r()*W,r()*ly,r()]);
+    },
+    frame(c,W,H,t,S){
+      const ly=S.ly;for(let x=0;x<W;x++){const s=Math.round(Math.sin(x*.12+t/400)*1.5+Math.sin(x*.05-t/700));rect(c,x,ly+s,1,H-ly-s,C.cr);rect(c,x,ly+s,1,1,C.y);rect(c,x,ly+s+1,1,1,C.r);if((x*7+((t/200)|0))%37===0)rect(c,x,ly+s-2,2,2,C.y);}
+      for(const e of S.em){e[1]-=.15+e[2]*.25;e[0]+=Math.sin(t/500+e[2]*20)*.15;if(e[1]<0)e[1]=ly;rect(c,e[0],e[1],1,1,e[2]>.5?C.y:C.r);}
+    }
+  },
+  /* --- the void: continue screen warp --- */
+  void:{
+    build(c,W,H,r,S){rect(c,0,0,W,H,"#06060b");S.st=Array.from({length:90},()=>[r()*2-1,r()*2-1,r()]);},
+    frame(c,W,H,t,S){for(const s of S.st){s[2]-=.004;if(s[2]<=.02){s[0]=Math.random()*2-1;s[1]=Math.random()*2-1;s[2]=1;}const x=W/2+s[0]/s[2]*W*.25,y=H/2+s[1]/s[2]*H*.25;if(x<0||x>=W||y<0||y>=H)continue;const big=s[2]<.25;rect(c,x,y,big?2:1,big?2:1,s[2]<.4?"#ffffff":s[2]<.7?C.pl:"#4a4670");}}
+  },
+};
+
+const live=[];
+document.querySelectorAll(".scene").forEach((sec,i)=>{
+  const def=SCENES[sec.dataset.scene];if(!def)return;
+  const cv=sec.querySelector("canvas"),ctx=cv.getContext("2d"),bg=document.createElement("canvas"),bctx=bg.getContext("2d");
+  const o={sec,cv,ctx,bg,def,S:{},visible:false,W:0,H:0,r:rng(4034+i*97)};
+  o.size=()=>{const W=Math.ceil(sec.clientWidth/PX),H=Math.ceil(sec.clientHeight/PX);if(W===o.W&&H===o.H)return;o.W=W;o.H=H;cv.width=bg.width=W;cv.height=bg.height=H;cv.style.width=W*PX+"px";cv.style.height=H*PX+"px";o.S={};o.r=rng(4034+i*97);def.build(bctx,W,H,o.r,o.S);o.draw(0);};
+  o.draw=t=>{ctx.drawImage(bg,0,0);def.frame&&def.frame(ctx,o.W,o.H,t,o.S,o.r);};
+  live.push(o);
+});
+const sizeAll=()=>live.forEach(o=>o.size());sizeAll();
+let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(sizeAll,120)});
+document.fonts&&document.fonts.ready.then(sizeAll);
+const io=new IntersectionObserver(es=>es.forEach(e=>{const o=live.find(l=>l.sec===e.target);if(o)o.visible=e.isIntersecting;}),{rootMargin:"100px"});
+live.forEach(o=>io.observe(o.sec));
+if(!reduce){let last=0;const loop=t=>{if(t-last>=83){last=t;for(const o of live)if(o.visible)o.draw(t);}requestAnimationFrame(loop)};requestAnimationFrame(loop);}
+else live.forEach(o=>o.draw(2600));
+
+/* ================= nav highlight ================= */
+const links=[...document.querySelectorAll(".bar nav a[href^='#']")];
+/* ================= horizontal stages ================= */
+const track=document.querySelector("main"),stages=[...document.querySelectorAll(".scene")],dots=document.getElementById("dots");
+stages.forEach(()=>dots.appendChild(document.createElement("i")));
+let cur=0,lock=0,navUntil=0;
+const go=i=>{i=Math.max(0,Math.min(stages.length-1,i));navUntil=performance.now()+(reduce?50:1000);setCur(i);track.scrollTo({left:i*track.clientWidth,behavior:reduce?"auto":"smooth"});};
+const setCur=i=>{if(i!==cur)dispatchEvent(new CustomEvent("stagechange",{detail:i}));cur=i;document.getElementById("stageNo").textContent=`${i+1} / ${stages.length}`;[...dots.children].forEach((d,j)=>d.classList.toggle("on",j===i));document.getElementById("prev").disabled=i===0;document.getElementById("next").disabled=i===stages.length-1;links.forEach(a=>a.classList.toggle("on",a.getAttribute("href")==="#"+stages[i].id));};
+const navIO=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&performance.now()>navUntil)setCur(stages.indexOf(e.target));}),{root:track,rootMargin:"0px -45% 0px -45%"});
+stages.forEach(s=>navIO.observe(s));setCur(0);
+document.getElementById("prev").onclick=()=>go(cur-1);document.getElementById("next").onclick=()=>go(cur+1);
+document.addEventListener("click",e=>{const a=e.target.closest('a[href^="#"]');if(!a)return;const t=document.querySelector(a.getAttribute("href"));const st=t&&t.closest(".scene");if(!st)return;e.preventDefault();go(stages.indexOf(st));});
+track.addEventListener("wheel",e=>{
+  if(Math.abs(e.deltaX)>Math.abs(e.deltaY))return;
+  const now=performance.now();
+  if(now<lock){e.preventDefault();lock=Math.max(lock,now+220);return;}
+  const inner=stages[cur].querySelector(".inner"),dy=e.deltaY;
+  if(inner&&((dy>0&&inner.scrollTop+inner.clientHeight<inner.scrollHeight-2)||(dy<0&&inner.scrollTop>0)))return;
+  e.preventDefault();if(Math.abs(dy)<4)return;lock=now+800;go(cur+(dy>0?1:-1));
+},{passive:false});
+document.addEventListener("keydown",e=>{if(e.defaultPrevented||e.altKey||e.metaKey||e.ctrlKey)return;const k={ArrowRight:1,PageDown:1,ArrowLeft:-1,PageUp:-1}[e.key];
+  if(k){e.preventDefault();go(cur+k);}else if(e.key==="Home"){e.preventDefault();go(0);}else if(e.key==="End"){e.preventDefault();go(stages.length-1);}});
+addEventListener("resize",()=>track.scrollTo({left:cur*track.clientWidth,behavior:"auto"}));
+/* free swipes settle on the nearest stage */
+let settle;const snap=()=>{if(performance.now()<navUntil)return;const i=Math.round(track.scrollLeft/track.clientWidth);if(Math.abs(track.scrollLeft-i*track.clientWidth)>1)go(i);else setCur(i);};
+track.addEventListener("scroll",()=>{clearTimeout(settle);settle=setTimeout(snap,160);},{passive:true});
+
+/* ================= world 1-1: ? blocks ================= */
+const blocks=[...document.querySelectorAll(".qblock")];
+const hit=b=>{b.classList.remove("hit");void b.offsetWidth;b.classList.add("hit","used");};
+blocks.forEach(b=>b.addEventListener("click",()=>hit(b)));
+new IntersectionObserver((es,obs)=>{if(es.some(e=>e.isIntersecting)){blocks.forEach((b,i)=>setTimeout(()=>hit(b),reduce?0:500+i*450));obs.disconnect();}},{threshold:.5}).observe(document.querySelector(".steps"));
+
+/* ================= inventory ================= */
+const ITEMS=[
+  ["palette","COLORS + ROLES","MEASURE","Every color the page uses, sorted by what it does: background, surface, text, accent, border, state.",["Roles, not just hex codes","Dark or light theme, if the site has both"],[9,7,6]],
+  ["type","TYPE SCALE","MEASURE","Families, sizes, weights, line heights and letter spacing, grouped into a real scale.",["Display to caption","Fonts as the page loads them"],[8,8,5]],
+  ["spacing","SPACING","MEASURE","The spacing steps the page actually uses, so your agent stops inventing 13px gaps.",["Margins, paddings, gaps","Rounded to the page's own rhythm"],[7,8,6]],
+  ["radius","RADII + BORDERS","MEASURE","Corner radii, border widths and colors. The difference between friendly and sharp.",["Per component","Pill, card and input radii"],[6,7,7]],
+  ["shadow","SHADOWS","MEASURE","Elevation as measured: offsets, blur, spread and color of every shadow in use.",["Grouped by depth","Ready to paste as CSS"],[6,6,8]],
+  ["layout","LAYOUT BLUEPRINT","MEASURE","Content width, columns, gutters and sections, drawn as a simple blueprint.",["Mobile capture at phone width","Merge more pages from the same site"],[8,6,7]],
+  ["contrast","CONTRAST CHECK","INSPECT","Text and background pairs checked against WCAG AA, so you know which pairs fail before you ship.",["AA pass or fail per pair","Shown next to the palette"],[9,9,4]],
+  ["dropper","EYEDROPPER","INSPECT","Pick any pixel on the page and get its color with its role.",["Live on the page","Also an Inspect card and a baseline grid"],[7,9,5]],
+  ["phone","COMPONENTS","INSPECT","Buttons, inputs, cards and links, with their hover and focus states.",["States side by side","Measured, not guessed"],[7,8,6]],
+  ["chest","LIBRARY","SAVE","Every scan is saved on your device. Search, rename, tag, favorite, re-scan, export and import as JSON.",["IndexedDB, on your machine","Nothing synced anywhere"],[9,5,9]],
+  ["potion","COMPOSE","MIX","Take colors from one scan, type from another and spacing from a third. Brew a new design.",["Colors, type, spacing, shape, layout","Exports like any scan"],[8,7,9]],
+  ["lens","FIDELITY CHECK","CHECK","Point it at the page you built (say localhost:3000). It compares with the original and writes a prompt that fixes the gaps.",["Works from Generate or the Library","Closes the loop with your agent"],[9,8,8]],
+];
+const grid=document.getElementById("itemGrid"),det=document.getElementById("itemDetail");
+let sel=0;
+ITEMS.forEach((it,i)=>{const b=document.createElement("button");b.type="button";b.className="item";b.setAttribute("role","option");b.setAttribute("aria-label",it[1]);b.innerHTML=sprite(ICON[it[0]]);b.addEventListener("click",()=>pick(i));b.addEventListener("mouseenter",()=>pick(i,false));grid.appendChild(b);});
+function pick(i,focus){sel=(i+ITEMS.length)%ITEMS.length;const [ic,name,kind,desc,bul,st]=ITEMS[sel];
+  [...grid.children].forEach((b,j)=>{b.setAttribute("aria-selected",j===sel);b.tabIndex=j===sel?0:-1;});if(focus)grid.children[sel].focus();
+  det.innerHTML=`<div style="display:flex;gap:16px;align-items:center"><div class="icon">${sprite(ICON[ic])}</div><div><p class="tag kind">${kind}</p><h3>${name}</h3></div></div><p>${desc}</p><ul>${bul.map(b=>`<li>${b}</li>`).join("")}</ul>${["ACCURACY","USEFUL","FUN"].map((s,k)=>`<div class="stat"><span>${s}</span><span class="meter"><i style="width:calc(${st[k]*10}% - 4px)"></i></span></div>`).join("")}<p class="hint">Arrow keys or hover to browse.</p>`;}
+grid.addEventListener("keydown",e=>{const m={ArrowRight:1,ArrowLeft:-1,ArrowDown:4,ArrowUp:-4}[e.key];if(m){e.preventDefault();pick(sel+m,true);}});
+pick(0);
+
+/* ================= cartridge ================= */
+const TARGETS=["CLAUDE CODE","CURSOR","V0","LOVABLE","GENERIC"];
+const OUT={
+  prompt:t=>`<span class="hd">PROMPT · ${t}</span>Build a new page with this
+design system. Make something
+original. Do not copy content.
+
+COLOR
+  bg       #0E0E16  canvas
+  surface  #1B1B2F  cards
+  accent   #7C6CF5  primary CTA
+  success  #06D6A0  confirmations
+TYPE
+  display  48/56  700  -0.5
+  body     16/24  400
+SPACE    4 8 12 16 24 32 48
+RADIUS   0 4 8 · SHADOW 0 2 8 #0004`,
+  design:()=>`<span class="hd">DESIGN.md</span># Design system
+
+## Colors (role → value)
+- background: #0E0E16
+- text: #F4F1FF (AA on bg ✓)
+- accent: #7C6CF5
+
+## Typography
+| role    | size | lh | wt  |
+| display | 48   | 56 | 700 |
+| body    | 16   | 24 | 400 |
+
+## Layout
+max 1160 · 12 col · gutter 24`,
+};
+let mode="prompt",ti=0,typing;
+const lcd=document.getElementById("lcd"),tgt=document.getElementById("target"),bA=document.getElementById("btnA"),bB=document.getElementById("btnB");
+function show(){clearInterval(typing);const full=OUT[mode](TARGETS[ti]);tgt.textContent=mode==="prompt"?`◀ TARGET: ${TARGETS[ti]} ▶`:"DESIGN.MD · ANY AGENT";bA.setAttribute("aria-pressed",mode==="prompt");bB.setAttribute("aria-pressed",mode==="design");
+  const head=full.slice(0,full.indexOf("</span>")+7),body=full.slice(head.length);
+  if(reduce){lcd.innerHTML=head+body;return;}let n=0;typing=setInterval(()=>{n+=3;lcd.innerHTML=head+body.slice(0,n)+'<span class="cur"></span>';lcd.scrollTop=lcd.scrollHeight;if(n>=body.length)clearInterval(typing);},28);}
+bA.onclick=()=>{mode="prompt";show()};bB.onclick=()=>{mode="design";show()};
+document.querySelectorAll(".dpad button").forEach(b=>b.onclick=()=>{mode="prompt";ti=(ti+ +b.dataset.dir+TARGETS.length)%TARGETS.length;show();});
+new IntersectionObserver((es,obs)=>{if(es[0].isIntersecting){show();obs.disconnect();}},{threshold:.4}).observe(lcd);
+
+/* ================= choose your ai ================= */
+const CHIP=["..s.s.s.s.s.s...",".kkkkkkkkkkkkk..","skgggggggggggks.",".kgkkkgggkkkgk..","skgkwkgggkwkgks.",".kgkkkgggkkkgk..","skgggggggggggks.",".kgggkkkkkgggk..","skggggkkkggggks.",".kgggggggggggk..","skgggggggggggks.",".kkkkkkkkkkkkk..","..s.s.s.s.s.s..."];
+const WINDOW=["kkkkkkkkkkkkkk","krkykgkbbbbbbk","kkkkkkkkkkkkkk","kbbbbbbbbbbbbk","kbbwkbbbbwkbbk","kbbkkbbbbkkbbk","kbbbbbbbbbbbbk","kbbbbbbbbbbbbk","kbbbbkkkkbbbbk","kbbbbbbbbbbbbk","kBBBBBBBBBBBBk","kkkkkkkkkkkkkk"];
+const KEY=["..kkkkk.........",".kyyyyyk........","kyykkkyyk.......","kyk...kyk.......","kyk...kykkkkkkkk","kyykkkyyyyyyyyyk",".kyyyyykkkkykkyk","..kkkkk....kkkk."];
+const FIGHTERS=[
+  ["NONE","DEFAULT",critter("idle",96),"Plain Specimen","Scan, Inspect, Generate, Library, Compose and the fidelity check all work with no AI at all. Nothing leaves your browser.",[10,10,10],"Moves: everything above."],
+  ["LOCAL GEMMA","ON YOUR GPU",sprite(CHIP),"Local Gemma","Runs in your browser on your GPU through WebLLM and WebGPU. One download from Hugging Face (Gemma 3 1B is about 0.7 GB), then it works offline.",[10,6,6],"Moves: Ask · Polish with AI · Vibe"],
+  ["CHROME AI","BUILT IN",sprite(WINDOW),"Chrome built-in","Uses the Prompt API model inside Chrome, when your Chrome has one. No download from us, stays on your device.",[10,6,9],"Moves: Ask · Polish with AI · Vibe"],
+  ["YOUR KEY","BRING ONE",sprite(KEY),"Your own API key","Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral and more, or a local server like Ollama. Keys stay in chrome.storage.local, can be encrypted, and go only to the provider you picked.",[7,10,8],"Moves: Ask · Polish with AI · Vibe"],
+];
+const roster=document.getElementById("roster"),aiD=document.getElementById("aiDetail");let ai=0;
+FIGHTERS.forEach((f,i)=>{const b=document.createElement("button");b.type="button";b.className="fighter";b.setAttribute("role","radio");b.innerHTML=`${f[2]}<span class="plat"></span><span>${f[0]}</span><span class="def">${f[1]}</span>`;b.onclick=()=>choose(i);roster.appendChild(b);});
+function choose(i,focus){ai=(i+4)%4;const f=FIGHTERS[ai];[...roster.children].forEach((b,j)=>{b.setAttribute("aria-checked",j===ai);b.tabIndex=j===ai?0:-1;});if(focus)roster.children[ai].focus();
+  aiD.innerHTML=`<div><h3>${f[3]}</h3><p>${f[4]}</p><p class="moves">${f[6]}</p></div><div class="stats">${["PRIVACY","SMARTS","EASY SETUP"].map((s,k)=>`<div class="stat"><span>${s}</span><span class="meter"><i style="width:calc(${f[5][k]*10}% - 4px)"></i></span></div>`).join("")}</div>`;}
+roster.addEventListener("keydown",e=>{const m={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1}[e.key];if(m){e.preventDefault();choose(ai+m,true);}});
+choose(0);
+
+/* ================= boss battle ================= */
+const BOSS=[".........y..........","........yry.........",".........k..........",".........k..........","....kkkkkkkkkkkk....","..kkCCCCCCCCCCCCkk..",".kCCCCCCCCCCCCCCCCk.","kCCCwwwwwwwwwwwwDCCk","kCCwwwwwwwwwwwwwwDCk","kCwwwwwmmmmmwwwwwDCk","kCwwwwmmmkkmmwwwwDCk","kCwwwwmmkkkkmwwwwDCk","kCwwwwmmmkkmmwwwwDCk","kCCwwwwmmmmmwwwwDDCk","kCCCwwwwwwwwwwwwDCCk",".kCCCDDDDDDDDDDDCCk.","..kkCCCCCCCCCCCCkk..","...kCk.kCk.kCk.kCk..","...kCk.kCk.kCk.kCk..","...kk..kk..kk..kk..."];
+const bossEl=document.getElementById("boss");bossEl.innerHTML=sprite(BOSS);bossEl.style.display="block";
+const LINES=[
+  ["A wild TRACKER appeared!",100],
+  ["SPECIMEN used NO BACKEND. There is no server to send data to.",70],
+  ["SPECIMEN used NO ACCOUNT. Nothing to sign up for.",45],
+  ["SPECIMEN used NO TELEMETRY. It's super effective!",20],
+  ["Scans stay on your device. Keys stay in chrome.storage.local.",8],
+  ["Page data goes only to the AI you pick. Or nowhere.",0],
+  ["TRACKER fainted!",0],
+];
+const log=document.getElementById("log"),hp=document.getElementById("bossHp"),hero=document.getElementById("heroCritter");let fightT=[];
+function fight(){fightT.forEach(clearTimeout);fightT=[];log.innerHTML="";bossEl.className="";hp.classList.remove("low");hp.firstElementChild.style.width="calc(100% - 4px)";paintCritter(hero,"idle");
+  LINES.forEach(([txt,h],i)=>fightT.push(setTimeout(()=>{const p=document.createElement("p");p.textContent=txt;log.appendChild(p);while(log.children.length>4)log.firstChild.remove();
+    hp.firstElementChild.style.width=`calc(${h}% - ${h?4:0}px)`;hp.classList.toggle("low",h<30);
+    if(i>0&&i<6){bossEl.className="";void bossEl.offsetWidth;bossEl.className="hurt";paintCritter(hero,"scanning");}
+    if(i===6){bossEl.className="down";paintCritter(hero,"happy");dispatchEvent(new Event("tracker-down"));}},reduce?0:i*1300)));}
+document.getElementById("refight").onclick=fight;
+new IntersectionObserver((es,obs)=>{if(es[0].isIntersecting){fight();obs.disconnect();}},{threshold:.35}).observe(document.getElementById("privacy"));
+
+/* ================= continue? ================= */
+const countEl=document.getElementById("count"),endC=document.getElementById("endCritter"),ctas=document.getElementById("endCtas");let n=9,hover=false;
+const mood=()=>paintCritter(endC,hover?"happy":n<=2?"sad":n<=5?"thinking":"idle");
+ctas.addEventListener("pointerover",()=>{hover=true;mood()});ctas.addEventListener("pointerout",()=>{hover=false;mood()});ctas.addEventListener("focusin",()=>{hover=true;mood()});ctas.addEventListener("focusout",()=>{hover=false;mood()});
+if(!reduce)setInterval(()=>{if(hover)return;n=n<=0?9:n-1;countEl.textContent=n;mood();dispatchEvent(new CustomEvent("countdown",{detail:n}));},1000);
+mood();
+/* ================= the pet: follows you, perches on things, has feelings ================= */
+(()=>{
+  const pet=document.getElementById("pet"),body=pet.querySelector(".body"),say=document.getElementById("petSay"),home=document.getElementById("heroHome"),toggle=document.getElementById("petToggle");
+  const touch=matchMedia("(hover: none)").matches;
+  const EYES=(dx,dy)=>[[32+dx,48+dy,8,16],[88+dx,48+dy,8,16]];
+  const X=ox=>[[ox-8,48,8,8],[ox+8,48,8,8],[ox,56,8,8],[ox-8,64,8,8],[ox+8,64,8,8]];
+  const face=(f,dx,dy)=>{
+    switch(f){
+      case "sleep":return[[C.ink,[[24,56,16,8],[80,56,16,8],[56,72,16,8]]],[C.blush,BL]];
+      case "dizzy":return[[C.ink,[...X(32),...X(88),[48,80,8,8],[64,80,8,8],[56,76,8,8]]]];
+      case "wow":return[[C.ink,[...EYES(dx,dy),[56,72,16,16]]],[C.blush,BL]];
+      case "idle":return[[C.ink,[...EYES(dx,dy),[56,68,16,8]]],[C.blush,BL]];
+      default:return FACES[f]||FACES.idle;
+    }
+  };
+  let faceKey="";
+  const paint=(f,dx=0,dy=0)=>{const k=f+dx+dy;if(k===faceKey)return;faceKey=k;
+    body.innerHTML=`<svg viewBox="0 0 128 128" shape-rendering="crispEdges">${R(BODY,"#7C6CF5")}${TUFT.map(([x,y,c])=>`<rect x="${x}" y="${y}" width="8" height="8" fill="${c}"/>`).join("")}<rect x="24" y="16" width="16" height="8" fill="#A99BFF"/>${face(f,dx,dy).map(([c,l])=>R(l,c)).join("")}</svg>`;};
+
+  /* state */
+  const P={x:innerWidth-120,y:innerHeight-170,s:1,tx:0,ty:0,ts:1};
+  let mx=-1,my=-1,moved=false,atHome=true,lastMove=performance.now(),perch=null,perchUntil=0,over=false,mood="scanning",moodUntil=0,sayUntil=0,sayPri=0,hopT=0,dizzyUntil=0,flips=[],lastVx=0,clicks=[],lastStage=0,on=true;
+
+  const talk=(text,ms=2200,pri=1)=>{const now=performance.now();if(now<sayUntil&&pri<sayPri)return;say.textContent=text;say.classList.add("on");sayUntil=now+ms;sayPri=pri;};
+  const feel=(m,ms=1800)=>{mood=m;moodUntil=performance.now()+ms;};
+  const fx=(ch,color,n=1)=>{if(reduce)return;for(let i=0;i<n;i++){const d=document.createElement("span");d.className="fx";d.textContent=ch;d.style.color=color;d.style.left=(P.x+16+Math.random()*32*P.s)+"px";d.style.top=(P.y-4+Math.random()*10)+"px";d.style.animationDelay=i*90+"ms";document.body.appendChild(d);setTimeout(()=>d.remove(),1200+i*90);}};
+
+  /* what the pet says about things you point at */
+  const LINES=[
+    ['a[href*="chromewebstore"]',"YES! ADD ME TO CHROME!","happy"],
+    ['a[href^="/privacy"]',"IT'S SHORT. READ IT!","happy"],
+    ['a[href*="github"]',"A STAR? FOR ME? ★","happy"],
+    [".press","LET'S GO! →","wow"],
+    [".qblock","BONK IT!","wow"],
+    [".item",el=>`OOH, ${el.getAttribute("aria-label")}!`,"wow"],
+    [".fighter",el=>el.querySelector("span:nth-of-type(2)").textContent==="NONE"?"JUST ME? WORKS GREAT.":`${el.querySelector("span:nth-of-type(2)").textContent}? NICE.`,"happy"],
+    [".dpad button","SWITCH THE TARGET","thinking"],
+    ["#btnA, #btnB","PRESS IT!","wow"],
+    ["#refight","AGAIN? OK!","scanning"],
+    ["#prev","GO BACK?","thinking"],["#next","ONWARD!","happy"],
+    [".bar nav a",el=>`TO ${el.textContent.replace("▶ ","")}!`,"happy"],
+    ["#petToggle","DON'T TURN ME OFF...","sad"],
+    ["#lcd","I WROTE THAT!","happy"],
+    ["#boss","DON'T POKE IT!!","sad"],
+    ["a, button","CLICK?","happy"],
+  ];
+  const lineFor=el=>{for(const [sel,txt,m] of LINES){const t=el.closest(sel);if(t)return{t,text:typeof txt==="function"?txt(t):txt,m};}return null;};
+  const STAGE_LINES=["HI! I'M SPECIMEN.","FOUR STEPS. THAT'S IT.","PICK SOMETHING SHINY.","NUMBERS, NOT VIBES!","NONE IS FINE TOO.","EEK! A TRACKER!","DON'T LET IT HIT 0!"];
+  const STAGE_NAMES=["THE START","HOW TO PLAY","THE SHOP","THE LOOT","SELECT","THE BOSS","CONTINUE"];
+
+  const leaveHome=()=>{if(!atHome)return;atHome=false;document.body.classList.add("pet-away");feel("wow",700);talk(touch?"I'LL COME ALONG!":"WAIT FOR ME!",1600,2);fx("!",C.y);};
+
+  addEventListener("pointermove",e=>{if(e.pointerType!=="mouse")return;
+    const now=performance.now(),vx=e.clientX-mx;
+    if(mx>=0&&Math.sign(vx)!==Math.sign(lastVx)&&Math.abs(vx)>12){flips.push(now);flips=flips.filter(t=>now-t<700);if(flips.length>=7&&now>dizzyUntil){dizzyUntil=now+2200;feel("dizzy",2200);talk("WHOA... SO DIZZY",2200,3);fx("@",C.pl,2);flips=[];}}
+    if(Math.abs(vx)>2)lastVx=vx;
+    if(lastMove&&now-lastMove>9000&&!atHome){talk("! I'M UP!",1200,2);fx("!",C.y);}
+    mx=e.clientX;my=e.clientY;lastMove=now;
+    if(!moved&&Math.hypot(e.movementX,e.movementY)>2){moved=true;leaveHome();}
+    over=e.target===body||body.contains(e.target);if(over)perch=null;
+    if(!over){const l=e.target.closest&&lineFor(e.target);if(l){perch=l.t;perchUntil=Infinity;if(l.t!==P.lastT){P.lastT=l.t;talk(l.text,1800,1);feel(l.m,1600);}}else{perch=null;P.lastT=null;}}
+  },{passive:true});
+
+  /* taps on touch screens: hop over to whatever was tapped */
+  addEventListener("pointerdown",e=>{if(e.pointerType==="mouse"||body.contains(e.target))return;leaveHome();const l=lineFor(e.target);if(l){talk(l.text,2000,1);feel(l.m,1800);}},{passive:true});
+
+  /* touch: hold the pet and drag it to a new seat (remembered per browser) */
+  let seat={fx:0,fy:1};try{const v=JSON.parse(localStorage.getItem("specimen-pet-seat"));if(v&&typeof v.fx==="number")seat=v;}catch{}
+  const seatXY=()=>[8+seat.fx*(innerWidth-80),56+seat.fy*(innerHeight-56-150)];
+  let drag=null,holdT;
+  body.style.touchAction="none";
+  body.addEventListener("pointerdown",e=>{if(e.pointerType==="mouse")return;e.preventDefault();try{body.setPointerCapture(e.pointerId)}catch{}leaveHome();
+    const ox=e.clientX-P.x,oy=e.clientY-P.y,sx=e.clientX,sy=e.clientY;
+    drag={ox,oy,sx,sy,live:false};holdT=setTimeout(()=>{if(drag){drag.live=true;feel("wow",99999);talk("WHEE!",99999,3);hopT=performance.now();}},180);});
+  body.addEventListener("pointermove",e=>{if(!drag)return;if(!drag.live&&Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>8){drag.live=true;feel("wow",99999);talk("WHEE!",99999,3);}
+    if(drag.live){P.x=P.tx=e.clientX-drag.ox;P.y=P.ty=e.clientY-drag.oy;}});
+  const drop=e=>{if(!drag)return;clearTimeout(holdT);const was=drag.live;drag=null;
+    if(was){seat={fx:Math.max(0,Math.min(1,(P.x-8)/(innerWidth-80))),fy:Math.max(0,Math.min(1,(P.y-56)/(innerHeight-56-150)))};try{localStorage.setItem("specimen-pet-seat",JSON.stringify(seat))}catch{}
+      sayUntil=0;feel("happy",1500);talk("NICE SPOT!",1500,3);fx("♥",C.r,2);}
+    else body.click();};
+  body.addEventListener("pointerup",drop);body.addEventListener("pointercancel",drop);
+
+  /* petting and poking */
+  const PETS=["HEHE","THAT TICKLES!","4PX GRID, ALWAYS.","I MEASURE THINGS.","MORE PATS PLS","♥ ♥ ♥"];
+  body.addEventListener("click",()=>{const now=performance.now();clicks.push(now);clicks=clicks.filter(t=>now-t<1500);hopT=now;
+    if(clicks.length>=6){feel("dizzy",2000);talk("OK OK, I'M AWAKE!",1800,3);clicks=[];}else{feel("happy",1500);talk(PETS[Math.floor(Math.random()*PETS.length)],1500,2);fx("♥",C.r,3);}});
+  let patT=0;
+
+  /* the story beats */
+  addEventListener("stagechange",e=>{const i=e.detail;if(i===lastStage)return;const back=i<lastStage;lastStage=i;leaveHome();
+    talk(back?`BACK TO ${STAGE_NAMES[i]}!`:STAGE_LINES[i],2600,2);feel(i===5?"sad":back?"thinking":"wow",1600);hopT=performance.now();});
+  addEventListener("tracker-down",()=>{if(lastStage===5){talk("WE WON! ♥",2400,3);feel("happy",2400);fx("★",C.y,3);}});
+  addEventListener("countdown",e=>{if(lastStage!==6)return;if(e.detail===3){talk("HURRY...",1500,1);feel("sad",1500);}if(e.detail===0){talk("CONTINUE? PLEASE?",1800,2);feel("sad",1800);}});
+
+  /* the on/off switch, remembered per browser */
+  const setOn=v=>{on=v;document.body.classList.toggle("pet-on",v);toggle.setAttribute("aria-pressed",v);try{localStorage.setItem("specimen-pet",v?"1":"0")}catch{}};
+  let saved=null;try{saved=localStorage.getItem("specimen-pet")}catch{}
+  setOn(saved!=="0");toggle.onclick=()=>{setOn(!on);if(on){talk("I'M BACK!",1500,3);feel("happy");}};
+
+  /* movement: 20 steps a second, snapped to 4px like the art */
+  let last=0;
+  const tick=t=>{requestAnimationFrame(tick);if(!on||t-last<50)return;last=t;
+    const now=t,W=innerWidth,H=innerHeight;
+    if(atHome){const r=home.getBoundingClientRect();P.tx=r.left;P.ty=r.top;P.ts=r.width/64;if(r.right<0||r.left>W)leaveHome();}
+    else{P.ts=1;
+      if(perch&&now<perchUntil&&perch.isConnected){const r=perch.getBoundingClientRect();P.tx=Math.min(W-72,Math.max(8,r.right-56));P.ty=r.top>140?r.top-60:r.bottom+4;}
+      else if(drag&&drag.live){/* finger moves it */}
+      else if(touch||mx<0){perch=null;[P.tx,P.ty]=seatXY();}
+      else if(!over){P.tx=mx+18;P.ty=my+18;if(P.tx>W-72)P.tx=mx-82;if(P.ty>H-72)P.ty=my-82;}
+    }
+    if(drag&&drag.live){P.x=Math.max(0,Math.min(W-64,P.x));P.y=Math.max(48,Math.min(H-64,P.y));P.tx=P.x;P.ty=P.y;}
+    if(!atHome){P.tx=Math.max(8,Math.min(W-72,P.tx));P.ty=Math.max(56,Math.min(H-72,P.ty));}
+    const k=reduce?1:atHome?1:.3;
+    P.x+=(P.tx-P.x)*k;P.y+=(P.ty-P.y)*k;P.s+=(P.ts-P.s)*(reduce?1:.35);if(Math.abs(P.ts-P.s)<.05)P.s=P.ts;
+    const moving=Math.hypot(P.tx-P.x,P.ty-P.y)>6;
+    let hop=0;if(!reduce&&((moving&&Math.floor(now/120)%2)||(now-hopT<300&&Math.floor((now-hopT)/100)%2===0)))hop=-8;
+    const qx=Math.round(P.x/4)*4,qy=Math.round((P.y+hop)/4)*4;
+    pet.style.transform=`translate(${qx}px,${qy}px) scale(${P.s})`;
+
+    /* mood */
+    const idle=now-lastMove;let f;
+    if(now<moodUntil)f=mood;
+    else if(over){f="happy";if(now-patT>500){patT=now;fx("♥",C.blush);if(now>sayUntil)talk("PAT PAT ♥",900,0);}}
+    else if(!touch&&!atHome&&idle>15000){f="sleep";if(Math.floor(now/50)%30===0)fx("z",C.pl);}
+    else if(!touch&&!atHome&&idle>7000)f="thinking";
+    else f=atHome?"scanning":"idle";
+    let dx=0,dy=0;if(f==="idle"&&mx>=0){const cx=P.x+32,cy=P.y+32;dx=mx<cx-40?-8:mx>cx+40?8:0;dy=my<cy-60?-8:0;}
+    paint(f,dx,dy);
+
+    /* speech bubble rides above the pet (or below, near the top bar) */
+    if(now>sayUntil)say.classList.remove("on");
+    const sw=say.offsetWidth,sh=say.offsetHeight,petW=64*P.s;let bx=qx+petW/2-sw/2,by=qy-sh-12;const below=by<60;if(below)by=qy+64*P.s+12;
+    bx=Math.max(8,Math.min(W-sw-8,bx));say.classList.toggle("below",below);say.style.setProperty("--tail",Math.max(8,Math.min(sw-16,qx+petW/2-bx-4))+"px");
+    say.style.transform=`translate(${Math.round(bx)}px,${Math.round(by)}px)`;
+  };
+  paint("scanning");requestAnimationFrame(tick);
+  setTimeout(()=>talk(touch?"HI! SWIPE → TO EXPLORE":"HI! MOVE YOUR MOUSE!",3200,1),900);
+})();
+
+})();
+</script>
+</body>
+</html>
