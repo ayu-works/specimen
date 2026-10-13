@@ -16,6 +16,7 @@
       "!pnpm-lock.yaml",
       "!docs",
       "!design",
+      "!site",
       "!fixtures/pages/*.html",
       "!fixtures/raw",
       "!**/__snapshots__"

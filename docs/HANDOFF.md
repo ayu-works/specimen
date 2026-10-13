@@ -18,8 +18,8 @@ Read `CLAUDE.md` first. It holds the workflow and rules. This file says where th
 - The "scanned" site in the video is made up. No real brands, logos or copy.
 
 ## Open
-- **Chrome Web Store submission is on hold** (user decision). Everything is ready: `pnpm zip`, `store/SUBMIT.md`, `store/images/`. The user submits with their own developer account. The README store badge still points to `…/detail/specimen/TODO`.
-- **Website (Phase 7.1–7.2)** not started. Host: Vercel. It must serve `/privacy` so the store listing can link to it.
+- **Live on the Chrome Web Store** (2026-10-13): https://chromewebstore.google.com/detail/pbolkplggojhilegibocfkaeonjakkgp
+- **Website**: `site/` (plain HTML, no build), deployed by Netlify from `main` via `netlify.toml`. `/privacy` is the privacy page; point the store listing's privacy URL at it once the Netlify URL exists.
 - **Branch `phase-6-mcp`**: the cancelled MCP bridge, kept on purpose. Don't delete it. Open questions: is the value only the self-check loop (`check_build`)? How much browser control should agents get? Standalone headless CLI instead? Before or after launch?
 - Manual items still with the user: the Alt+Shift+C shortcut, the Gemma download, a real "AI builds page → Fidelity check".
 
