@@ -153,7 +153,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T6.04 | E | Extension pairs with a locally running bridge and pushes a scan |
 | T6.05 | 🖐 | `claude mcp add specimen -- npx specimen-mcp` → Claude Code lists and reads scans |
 | T6.06 | 🖐 | Store package: zip builds, manifest validated, privacy policy present |
-| T6.07 | U | Secret scan (gitleaks) on the whole history is clean |
+| T6.07 | U | Secret scan (gitleaks) on the whole history is clean (`pnpm secrets`, in the gate; skipped with a warning locally without gitleaks, required in CI) |
 
 ## Phase 7: Website & video
 | ID | Type | Test |
