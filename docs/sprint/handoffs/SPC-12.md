@@ -54,7 +54,7 @@ returns only historical mentions; `pnpm lint` (Biome ignores md, but run it anyw
 - Check: the rg command returns only the three Phase 3–5 "tests deferred …, which shipped in PR #9" history lines. `pnpm lint` clean.
 
 ## Next
-- PR open; comment on SPC-12; message specimen-b0. Fold any PE notes (doc-only: no re-review).
+- PR #21 open, Linear comment posted, specimen-b0 told. pe-5e is reviewing the PR itself (doc-only skips lens B, not the PE review). Fold its findings from `docs/sprint/reviews/SPC-12-a-r1.md`; doc-only fixes get no re-review.
 
 ## How to resume
 - Branch `exec/spc-12`; read this file and the PR.
