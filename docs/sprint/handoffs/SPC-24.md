@@ -3,7 +3,7 @@
 Executor: spc-24-3e · Branch: exec/spc-24 (from exec/spc-22, PR #25's code) · Lane C · Sprint 2 · PE: pe-1b ·
 Orchestrator: specimen-53
 
-## Plan (waiting for PE approval; no code yet)
+## Plan (PE pe-1b approved 2026-10-15 with changes 1–7, folded in under "PE changes")
 
 ### Scope (owner's 6 requirements, SPC-24)
 1. One tab: Ask gets a mode switch **Quick answer | Ask the council**. The Critique tab goes away.
@@ -237,6 +237,39 @@ Component:
 | Malformed / wrong-version message | Rejected with fixed text, never thrown in the host |
 | WebLLM | Same `llmHost` queue via an in-memory port; SPC-18 limits still apply |
 
+### PE changes (approval conditions, 2026-10-15). These win over anything above.
+Answers: Q1 OK; Q3 OK; Q2 → item 2; Q4 → item 3. The in-memory port to llmHost, `council.seen` in storage.local and
+T3.28–T3.33 are OK.
+1. **A closed panel never kills the run.** Chrome throws on `postMessage` to a disconnected Port. The host wraps every
+   post in try/catch and drops that port on a throw and in `onDisconnect`. The engine's `emit` guards `onTurn` (a
+   throwing callback never breaks a turn). Every fire-and-forget `put` has a `.catch`. Tests: T3.30's fake port throws
+   on post after disconnect (as Chrome does) and the run still ends `done`; an engine case in `critique.test.ts`
+   (`T3.30 engine: a throwing onTurn never breaks a turn`) → every turn still `done`, same call count.
+2. **Q2 → `rejected{ runId: string | null, error }`** (host → panel), added to the frozen v1 contract. A malformed start
+   may have no runId (null). `status{error}` is only for a stored run failing.
+3. **Q4 → `council.halt{ at }`** with the change time (`Date.now()` in the SW when the `onChanged` fired). The host
+   ignores it when the live run's `startedAt > at`, so a key change followed by a quick Start can't kill the new run
+   that already uses the new key. T3.31 tests both orders (halt before start → ignored; start then halt → stopped).
+4. **Badge on a new run:** host → SW runtime message `council.started{ runId }`, sent when a run is accepted; the SW
+   clears the old `✓`/`!`. Added to the contract (beside `council.finished`). Tested in T3.31 (badge cleared on
+   started) and T3.32 (the started message carries no key).
+5. **TESTING.md:** T3.25 and T3.26 become ⊘ (`**Dropped 2026-10-15** (replaced by T3.29 / T3.33, SPC-24)` plus the
+   struck-through original). IDs are never reworded. T3.18–T3.24 stay (the engine keeps those behaviours). Run
+   `check-ids --all`. T3.27's owner row is updated in place only if it keeps its meaning (an owner Groq run); otherwise
+   a new ID. (I'll keep T3.27 as the SPC-22 check and add the SPC-24 owner check as **T3.34 🖐**.)
+6. **`attachLlmPort` is a pure refactor:** the existing T3.11 llmHost tests pass unchanged (no edits to them). The PR
+   says that with WebLLM a quick Ask queues behind each council turn (same `chatChain`).
+7. **Privacy line:** the setup text and the footer say each turn sends the measured values **plus the user's goal
+   text** to <provider>, and that the run continues with the panel closed.
+
+Frozen contract v1, final:
+- Panel → host (Port `council`): `start{ v, runId, scan, provider, personas, rounds, context }` · `stop{ runId }` ·
+  `attach{}`.
+- Host → panel: `snapshot{ record | null }` · `turn{ runId, index, turn }` · `status{ runId, status, verdict?,
+  error? }` · `rejected{ runId | null, error }`.
+- Host → SW (runtime): `council.started{ runId }` · `council.finished{ runId, status }`.
+- SW → host (runtime): `council.halt{ at }`.
+
 ### Known limitations (unchanged)
 - Sanitizer camelCase gap (SPC-17); WebLLM interrupt limits (SPC-18); TPM keyed by provider, not model (A-r2 L1).
 - The flag ships in any release built from `main` with this code, so the owner's rule stands: no merge before go.
@@ -245,7 +278,7 @@ Component:
 - Read the brief, setup, plan, SPC-24 + SPC-22 (all comments), the SPC-22 handoff and reviews. `pnpm i` done.
 
 ## Next
-- PE approval of this plan (Q1–Q4 above), then build: engine tests first (T3.28–T3.29), host + guard (T3.30–T3.32),
+- Approved. Build: engine tests first (T3.28–T3.29), host + guard (T3.30–T3.32),
   UI (T3.33).
 
 ## How to resume
