@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiProvider, openSettings, useAiContext } from '@/lib/aiContext';
 import { unlockKeys } from '@/lib/aiSettings';
+import { useFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import { sampleScan } from './dev/sampleScan';
 import { type TabId, useStore } from './store';
 import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
+import { Critique } from './views/Critique';
 import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
 import { Library } from './views/Library';
@@ -20,6 +22,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'inspect', label: 'Inspect' },
   { id: 'generate', label: 'Generate' },
   { id: 'ask', label: 'Ask' },
+  { id: 'critique', label: 'Critique' },
   { id: 'library', label: 'Library' },
 ];
 
@@ -96,7 +99,14 @@ export default function App() {
 
 function Panel() {
   const { activeTab, setTab, scan, succeed, status } = useStore();
+  const critique = useFlag('critique');
+  const tabs = TABS.filter((t) => t.id !== 'critique' || critique);
   useShortcut();
+
+  // Leave the Critique tab if its flag is switched off.
+  useEffect(() => {
+    if (!critique && activeTab === 'critique') setTab('ask');
+  }, [critique, activeTab, setTab]);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('demo') === '1') {
@@ -123,7 +133,7 @@ function Panel() {
       <UnlockBanner />
       <Tabs value={activeTab} onValueChange={(v) => setTab(v as TabId)}>
         <TabsList>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <TabsTrigger key={t.id} value={t.id}>
               {t.label}
             </TabsTrigger>
@@ -142,6 +152,11 @@ function Panel() {
           <TabsContent value="ask">
             <Ask />
           </TabsContent>
+          {critique && (
+            <TabsContent value="critique">
+              <Critique />
+            </TabsContent>
+          )}
           <TabsContent value="library">
             <Library />
           </TabsContent>

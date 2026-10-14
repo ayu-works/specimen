@@ -4,7 +4,7 @@ import type { ChatMessage } from '@/lib/db';
 
 export type AskMessage = ChatMessage;
 
-export type TabId = 'scan' | 'inspect' | 'generate' | 'ask' | 'library';
+export type TabId = 'scan' | 'inspect' | 'generate' | 'ask' | 'critique' | 'library';
 /** Where the current scan came from: the live tab, a saved Library entry, or a Compose mix. */
 export type Origin = 'tab' | 'saved' | 'composed';
 export type Status = 'idle' | 'scanning' | 'done' | 'error';
