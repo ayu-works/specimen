@@ -8,7 +8,7 @@ it('T1.09 accent role within ΔE<3 of ground truth', () => { … })
 
 **Phase gate** = `pnpm gate` green **and** every ID listed for the phase is present and passing (`scripts/check-test-ids.ts` greps the test files against this document). Manual checks (🖐) are run by Opus/you, and the results go in the PR description.
 
-Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Library, jsdom) · **E** = e2e (Playwright + Chromium with the built extension) · **🖐** = manual
+Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Library, jsdom) · **E** = e2e (Playwright + Chromium with the built extension) · **🖐** = manual · **⊘** = dropped: the row and ID stay for the record (IDs are never reused), check-ids skips it and fails if a test still carries the ID. A ⊘ row's Test cell must start with `**Dropped YYYY-MM-DD**` and a reason. ⊘ (like 🖐) goes only in a Type cell; to drop a row in a table without a Type column, add the column first
 
 ---
 
@@ -147,11 +147,11 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 ## Phase 6: MCP & release
 | ID | Type | Test |
 |---|---|---|
-| T6.01 | U | MCP server exposes `list_scans`, `get_scan`, `get_prompt`, `get_tokens` with valid schemas (SDK in-memory transport) |
-| T6.02 | U | WS bridge binds to 127.0.0.1 only; rejects connections without a pairing token |
-| T6.03 | U | Pushed scans are queryable via MCP tools |
-| T6.04 | E | Extension pairs with a locally running bridge and pushes a scan |
-| T6.05 | 🖐 | `claude mcp add specimen -- npx specimen-mcp` → Claude Code lists and reads scans |
+| T6.01 | ⊘ | **Dropped 2026-10-09** (MCP bridge cut from v1; see IMPLEMENTATION.md Phase 6, SPC-10): ~~MCP server exposes `list_scans`, `get_scan`, `get_prompt`, `get_tokens` with valid schemas (SDK in-memory transport)~~ |
+| T6.02 | ⊘ | **Dropped 2026-10-09** (MCP bridge cut from v1; see IMPLEMENTATION.md Phase 6, SPC-10): ~~WS bridge binds to 127.0.0.1 only; rejects connections without a pairing token~~ |
+| T6.03 | ⊘ | **Dropped 2026-10-09** (MCP bridge cut from v1; see IMPLEMENTATION.md Phase 6, SPC-10): ~~Pushed scans are queryable via MCP tools~~ |
+| T6.04 | ⊘ | **Dropped 2026-10-09** (MCP bridge cut from v1; see IMPLEMENTATION.md Phase 6, SPC-10): ~~Extension pairs with a locally running bridge and pushes a scan~~ |
+| T6.05 | ⊘ | **Dropped 2026-10-09** (MCP bridge cut from v1; see IMPLEMENTATION.md Phase 6, SPC-10): ~~`claude mcp add specimen -- npx specimen-mcp` → Claude Code lists and reads scans~~ |
 | T6.06 | 🖐 | Store package: zip builds, manifest validated, privacy policy present |
 | T6.07 | U | Secret scan (gitleaks) on the whole history is clean (`pnpm secrets`, in the gate; skipped with a warning locally without gitleaks, required in CI) |
 
@@ -159,7 +159,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | ID | Type | Test |
 |---|---|---|
 | T7.01 | E | Website builds; all internal links resolve; Add-to-Chrome + GitHub links present |
-| T7.02 | E | Lighthouse ≥ 95 (performance, a11y, best practices, SEO) via `@lhci/cli` |
+| T7.02 | E | Lighthouse ≥ 95 (performance, a11y, best practices, SEO) via `@lhci/cli`: **a CI report, non-blocking** (`lighthouse.yml`). check-ids counts T7.02 present when the report-logic tests exist; that does **not** mean ≥ 95 passed |
 | T7.03 | E | Layout works at 375px with no horizontal scroll |
 | T7.04 | U | Remotion compositions render (frame count = fps × duration) |
 | T7.05 | 🖐 | Video review (length per the user's decision) |
