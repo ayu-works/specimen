@@ -158,6 +158,8 @@ Status: **Built, `pnpm gate` green, PR open (link on SPC-16).** Plan approved by
     with no events is a provider failure, not a model that spent its budget thinking.
   - L4: vibe's no-retry test now goes through a real `httpError` 400 ("Image too large"), which is reachable.
 - Not done (pre-existing, out of scope): OpenAI `429 insufficient_quota` is treated as `rate`. Suggested as a later ticket.
+- **2026-10-15:** pe-99 confirmed the post-lens-B diff (bb6e398..90ad197) with no findings; lens A stays APPROVED. CI is green.
+  Waiting on the owner's merge decision.
 
 ## Next
 - Reviews (PE lens A, a lens-B reviewer, and a security review: keys). Fold findings in new commits.
