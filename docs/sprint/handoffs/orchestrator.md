@@ -6,6 +6,12 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (folders moved; fresh PE)
+
+- The owner ran the folder move: main checkout `specimen-herdr/specimen`, worktrees `specimen-herdr/worktrees/` (sprint-log, pe). The old `Specimen`/`Specimen-wt` are gone; the memory dir was copied to the new project key. **The orchestrator session is now `specimen-53`.**
+- A fresh PE was started on 2.1.300 (pane w1:pN, worktree worktrees/pe, branch pe/sprint-2), reviewing PR #24 (sprint/log → main, doc-only). Then SPC-22.
+- Scratchpad (kickoffs): /private/tmp/claude-501/-Users-ayushmayank-Claude-coding-Projects-specimen-herdr-specimen/015cf71f-2911-4db4-8f1b-44b3361da55e/scratchpad
+
 ## UPDATE 2026-10-15 (Sprint 1 complete; wrap-up)
 
 - All sprint tickets are Done; summary in `docs/sprint/standups/2026-10-15-sprint-1-summary.md`. The PE (pe-5e) and all executors are closed; pe.md has been copied here.
