@@ -100,6 +100,8 @@ and the three formats (16x9 1920×1080, 1x1 1080×1080, 9x16 1080×1920).
   `pnpm typecheck:video` clean; `pnpm lint` clean; `pnpm gate` exit 0 with video out of `pnpm test` (gitleaks not
   installed locally, so the secret scan skipped; CI scans).
 
+- Root.tsx comment "Six" → "Twelve compositions" (orchestrator asked for it in this PR; comment only), 749eb35.
+
 ## Next
 - Reviews (PE lens A + lens B) → fold findings → owner merges.
 
