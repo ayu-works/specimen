@@ -2,6 +2,7 @@ import { extract } from '@specimen/core';
 import type { DesignScan, RawPage } from '@specimen/core/schema';
 import { saveScan } from './db';
 import { send } from './messaging';
+import { tabEmulationIdle } from './tabEmulation';
 
 export function friendlyScanError(msg: string): string {
   if (/Unsupported page|chrome:\/\/|chrome-extension:\/\/|extensions gallery|webstore/i.test(msg))
@@ -38,6 +39,8 @@ export interface ScanTabOptions {
 
 /** Scan a tab and save the result (with thumbnail) to the library. Saving never fails the scan. */
 export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
+  // A mobile capture may have a phone override on this tab: never record that as the desktop.
+  await tabEmulationIdle();
   const res = await send('scan.run', {
     tabId,
     opts: opts.noScreenshot ? { noScreenshot: true } : undefined,

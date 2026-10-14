@@ -160,6 +160,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T5.08 | U | Multi-page merge: weights summed, roles stable, `meta.pages` recorded |
 | T5.09 | E | Diff view: pick a source scan, scan the current tab, show score + deltas |
 | T5.10 | 🖐 | End to end: linear.app → Claude Code build on localhost → Diff ≥ 80 after one fix round |
+| T5.11 | U | Mobile capture in full screen (SPC-25): the scanned tab's window (else the current one) is checked first; full screen opens no window or tab; the automatic capture never touches the user's tab, and only a click emulates a phone there (debugger held, tab still on the page); each skip has its reason and note (full screen, page changed, debugger can't attach, opened as a tab); a desktop scan waits for an emulation to clear; a window or tab Chrome hands back is caught after create and only what was created is closed (the one new tab, never the user's window or other tabs); a closed panel's leftovers (override, popup) are undone on the next start; no second capture while one runs |
 
 ## Phase 6: MCP & release
 | ID | Type | Test |
