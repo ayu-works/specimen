@@ -6,6 +6,12 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (Sprint 2: SPC-22 waiting for the owner's test)
+
+- #24 merged (e1e8a6e): Sprint 1 is closed. Sprint 2 = SPC-22 (critique-panel spike), PR #25 (base main): lens A r2 approved, lens B + privacy r1 folded in, CI green.
+- **Owner chose A for H2:** #25 is NOT merged until go/no-go. The owner tests the branch build at `worktrees/spc-22/apps/extension/.output/chrome-mv3` (built by the orchestrator at cfe7616), loaded unpacked, with the Groq key in Options and `?labs=1` → Labs → Critique panel.
+- Live: pe-1b (w1:pN, worktrees/pe), spc-22-f2 (w1:pP, worktrees/spc-22), both idle and waiting. On go: polish ticket(s) + a shipping decision (build gate vs release). On no-go: close #25, remove the worktree.
+
 ## UPDATE 2026-10-15 (folders moved; fresh PE)
 
 - The owner ran the folder move: main checkout `specimen-herdr/specimen`, worktrees `specimen-herdr/worktrees/` (sprint-log, pe). The old `Specimen`/`Specimen-wt` are gone; the memory dir was copied to the new project key. **The orchestrator session is now `specimen-53`.**
