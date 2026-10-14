@@ -84,6 +84,8 @@ export async function restorePanel(): Promise<number | undefined> {
   await startChatScrub();
   const tab = await activeTab();
   const windowId = tab?.windowId;
+  // Something is already showing (a scan started meanwhile): nothing to restore, no Library reads.
+  if (!untouched()) return windowId;
   try {
     const memo = windowId === undefined ? null : await readMemo(windowId);
     const url = tab?.url;

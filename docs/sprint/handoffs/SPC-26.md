@@ -131,8 +131,17 @@ whenever `scan.id`, `activeTab` or `askMode` changes (only once a scan is shown;
   - L6: accepted: closed windows' memos (ids only) stay in session storage until the browser quits; in the PR.
   - Tests: T4.10 +4 (stale memo, saved origin, foreign memo, early scan remembered), T4.11 +1 (malformed row).
 
+- Rebased on origin/main after #29 (SPC-17): `db.ts` keeps both #29's `DesignScanSchema.parse` on writes and the
+  `await chatsReady` gate in `loadChat`/`saveChat`.
+- After the rebase, `council.test.tsx` "T3.33 a run started from another window" failed ~1 in 8 runs with the
+  restore on, 0/16 with it off: the restore's Library reads (fake-indexeddb) shifted the timing of the council's
+  attach. `restorePanel` now returns before any Library read when the panel already shows something (it never
+  restores over existing state anyway): 16/16 green. In real use the panel opens empty, so the reads still run
+  next to `initCouncil`; the council attaches on `council.started` regardless, so this is test timing, but worth a
+  look if that test flakes again.
+
 ## Next
-- CI green on #30; tell pe-99 the commits (lens A L1 + lens B folds); lens B re-check if asked.
+- CI green on #30; pe-99 and the orchestrator told; lens B re-check if the orchestrator asks.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-26`; `gh pr view` for the PR and reviews in `docs/sprint/reviews/`.
