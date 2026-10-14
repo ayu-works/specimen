@@ -1,5 +1,8 @@
 # Orchestrator handoff
 
+**Resume this orchestrator:** in the main `Specimen` folder, run `claude --resume 015cf71f-2911-4db4-8f1b-44b3361da55e`
+(or `claude --continue`). The session may be listed as "Handoff document". The `/resume` list is per folder.
+
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
