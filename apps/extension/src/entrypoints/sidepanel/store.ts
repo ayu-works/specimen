@@ -52,6 +52,9 @@ interface State {
   setAskMode: (m: AskMode) => void;
   origin: Origin;
   extras: Extras;
+  /** On reopen with an unknown tab URL: the last scan, offered on the Scan tab (never auto-applied). */
+  offer: { scanId: string; host: string } | null;
+  setOffer: (offer: { scanId: string; host: string } | null) => void;
   /** Set by Library's "Check a build against this"; Generate scrolls to its check card once. */
   checkPending: boolean;
   /** Ask-view history, per scan id (persisted to the Library db when the scan is saved). */
@@ -83,6 +86,8 @@ export const useStore = create<State>((set) => ({
   setAskMode: (askMode) => set({ askMode }),
   origin: 'tab',
   extras: NO_EXTRAS,
+  offer: null,
+  setOffer: (offer) => set({ offer }),
   checkPending: false,
   chats: {},
   setChat: (scanId, update) =>
@@ -101,6 +106,7 @@ export const useStore = create<State>((set) => ({
       favicon: null,
       status: 'done',
       error: null,
+      offer: null,
       extras: { ...NO_EXTRAS, scanId: scan.id },
     }),
   start: () => set({ status: 'scanning', error: null }),
@@ -112,6 +118,7 @@ export const useStore = create<State>((set) => ({
       favicon,
       status: 'done',
       error: null,
+      offer: null,
       extras: { ...NO_EXTRAS, scanId: scan.id },
     }),
   fail: (error) => set({ status: 'error', error }),

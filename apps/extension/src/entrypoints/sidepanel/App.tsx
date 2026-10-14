@@ -9,6 +9,7 @@ import { initCouncil, moodFor, useCouncil } from '@/lib/council';
 import { useFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import { sampleScan } from './dev/sampleScan';
+import { rememberPanel, restorePanel } from './restore';
 import { type TabId, useStore } from './store';
 import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
@@ -124,7 +125,18 @@ function Panel() {
       succeed(sampleScan, null, null);
       const t = new URLSearchParams(location.search).get('tab');
       if (t) setTab(t as TabId);
+      return;
     }
+    // Reopen where the user left off (SPC-26), then keep remembering it for this window.
+    let stop: (() => void) | undefined;
+    let live = true;
+    void restorePanel().then((windowId) => {
+      if (live && windowId !== undefined) stop = rememberPanel(windowId);
+    });
+    return () => {
+      live = false;
+      stop?.();
+    };
   }, [succeed, setTab]);
 
   return (
