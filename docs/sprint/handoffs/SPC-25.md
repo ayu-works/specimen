@@ -120,7 +120,7 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
     side-panel start (`main.tsx`) clears the override, detaches and closes the popup; it skips when another side panel
     is open. Unit-tested only. **Owner check:** close the panel mid-capture.
   - L1: the running line says "this page shows at phone width" on the emulation path.
-  - L2: a single new id in the home window is closed whatever its url (redirects); the url only breaks ties.
+  - L2: superseded by lens A r3 L1 (below): a redirected stray tab is left open (the safe failure).
   - L3: no `chrome.debugger` → `attach` reason, never "too wide".
   - L4: owner checks added below. Not done: passing `left/top` for a second display. That's a popup-placement
     change outside this bug. **The post-create guard's return shapes are unverified on real macOS.**
@@ -130,6 +130,13 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
   `onUpdated` never arrived after the listener attached. That's a race already in `waitForTabLoad` (scanFlow.ts; also
   used by `rescanUrl`), not new code. Now fire-and-forget (`void`). **Follow-up suggested:** make `waitForTabLoad`
   also poll `tabs.get` (separate ticket; scanFlow is SPC-19/20's).
+
+- Lens A r3 (`docs/sprint/reviews/SPC-25-a-r3.md`), both fixed:
+  - M1: the popup window is recorded for recovery only when it is ours (`!intoExisting && win.id !== homeId`), and
+    cleared under the same condition, so recovery can never close another of the user's windows.
+  - L1: a lone new tab in the home window is closed only if it's on the url or still blank (empty/`about:blank`); a
+    new tab page or a redirected page is left alone.
+  - Tests: 3 new T5.11 tests; 2 fail on b624dd5 (the about:blank one passes there too).
 
 ## Owner check (macOS)
 1. Full screen, "Also capture mobile" on, Scan → no new tab or window; the card says "skipped in full screen".

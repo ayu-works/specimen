@@ -136,17 +136,22 @@ async function tabsIn(windowId: number) {
   }
 }
 
+const blank = (u: string | undefined) => !u || u === 'about:blank';
+
 /**
- * The one tab `windows.create` added to an existing window. A single new id is ours whatever its
- * url (the page may have redirected); with several, the url decides. Undefined unless exactly
- * one is found, so we never close a tab the user had open.
+ * The one tab `windows.create` added to an existing window: a new id on `url`, or one still
+ * blank (loading). Undefined unless exactly one matches, so a tab the user just opened (a new
+ * tab page) is never closed. A page that already redirected is left too: a stray tab is the
+ * safe failure.
  */
 async function createdTab(windowId: number, before: Set<number>, url: string) {
   const after = await tabsIn(windowId);
   const added = (after ?? []).filter((t) => t.id !== undefined && !before.has(t.id));
-  if (added.length === 1) return added[0]?.id;
   const onUrl = added.filter((t) => sameUrl(t.url, url) || sameUrl(t.pendingUrl, url));
-  return onUrl.length === 1 ? onUrl[0]?.id : undefined;
+  if (onUrl.length === 1) return onUrl[0]?.id;
+  if (onUrl.length > 1) return undefined;
+  const loading = added.filter((t) => blank(t.url) && blank(t.pendingUrl));
+  return added.length === 1 && loading.length === 1 ? loading[0]?.id : undefined;
 }
 
 /**
@@ -209,11 +214,13 @@ export async function captureMobile(
     focused: false,
   });
   if (!win) throw new Error('Could not open the mobile window');
-  // Not awaited: any delay between create and waitForTabLoad can miss the popup's load in the
-  // E2E browser (T5.03); storage writes from one page apply in order, so the later clear wins.
-  if (win.id !== undefined && win.id !== homeId) void rememberMobileWindow(win.id);
   // Chrome put the page in an existing window (one of ours never has more than one tab).
   const intoExisting = (win.id !== undefined && win.id === homeId) || (win.tabs?.length ?? 0) > 1;
+  // Only a window we created is recorded for recovery: never one of the user's.
+  const ownWindow = !intoExisting && win.id !== undefined && win.id !== homeId;
+  // Not awaited: any delay between create and waitForTabLoad can miss the popup's load in the
+  // E2E browser (T5.03); storage writes from one page apply in order, so the later clear wins.
+  if (ownWindow) void rememberMobileWindow(win.id as number);
   let strayTab: number | undefined;
   try {
     if (intoExisting) {
@@ -240,7 +247,7 @@ export async function captureMobile(
     if (intoExisting) {
       if (strayTab !== undefined) await chrome.tabs.remove(strayTab).catch(() => {});
     } else if (win.id !== undefined) await chrome.windows.remove(win.id).catch(() => {});
-    if (win.id !== undefined && win.id !== homeId) await rememberMobileWindow(null);
+    if (ownWindow) await rememberMobileWindow(null);
   }
 }
 

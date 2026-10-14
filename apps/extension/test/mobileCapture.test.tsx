@@ -46,8 +46,8 @@ interface RigOpts {
   scannedTabWindow?: { id: number; state: WinState };
   /** The scanned tab's current url (default: the scanned page). */
   scannedTabUrl?: string;
-  /** The new tab Chrome put in the user's window has redirected away from the scanned url. */
-  redirected?: boolean;
+  /** The single new tab in the user's window: redirected away, or a new tab page the user opened. */
+  newTabUrl?: string;
   /** `chrome.debugger` is not bound in this context although the permission is held. */
   noDebuggerApi?: boolean;
   /** What `windows.create` hands back: a real popup (default), a full-screen window, or the panel's own window. */
@@ -79,9 +79,7 @@ function rig(opts: RigOpts): Rig {
         return { id: 2, type: 'normal', state: 'normal', tabs: otherTabs };
       if (created === 'fullscreen')
         return { id: 7, type: 'normal', state: 'fullscreen', tabs: [{ id: 42 }] };
-      const ours = opts.redirected
-        ? { id: 9, url: 'https://x.test/en/' }
-        : { id: 9, pendingUrl: PAGE };
+      const ours = opts.newTabUrl ? { id: 9, url: opts.newTabUrl } : { id: 9, pendingUrl: PAGE };
       panelTabs = [panelTabs[0], ours, ...panelTabs.slice(1)] as typeof panelTabs;
       if (created === 'panel-window-ambiguous') panelTabs.push({ id: 11, url: PAGE });
       return { ...panelWin, tabs: panelTabs };
@@ -387,17 +385,36 @@ describe('captureMobile in full screen', () => {
 });
 
 describe('captureMobile in full screen: more failure paths', () => {
-  it("T5.11 a redirected new tab in the user's window is still the one closed (single new id)", async () => {
+  it("T5.11 a lone new tab not on the page (the user's new tab page, or a redirect) is never closed", async () => {
+    for (const newTabUrl of ['chrome://newtab/', 'https://x.test/en/']) {
+      const r = rig({ widths: [390], debuggerGranted: false, created: 'panel-window', newTabUrl });
+      const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
+      expect((err as MobileSkippedError).reason).toBe('tabbed');
+      expect(r.tabsRemove).not.toHaveBeenCalled();
+      expect(r.windows.remove).not.toHaveBeenCalled();
+    }
+  });
+
+  it('T5.11 a lone new tab still loading (about:blank) is ours and is closed', async () => {
     const r = rig({
       widths: [390],
       debuggerGranted: false,
       created: 'panel-window',
-      redirected: true,
+      newTabUrl: 'about:blank',
     });
-    const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect((err as MobileSkippedError).reason).toBe('tabbed');
-    expect(r.tabsRemove).toHaveBeenCalledTimes(1);
+    await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch(() => {});
     expect(r.tabsRemove).toHaveBeenCalledWith(9);
+  });
+
+  it("T5.11 another of the user's windows is never recorded for recovery", async () => {
+    const r = rig({ widths: [390], debuggerGranted: false, created: 'other-window' });
+    await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch(() => {});
+    const writes = (r.chrome.storage.session.set as Mock).mock.calls.map((c) => c[0]);
+    expect(writes.some((w) => 'mobile.window' in w)).toBe(false);
+    // So a later recovery (panel closed mid-capture) has no window of theirs to close.
+    r.chrome.runtime.getContexts = vi.fn(async () => [{}]) as never;
+    r.chrome.storage.session.data.set('mobile.emulatingTab', 5);
+    await recoverMobileCapture();
     expect(r.windows.remove).not.toHaveBeenCalled();
   });
 
