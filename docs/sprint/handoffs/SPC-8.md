@@ -108,8 +108,10 @@ passing with no fixme.
     ≥400 response listener.
   - `pnpm gate` green on 2026-10-14 after the fixes: exit 0, e2e 43/43 (17 site), check-ids 87.
 
+- Lens A round 2 (`SPC-8-a-r2.md`): 0C/0H/0M/0L, approved.
+
 ## Next
-- PE round 2 (H1 and the new negatives). Fold in anything else that comes back.
+- Nothing open on my side. Waiting for the owner to merge (the orchestrator merges). The PR changes `site/`, which goes live on merge.
 
 ## How to resume
 - Worktree `Specimen-wt/spc-8`, branch `exec/spc-8`. Read this file; PE is `pe-5e`, orchestrator `specimen-b0`.
