@@ -105,6 +105,9 @@ const show = (m: number | null) => (m === null ? 'missing' : String(Number((m * 
 
 export function toMarkdown(results: PageResult[], bar = BAR): string {
   const problems = verdict(results, bar);
+  const fonts = results.flatMap((r) => r.fontProblems.map((p) => `${r.page}: ${p}`));
+  // A pass measured without the web fonts isn't the real page; say so on the verdict line too.
+  const pass = fonts.length ? '**Pass (fallback fonts).**' : '**Pass.**';
   const lines = [
     `### T7.02 Lighthouse (median of ${RUNS} runs, bar: every score ≥ ${bar * 100})`,
     '',
@@ -115,10 +118,9 @@ export function toMarkdown(results: PageResult[], bar = BAR): string {
     ),
     '',
     problems.length === 0
-      ? '**Pass.**'
+      ? pass
       : `**Below the bar:**\n${problems.map((p) => `- ${p}`).join('\n')}`,
   ];
-  const fonts = results.flatMap((r) => r.fontProblems.map((p) => `${r.page}: ${p}`));
   if (fonts.length) lines.push('', `**Warning: ${FONTS_WARNING}.**`, ...fonts.map((f) => `- ${f}`));
   return `${lines.join('\n')}\n`;
 }

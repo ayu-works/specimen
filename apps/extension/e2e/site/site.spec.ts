@@ -110,15 +110,14 @@ test.describe('website (site/)', () => {
     }) => {
       const context = await newContext(server.origin, true, 'blocked');
       const { page, problems } = await openPage(context, server.origin + p, server.origin);
-      // The only problems are the two font 404s (blocked on purpose) and their console errors.
-      const notFound =
-        'console error: Failed to load resource: the server responded with a status of 404 (Not Found)';
-      expect(problems.sort()).toEqual(
-        [
-          ...FONT_PATHS.map((f) => `HTTP 404 for ${server.origin}${f}`),
-          ...FONT_PATHS.map(() => notFound),
-        ].sort(),
+      // The only problems are the two font 404s (blocked on purpose) and one console error each. The
+      // console text is Chromium's, so only its 404 is matched; the URLs carry the real signal.
+      const consoleErrors = problems.filter((m) => m.startsWith('console error: '));
+      expect(problems.filter((m) => !m.startsWith('console error: ')).sort()).toEqual(
+        FONT_PATHS.map((f) => `HTTP 404 for ${server.origin}${f}`).sort(),
       );
+      expect(consoleErrors).toHaveLength(FONT_PATHS.length);
+      for (const m of consoleErrors) expect(m).toMatch(/\b404\b/);
       // Proves the font check isn't vacuous: with the font files missing, neither face loads.
       expect(await fontProblems(page)).toEqual([
         'font not loaded: Press Start 2P',

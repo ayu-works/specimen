@@ -113,8 +113,14 @@ recorded below and shows in the CI job summary.
 - Exit 2 verified (PLAYWRIGHT_BROWSERS_PATH=/nonexistent → "did not run", exit 2).
 - `pnpm gate` 2026-10-14: exit 0; e2e 51/51 (17 site + 8 T7.02 report); check-ids 87 (phases 0–5).
 
+- PR #22 opened (base `exec/spc-8`); commented on Linear; specimen-b0 told.
+- CI run 38574215249 (`T7.02 Lighthouse (report only)`, ubuntu-24.04): `/` and `/privacy/` 100/100/100/100, Pass.
+- Lens A r1 (`docs/sprint/reviews/SPC-11-a-r1.md`): 0C/0H/1M/2L. M1: CI table added to the PR body. L1: "Pass (fallback
+  fonts)" when fonts failed (+ test). L2: the fonts-blocked test matches console 404s by regex; URL 404s stay exact.
+  `pnpm gate` exit 0 after the fixes (e2e 51/51).
+
 ## Next
-- PR (base `exec/spc-8`) → Linear comment → message specimen-b0. Then fold review findings.
+- Wait for lens B (and any lens A r2); fold findings in new commits.
 
 ## How to resume
 - Read this file and `git log`, then continue from "Next". Local run: `pnpm -F @specimen/extension lighthouse [--out dir]`.

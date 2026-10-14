@@ -127,6 +127,8 @@ test.describe('T7.02 report', () => {
     const md = toMarkdown(results);
     expect(md).toContain(`**Warning: ${FONTS_WARNING}.**`);
     expect(md).toContain(`- /: ${FONT_FILE} → failed`);
+    expect(md).toContain('**Pass (fallback fonts).**');
+    expect(md).not.toContain('**Pass.**');
   });
 
   test('T7.02 report: a font 404 or no font request at all also warns', () => {
