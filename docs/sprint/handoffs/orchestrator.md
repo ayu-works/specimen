@@ -3,6 +3,12 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-14 14:01 (PAUSED by the owner)
+
+- The owner said "stop everything for now". Nothing merges and nothing new starts until they say resume.
+- pe-5e and spc-14-6b were told to save their handoffs (pe.md, SPC-14.md in their worktrees) and stop. Their panes and worktrees stay open so they can resume.
+- To resume: read this file, then SPC-14.md in ../Specimen-wt/spc-14 and pe.md in ../Specimen-wt/pe; `herdr agent list`; continue the SPC-14 plan approval.
+
 ## UPDATE 2026-10-14 (website shipped in one deploy; SPC-14 last)
 
 - **Done:** SPC-5, 6, 7, 8, 11, 12, 13, 15. #19 (with #22 folded in) merged as bbc8854: **one Netlify deploy**; the live site was checked with curl (new CSP, self-hosted fonts, no Google requests, redirects OK); main CI and Lighthouse green. #21 merged as 78c07f6.
