@@ -1,0 +1,5 @@
+# Reviewed gitleaks false positives, by fingerprint only (commit:file:rule:line). One reason per entry.
+# Dummy key (sk-test- plus digits) used as plaintext in the T3.10 encryption round-trip test.
+9a369b2ec0657d1513e2ef2aca645b77a30f5006:packages/ai/src/secrets/crypto.test.ts:generic-api-key:11
+# The lens-A review quotes that same dummy test key while checking the entry above.
+02e2e88c2ca8e4f13eef8c4ddc60a68a1245e6c8:docs/sprint/reviews/SPC-6-a-r1.md:generic-api-key:11

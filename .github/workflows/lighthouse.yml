@@ -1,0 +1,92 @@
+# T7.02: Lighthouse report for the website (site/ served locally, never the live site). Non-blocking by owner
+# decision (2026-10-14): scores move between runs on shared machines, so this job reports and never fails on them.
+# Setup and the Lighthouse step are guarded and time-boxed: any failure or hang becomes a "did not run" warning.
+# The scores land in the job summary; the full HTML reports are an artifact. It isn't a required check.
+name: Lighthouse
+on:
+  pull_request:
+    paths:
+      - site/**
+      - netlify.toml
+      - apps/extension/e2e/site/**
+      - .github/workflows/lighthouse.yml
+      - apps/extension/package.json # the Lighthouse version (@lhci/cli)
+      - pnpm-lock.yaml
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - netlify.toml
+      - apps/extension/e2e/site/**
+      - .github/workflows/lighthouse.yml
+      - apps/extension/package.json # the Lighthouse version (@lhci/cli)
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: T7.02 Lighthouse (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # a normal run takes ~2 min; the steps below are time-boxed tighter
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # Setup failures (registry or apt flakes) are recorded, not fatal: the "did not run" warning reports them.
+      - id: install
+        continue-on-error: true
+        run: pnpm i --frozen-lockfile --filter '!@specimen/video'
+      - id: pw
+        continue-on-error: true
+        run: echo "version=$(pnpm -F @specimen/extension exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - id: chromium
+        continue-on-error: true
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -F @specimen/extension exec playwright install-deps chromium
+          else
+            pnpm -F @specimen/extension exec playwright install --with-deps chromium
+          fi
+      # Exit codes: 0 pass, 1 a score under 95, 2 (or anything else, or no code: setup failed or the step timed out)
+      # Lighthouse did not run. Recorded, never fatal.
+      - id: lh
+        if: steps.install.outcome == 'success' && steps.pw.outcome == 'success' && steps.chromium.outcome == 'success'
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          set +e
+          pnpm -F @specimen/extension lighthouse --out "$RUNNER_TEMP/lighthouse-report"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+      - if: steps.lh.outputs.code == '1'
+        run: echo "::warning title=T7.02 Lighthouse::A score is under 95 (see the job summary)"
+      - if: steps.lh.outputs.code != '0' && steps.lh.outputs.code != '1'
+        env:
+          CODE: ${{ steps.lh.outputs.code || 'none' }}
+          LH_OUTCOME: ${{ steps.lh.outcome }}
+        run: |
+          echo "::warning title=T7.02 Lighthouse::Lighthouse did not run (exit $CODE, step $LH_OUTCOME); no scores this time"
+          echo "**T7.02: Lighthouse did not run (exit $CODE, step $LH_OUTCOME).** See the step logs." >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: ${{ runner.temp }}/lighthouse-report
+          if-no-files-found: ignore
+          retention-days: 14
