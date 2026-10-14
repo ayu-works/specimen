@@ -86,7 +86,7 @@ A reviewed script is never edited in place after review: new commit, and the dif
 - Executors and reviewers: always fresh, reading only their brief, the ticket and the handoff file.
 - PE: hand over at ~35–40% context with a handoff file of ≤ 60 lines (`docs/sprint/handoffs/pe.md` in its
   worktree), then restart fresh.
-- Orchestrator: keeps `docs/sprint/handoffs/orchestrator.md` current so it can restart at any time. On restart it
+- Orchestrator: keeps `docs/sprint/handoffs/orchestrator.md` current so it can restart at any time, and **restarts itself fresh at ~40% context** (the owner runs `/exit`, then starts a new session with the restart prompt; not `--continue`). On restart it
   lists live agents, sends each its new session name, and re-syncs Linear.
 - All state lives in repo md files + Linear + worktrees, never only in a chat.
 

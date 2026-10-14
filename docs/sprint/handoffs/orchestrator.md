@@ -6,6 +6,25 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 ~22:15 (CURRENT STATE: read this block first)
+
+**Sprint 3 (backlog) in progress.** Plan: `docs/sprint/plan.md`. No CWS release (owner). Netlify: 1 deploy this month.
+
+Merged & Done today: #26 SPC-24 Council v2 (behind Labs), #28 SPC-16 key-safe errors, #27 SPC-25 fullscreen scan.
+
+**Open PRs (merge only on the owner's explicit "merge N"; check CI green + mergeStateStatus first):**
+- **#29 SPC-17** (lane A): sanitizer camelCase + DesignScan **v4** (owner OK'd v4). Lens A r1 approved; lens B r1 (2H/2M/3L) folded in fc69291. **Waiting: pe-99 re-review of fc69291.** Then ask the owner to merge.
+- **#30 SPC-26** (lane B): panel restore + one-time history scrub (knownKeys). Lens A r1 approved (1 LOW). **Waiting: lens-B + privacy reviewer (pane w1:p12, tab "review").** Close that pane only after `herdr agent wait --until idle`.
+- ⚠️ #29 and #30 both touch `apps/extension/src/lib/db.ts`: the second to merge must rebase on main, keeping both the write validation (SPC-17) and the scrub (SPC-26). The PE checks.
+
+**Live agents (session names change on restart; re-read ListAgents):** pe-99 (w1:pS, worktrees/pe), spc-17-13 (w1:pZ, worktrees/spc-17), spc-26-81 (w1:p0, worktrees/spc-26), reviewer for #30 (w1:p12). Tabs: control (orchestrator + PE), build (executors), review.
+
+**Queue after merges:** lane A → SPC-18 (Gemma abort/disconnect, llmHost) → SPC-21 (deny-capable stubs). Lane B → SPC-19 (import atomicity, silent save fail; the validate-on-write part is already done in #29) → SPC-20 (scan failure paths) → SPC-28 (waitForTabLoad race) → SPC-27 (Inspect Port hardening). Backlog: SPC-29 (T3.33 flake), SPC-30 (insufficient_quota), SPC-31 (Unicode brand folding), SPC-23 (site, held: a Netlify deploy), SPC-9/SPC-10 (owner).
+
+**Owner prefs (also in memory):** plain language, short updates, one-line reply templates; only the owner says merge; batch `site/` (Netlify Free); test copies of branch builds go to ~/Desktop/specimen-critique-test (load unpacked; separate storage from the store copy; Groq key + Labs flag already set there).
+
+**Rules learned:** the orchestrator restarts itself at ~40% context (like the PE); the PE sends ONE contract ruling; executors all in the `build` tab; read main with `git show origin/main:<path>`, never pull in another checkout; verify with `herdr agent wait` before closing panes.
+
 ## UPDATE 2026-10-15 (Sprint 3 in progress)
 
 - Merged today in Sprint 3: #26 Council v2 (986317e), #28 SPC-16 key-safe errors (8db2562), #27 SPC-25 fullscreen (d279592); all have main CI green and are Done in Linear.
