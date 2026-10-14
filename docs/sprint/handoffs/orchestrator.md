@@ -3,6 +3,14 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-14 (#18 merged; SPC-7 and SPC-11 started)
+
+- **SPC-6 Done:** #18 merged as 7fbadc2 (the owner said ok); main CI green; remote branch and worktree deleted.
+- **#19 is held on purpose** (the owner is on Netlify Free): SPC-11 is stacked on exec/spc-8 (PR base = exec/spc-8, Lighthouse in its own lighthouse.yml). Merge #19 once, after SPC-11 lands in it, telling the owner it costs one deploy.
+- Live sessions: pe-5e (w1:p9), spc-7-08 (w1:pE, worktree spc-7, lane A, owns ci.yml), spc-11-14 (w1:pF, worktree spc-11). The spc-8 worktree is kept (clean) until #19 merges; its session is closed.
+- Next in lane A after SPC-7: SPC-14 (check-ids 0–7), blocked by SPC-7, SPC-8 and SPC-11. Lane B after SPC-11: SPC-12 (docs).
+- The Extension audit tickets (SPC-16 to SPC-21) wait for the owner to decide (a v1.0.1 CWS release).
+
 ## UPDATE 2026-10-14 (reviews running; audit filed)
 
 - PR #18 (SPC-6): lens A r2 approved and lens B r1 folded in. Waiting for the executor to commit the review files, then CI green, then **ask the owner to merge**.
