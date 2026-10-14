@@ -47,7 +47,8 @@ object, not `ColorsSchema`, because `ThemeVariantSchema` calls `.partial().exten
 Migration (`migrations.ts`), so old saved scans and imports keep working:
 - **v1/v2/v3 → v4: repair, then strict parse.** For `colors.palette` and each variant palette: a token whose `hex`
   isn't `#rrggbb` is normalised when culori can parse it (`#ABC`, `#AABBCC`, `rgb(…)` → `toHex(…, alpha 1)`, and
-  `oklch` is recomputed); otherwise the token is **dropped**. Then any role whose id is no longer in its palette is
+  `oklch` is recomputed); otherwise the token is **dropped**. A value that parses as fully transparent (`transparent`, alpha 0)
+  counts as unfixable and is dropped; a translucent one keeps `alpha = min(token alpha, parsed alpha)` (lens B B5). Then any role whose id is no longer in its palette is
   **dropped** (the generators already treat a missing role as absent). When the repair changed anything, one line
   goes into `meta.warnings` (`"Repaired on upgrade: dropped 1 color, 1 role"`). The warning is informational and
   **per read**: `toStored` doesn't write back, so it shows on every read of that v3 row until the scan is re-saved
@@ -144,8 +145,10 @@ ticket's "migrate() rejects" check would become "migrate() repairs". I recommend
   - B7 (LOW): covered by the B1, B2 and B5 tests.
   - `pnpm gate` green: core 69, ai 158, extension 86, e2e 51.
 
+- Lens A r2 (pe-99): APPROVED on fc69291, 0 findings (`docs/sprint/reviews/SPC-17-a-r2.md`); condition CI green.
+
 ## Next
-- PE re-review of the lens-B fixes. Still to come: lens B and security reviews. Remaining reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
+- Still to come: lens B and security reviews. Remaining reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-17`. Part 1 can be built once the PE approves; Part 2 waits for
