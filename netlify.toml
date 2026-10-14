@@ -20,6 +20,7 @@
 [[headers]]
   for = "/*"
   [headers.values]
+    # connect-src 'self' only so Lighthouse's robots.txt check (T7.02) can run; the pages make no requests themselves.
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"

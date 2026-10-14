@@ -119,6 +119,15 @@ recorded below and shows in the CI job summary.
   fonts)" when fonts failed (+ test). L2: the fonts-blocked test matches console 404s by regex; URL 404s stay exact.
   `pnpm gate` exit 0 after the fixes (e2e 51/51).
 
+- Lens A r2: 0/0/0/0, approved (`docs/sprint/reviews/SPC-11-a-r2.md`).
+- Lens B r1 (`docs/sprint/reviews/SPC-11-b-r1.md`): 0C/0H/1M/4L. M1: job `timeout-minutes: 20`, Lighthouse step 10 min,
+  install/Playwright/Chromium steps `continue-on-error` and the step is skipped unless they succeeded; any failure,
+  timeout or skip becomes the "did not run" warning. Still unguarded: checkout, pnpm/node setup and cache (GitHub-
+  hosted actions). L1: paths include apps/extension/package.json + pnpm-lock.yaml. L3: README wording + woff2 sha.
+  L4: comment above the CSP in netlify.toml. **L2 not changed (scope):** the bar measures the pages and the
+  netlify.toml headers from a local server, not Netlify's CDN (compression, `Cache-Control`). A `/fonts/*`
+  `Cache-Control` header would be a separate live change; suggested as a follow-up for the orchestrator.
+
 ## Next
 - Wait for lens B (and any lens A r2); fold findings in new commits.
 
