@@ -3,12 +3,10 @@
  * run, so the SW (woken by `storage.onChanged`) halts it when the Labs flag goes off, the chosen
  * provider changes or a key changes, and it keeps the toolbar badge in step with the run.
  */
-import { KEY_AI, SECRET_PREFIX } from './aiSettings';
-import { interruptAllRunning } from './councilDb';
+import { KEY_AI, SECRET_PREFIX, SESSION_KEY } from './aiSettings';
+import { clearRuns, interruptAllRunning } from './councilDb';
 import { type CouncilRuntimeMsg, type RunStatus, SEEN_KEY } from './councilProtocol';
-import { flagKey } from './flags';
-
-const VAULT_KEY = 'session.vaultKey';
+import { flagKey, loadFlag } from './flags';
 
 type Change = { oldValue?: unknown; newValue?: unknown };
 
@@ -32,7 +30,7 @@ function fingerprint(v: unknown): string {
 export function shouldHalt(changes: Record<string, Change>, area: string): boolean {
   if (area === 'session') {
     // Locking the keys (the vault key removed) stops the run; unlocking doesn't.
-    const v = changes[VAULT_KEY];
+    const v = changes[SESSION_KEY];
     return v !== undefined && v.newValue === undefined;
   }
   if (area !== 'local') return false;
@@ -47,6 +45,11 @@ export interface GuardApi {
   hasOffscreen: () => Promise<boolean>;
   sendHalt: (msg: Extract<CouncilRuntimeMsg, { type: 'council.halt' }>) => Promise<unknown>;
   setBadge: (text: string, color?: string) => Promise<unknown>;
+  /** `council.seen` and the Labs flag, read fresh. */
+  getSeen: () => Promise<string | null>;
+  flagOn: () => Promise<boolean>;
+  /** Forget stored runs and `council.seen` (the flag went off: no goal text stays on disk). */
+  clear: () => Promise<unknown>;
   now?: () => number;
 }
 
@@ -67,13 +70,25 @@ export function createCouncilGuard(api: GuardApi) {
       if (area === 'local' && SEEN_KEY in changes) await badge('');
       if (!shouldHalt(changes, area)) return;
       const at = now();
+      const flag = area === 'local' ? changes[flagKey('critique')] : undefined;
       // No offscreen document → no run to stop (and don't create one).
-      if (!(await api.hasOffscreen().catch(() => false))) return;
-      await api.sendHalt({ type: 'council.halt', at }).catch(() => {});
+      if (await api.hasOffscreen().catch(() => false))
+        await api.sendHalt({ type: 'council.halt', at }).catch(() => {});
+      if (flag && flag.newValue !== true) {
+        await api.clear().catch(() => {});
+        await badge('');
+      }
     },
     async onRuntime(msg: CouncilRuntimeMsg): Promise<void> {
       if (msg.type === 'council.started') await badge('');
       else if (msg.type === 'council.finished') {
+        // A run halted by the flag going off writes its final record after the clear: clear again.
+        if (!(await api.flagOn().catch(() => false))) {
+          await api.clear().catch(() => {});
+          return;
+        }
+        // The open panel may have marked it seen before this message arrived.
+        if ((await api.getSeen().catch(() => null)) === msg.runId) return;
         const text = badgeFor(msg.status);
         await badge(text, text === BADGE.done ? '#16a34a' : '#dc2626');
       }
@@ -95,6 +110,15 @@ export function chromeCouncilGuard() {
     setBadge: async (text, color) => {
       await chrome.action.setBadgeText({ text });
       if (color) await chrome.action.setBadgeBackgroundColor({ color });
+    },
+    getSeen: async () => {
+      const v = (await chrome.storage.local.get(SEEN_KEY))[SEEN_KEY];
+      return typeof v === 'string' ? v : null;
+    },
+    flagOn: () => loadFlag('critique'),
+    clear: async () => {
+      await clearRuns();
+      await chrome.storage.local.remove(SEEN_KEY);
     },
   });
 }

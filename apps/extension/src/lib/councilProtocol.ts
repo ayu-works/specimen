@@ -3,6 +3,8 @@
  * The run lives in the offscreen document (`offscreen/councilHost.ts`); side panels attach to it
  * over Port `council`. The provider config, key included, travels only in `start` and stays in
  * the host's memory for that run: it is never in a record or in any host → panel message.
+ * No other extension page may read `council` Port messages: an `onConnect` listener that isn't
+ * the host must ignore (or disconnect) ports named `council`, because `start` carries the key.
  */
 import {
   CRITIQUE_LIMITS,
@@ -56,6 +58,8 @@ export type PanelMsg =
       personas: PersonaId[];
       rounds: number;
       context: string;
+      /** The panel's Date.now() at its final settings/key read (after the offscreen document exists). */
+      resolvedAt: number;
     }
   | { type: 'stop'; runId: string }
   | { type: 'attach' };
@@ -78,6 +82,8 @@ export const COUNCIL_REJECT = {
   malformed: 'The council could not start: the request was not understood. Reload the panel.',
   version: 'The council could not start: reload the panel after the extension updated.',
   provider: 'The council needs a local Gemma model or an API key provider. Pick one in Settings.',
+  busy: 'A council is already starting. Wait a moment.',
+  changed: 'Your AI settings changed. Start the council again.',
   error: 'The council stopped because of an unexpected error. Start again.',
 } as const;
 
@@ -128,7 +134,9 @@ export function parsePanelMsg(
     typeof m.rounds === 'number' &&
     m.rounds >= CRITIQUE_LIMITS.minRounds &&
     m.rounds <= CRITIQUE_LIMITS.maxRounds &&
-    isStr(m.context);
+    isStr(m.context) &&
+    typeof m.resolvedAt === 'number' &&
+    Number.isFinite(m.resolvedAt);
   if (!ok) return { ok: false, runId, error: COUNCIL_REJECT.malformed };
   return { ok: true, msg: m as unknown as PanelMsg };
 }

@@ -92,6 +92,7 @@ const start = (runId = 'run-1', over: Record<string, unknown> = {}) => ({
   personas: ['brand', 'a11y', 'frontend'],
   rounds: 2,
   context: 'A clinic booking app for older patients.',
+  resolvedAt: 1000,
   ...over,
 });
 
@@ -191,6 +192,8 @@ describe('council host (offscreen)', () => {
     host.attach(p);
     p.send({ type: 'attach' });
     expect(p.got).toEqual([{ type: 'snapshot', record: null }]);
+    expect(() => p.send(start('r', { resolvedAt: Number.NaN }))).not.toThrow();
+    expect(p.got.at(-1)).toEqual({ type: 'rejected', runId: 'r', error: COUNCIL_REJECT.malformed });
   });
 
   it('T3.30 the store keeps exactly the newest 5 runs', async () => {
@@ -256,23 +259,102 @@ describe('council host (offscreen)', () => {
     expect((await latestRun())?.status).toBe('stopped');
   });
 
-  it('T3.31 halt{at} is ignored by a run that started after the change (both orders)', async () => {
-    let t = 1000;
-    const { host, provider, notified } = setup(mock({ delayMs: 10, chunkSize: 2 }), {
-      now: () => t,
-    });
+  it('T3.31 halt{at} stops a run only when the change came at or after its settings read (both orders)', async () => {
+    const { host, provider, notified } = setup(mock({ delayMs: 10, chunkSize: 2 }));
     const p = fakePort();
     host.attach(p);
-    // The key changed at 999, then the user started a run at 1000: the run already uses the new key.
-    p.send(start());
+    // The panel read the settings at 1000; a change at 999 is older, so the run already uses it.
+    p.send(start('run-1', { resolvedAt: 1000 }));
     await vi.waitFor(() => expect(provider.calls.length).toBeGreaterThanOrEqual(1));
     host.halt(999);
-    // Started at 1000, the change at 1000 or later stops it.
+    await new Promise((r) => setTimeout(r, 30));
     expect(host.liveRunId).toBe('run-1');
-    t = 2000;
-    host.halt(1500);
+    host.halt(1000);
     await finished(notified);
     expect((await latestRun())?.status).toBe('stopped');
+  });
+
+  it('T3.31 a start whose settings read is older than the last halt is rejected; a newer one runs', async () => {
+    const { host, provider, notified } = setup();
+    host.halt(5000);
+    const p = fakePort();
+    host.attach(p);
+    p.send(start('stale', { resolvedAt: 4999 }));
+    expect(p.got).toEqual([{ type: 'rejected', runId: 'stale', error: COUNCIL_REJECT.changed }]);
+    expect(provider.calls).toHaveLength(0);
+    p.send(start('fresh', { resolvedAt: 5001 }));
+    await finished(notified, 'fresh');
+    expect((await latestRun())?.status).toBe('done');
+  });
+
+  it('T3.31 a stop or halt while the provider is still being built: no call, a stopped run', async () => {
+    for (const how of ['stop', 'halt-after', 'halt-before'] as const) {
+      await _resetCouncilDb();
+      let resolve: (v: ReturnType<typeof mock>) => void = () => {};
+      const provider = mock();
+      const notified: CouncilRuntimeMsg[] = [];
+      const host = createCouncilHost({
+        makeProvider: () => new Promise((r) => (resolve = r as typeof resolve)),
+        notify: (m) => notified.push(m),
+        engine: { tokensPerMinute: 0 },
+      });
+      const p = fakePort();
+      host.attach(p);
+      p.send(start('run-1', { resolvedAt: 1000 }));
+      // A second start while the first is being built is refused, not queued.
+      const q = fakePort();
+      host.attach(q);
+      q.send(start('run-2'));
+      expect(q.got).toEqual([{ type: 'rejected', runId: 'run-2', error: COUNCIL_REJECT.busy }]);
+      if (how === 'stop') p.send({ type: 'stop', runId: 'run-1' });
+      if (how === 'halt-after') host.halt(1000);
+      if (how === 'halt-before') host.halt(999);
+      resolve(provider);
+      await finished(notified);
+      const rec = await latestRun();
+      if (how === 'halt-before') {
+        expect(rec?.status).toBe('done');
+        expect(provider.calls).toHaveLength(7);
+      } else {
+        expect(rec?.status).toBe('stopped');
+        expect(provider.calls).toHaveLength(0);
+      }
+    }
+  });
+
+  it('T3.30 the final write fails twice: attach still gets the finished run from memory, until the next run', async () => {
+    let n = 0;
+    const put = vi.fn(async (rec: CouncilRecord) => {
+      n++;
+      if (rec.status !== 'running') throw new Error('quota');
+      return putRun(rec);
+    });
+    const { host, notified } = setup(mock(), { put });
+    const p = fakePort();
+    host.attach(p);
+    p.send(start());
+    await finished(notified);
+    expect(n).toBeGreaterThan(0);
+    expect((await latestRun())?.status).toBe('running');
+    const q = fakePort();
+    host.attach(q);
+    q.send({ type: 'attach' });
+    expect(q.got[0]).toMatchObject({
+      type: 'snapshot',
+      record: { runId: 'run-1', status: 'done' },
+    });
+    expect((q.got[0] as { record: CouncilRecord }).record.verdict?.works).toEqual([
+      'Accent #5e6ad2',
+    ]);
+    // The next accepted run clears it.
+    p.send(start('run-2', { resolvedAt: 2000 }));
+    await vi.waitFor(() =>
+      expect(p.got.some((m) => m.type === 'snapshot' && m.record?.runId === 'run-2')).toBe(true),
+    );
+    const r = fakePort();
+    host.attach(r);
+    r.send({ type: 'attach' });
+    expect((r.got[0] as { record: CouncilRecord }).record.runId).toBe('run-2');
   });
 
   it('T3.32 a provider error ends the run with fixed text and no verdict', async () => {

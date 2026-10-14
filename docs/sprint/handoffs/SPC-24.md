@@ -262,17 +262,31 @@ T3.28–T3.33 are OK.
 7. **Privacy line:** the setup text and the footer say each turn sends the measured values **plus the user's goal
    text** to <provider>, and that the run continues with the panel closed.
 
-Frozen contract v1, final:
-- Panel → host (Port `council`): `start{ v, runId, scan, provider, personas, rounds, context }` · `stop{ runId }` ·
-  `attach{}`.
+Frozen contract v1, final (three amendments from A-r1 / B-r1, **owner OK 2026-10-15**):
+- Panel → host (Port `council`): `start{ v, runId, scan, provider, personas, rounds, context, resolvedAt }` ·
+  `stop{ runId }` · `attach{}`.
+  - **`resolvedAt` (amended B-r1/A-r1):** the panel's `Date.now()` at its final settings/key read, which happens after
+    `offscreen.ensure`. The panel then reads the flag and the spec again; if either changed, it doesn't send. The host
+    keeps `lastHaltAt`, rejects a start with `resolvedAt <= lastHaltAt`, and `halt(at)` stops a live or pending run
+    whose `resolvedAt <= at`. It must be a finite number.
 - Host → panel: `snapshot{ record | null }` · `turn{ runId, index, turn }` · `status{ runId, status, verdict?,
-  error? }` · `rejected{ runId | null, error }`.
-- Host → SW (runtime): `council.started{ runId }` · `council.finished{ runId, status }`.
+  summaryText?, error? }` · `rejected{ runId | null, error }`.
+  - **`summaryText?` (amended A-r1):** the sanitized moderator text, the fallback when no verdict parses.
+  - **`snapshot.record` (amended B-r1):** the live run, else the host's last finished run since the document started,
+    else null. `lastFinished` is cleared when the next run is accepted. A non-running snapshot never sets `starting`
+    or blocks Start, and the panel adopts it only over its own copy of the same run that still says `running`.
+- Host → SW (runtime): `council.started{ runId }` · `council.finished{ runId, status }`. Panels also listen to these
+  (B-M4).
 - SW → host (runtime): `council.halt{ at }`.
 
-### Known limitations (unchanged)
+### Known limitations
 - Sanitizer camelCase gap (SPC-17); WebLLM interrupt limits (SPC-18); TPM keyed by provider, not model (A-r2 L1).
 - The flag ships in any release built from `main` with this code, so the owner's rule stands: no merge before go.
+- B-L4: any extension page with an `onConnect` listener also receives `council` Ports. Today only Inspect has one,
+  and it ignores non-`inspector` ports. `councilProtocol.ts` now says no other page may read them. Hardening Inspect
+  (disconnect non-`inspector` ports) touches a file outside lane C: a follow-up for the orchestrator. Until then, a
+  live Inspect listener in another window may delay a crashed host's disconnect (the panel shows `running` until it
+  is reopened).
 
 ## Done (2026-10-15)
 - Plan approved by pe-1b with changes 1–7 (folded in above). PE handed over to pe-99.
@@ -297,10 +311,36 @@ Frozen contract v1, final:
 - Tests: `test/councilHost.test.ts` (T3.30–T3.32), `test/councilGuard.test.ts` (T3.31–T3.32),
   `test/council.test.tsx` (T3.32–T3.33). `docs/TESTING.md`: T3.25/T3.26 ⊘, T3.28–T3.34 added.
 
+## Review round 1 (A-r1 by pe-99, B-r1 by spc-24-fc), folded
+- **A-M1 / B-M1 / B-L2** (a stop, halt or settings change during start is lost): the host keeps a cancellable
+  `pending` start while it builds the provider. `stop{runId}` or a covering halt cancels it, and the run is stored
+  `stopped` with no call; a second start meanwhile is `rejected` "busy". Plus `start.resolvedAt` and `lastHaltAt`
+  (contract amendment, owner OK). The panel re-reads the flag and the spec after `ensure` before sending
+  (`SETTINGS_CHANGED`). Tests: T3.31 (deferred `makeProvider` with stop / halt after / halt before; `lastHaltAt`
+  reject; both halt orders); T3.33 (flag or provider changed during ensure → nothing sent).
+- **A-C1:** `status.summaryText?` written into the contract (owner OK).
+- **A-L1 / B-L1** (✓ after seen): the SW reads `council.seen` before setting the badge. Test in T3.31.
+- **A-L2:** `SESSION_KEY` exported from `aiSettings.ts`, used by the guard and its test.
+- **B-H1** (host dies with a panel attached → stuck `running`): when the host is known to be gone (disconnect, no
+  document, unknown run), `interrupt` re-reads the stored record and writes the conditional with its `updatedAt`.
+  Test (T3.32): two stored turns, then a crash → `interrupted` in the UI and the DB. Mutation-checked: it fails
+  without the fix.
+- **B-M2** (failed final write → ✓ then "interrupted"): the host keeps `lastFinished` and answers `attach` with it.
+  The panel shows it and stores it only over a copy still `running` (`saveIfStillRunning`). Tests: T3.30 (host) and
+  T3.32 (panel reopen shows the verdict, the DB becomes `done`).
+- **B-M3** (goal text kept forever): turning the flag off clears `specimen-council` and `council.seen` (SW guard), and a
+  run that finishes after that clears again. The setup privacy line says the last 5 runs, with the goal, are kept
+  until the council is turned off. Test in T3.31.
+- **B-M4** (a second window doesn't see a run): one long-lived Port per panel (never dropped on an empty snapshot or
+  after a status), and panels listen for `council.started`/`finished` to attach or refresh. Test (T3.33): a run
+  started by another window shows up as running, then done.
+- **B-L3** (late answer after the attach timeout): a late running snapshot is adopted. Test in T3.32.
+- **B-L4:** documented (see Known limitations; follow-up outside the lane).
+- **B-L5:** the note reads "for an earlier scan of this site" or "for <host>, not the current scan".
+
 ## Next
-- `pnpm gate` green (2026-10-15). PR #26 is open (base main, owner steps = T3.34 in the body). The link is on SPC-24,
-  and specimen-53 and pe-99 have been told. Waiting for reviews (PE lens A, lens B + privacy). Not to be merged
-  before the owner's go.
+- PR #26 is open. Round 1 is folded (above); pe-99 re-reviews (A round 2). Not to be merged before the owner's go
+  (T3.34).
 
 ## How to resume
 Branch `exec/spc-24` in `worktrees/spc-24`. Read this file, then `docs/sprint/reviews/SPC-24-*` for findings; fix in

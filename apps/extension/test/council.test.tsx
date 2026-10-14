@@ -8,8 +8,8 @@ import App from '../src/entrypoints/sidepanel/App';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
 import { SETUP_HINT } from '../src/lib/aiRuntime';
-import { _resetCouncil, councilIo } from '../src/lib/council';
-import { _resetCouncilDb, latestRun, putRun } from '../src/lib/councilDb';
+import { _resetCouncil, councilIo, SETTINGS_CHANGED } from '../src/lib/council';
+import { _resetCouncilDb, getRun, latestRun, putRun } from '../src/lib/councilDb';
 import { COUNCIL_REJECT, type CouncilRecord, SEEN_KEY } from '../src/lib/councilProtocol';
 import { flagKey } from '../src/lib/flags';
 import { createPortPair } from '../src/lib/localPort';
@@ -31,17 +31,24 @@ function mock(opts: Parameters<typeof createMockProvider>[0] = {}) {
   });
 }
 
-/** A real council host on the far end of an in-memory Port pair. */
+type RuntimeListener = (msg: unknown) => unknown;
+let runtimeListeners: Set<RuntimeListener>;
+const hostEnds: { disconnect(): void }[] = [];
+
+/** A real council host on the far end of an in-memory Port pair. Its SW notices reach the panel. */
 function wireHost(provider = mock(), extra: Partial<Parameters<typeof createCouncilHost>[0]> = {}) {
   const host = createCouncilHost({
     makeProvider: async () => provider,
-    notify: () => {},
+    notify: (m) => {
+      for (const l of runtimeListeners) l(m);
+    },
     engine: { tokensPerMinute: 0, retryDelaysMs: [5] },
     ...extra,
   });
   councilIo.connect = () => {
     const [panel, hostEnd] = createPortPair('council');
     host.attach(hostEnd as never);
+    hostEnds.push(hostEnd);
     return panel as never;
   };
   councilIo.hasOffscreen = async () => true;
@@ -78,6 +85,12 @@ function record(over: Partial<CouncilRecord> = {}): CouncilRecord {
 
 beforeEach(async () => {
   chrome = installChrome();
+  runtimeListeners = new Set();
+  hostEnds.length = 0;
+  (chrome.runtime as unknown as { onMessage: unknown }).onMessage = {
+    addListener: (l: RuntimeListener) => runtimeListeners.add(l),
+    removeListener: (l: RuntimeListener) => runtimeListeners.delete(l),
+  };
   Element.prototype.scrollIntoView = vi.fn();
   useStore.setState({
     scan: sampleScan,
@@ -327,5 +340,134 @@ describe('Ask + council (component)', () => {
     render(<App />);
     await screen.findByTestId('council-running');
     await screen.findByTestId('council-report', {}, { timeout: 20_000 });
+  });
+
+  it('T3.32 the host dies mid-run with the panel attached (after turns were stored) → interrupted', async () => {
+    let dead = false;
+    const { provider } = wireHost(mock({ delayMs: 20, chunkSize: 2 }), {
+      put: (rec) => (dead ? Promise.resolve() : putRun(rec)),
+    });
+    inject(provider);
+    await flagOn();
+    useStore.setState({ askMode: 'council' });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask the council' }));
+    await screen.findByTestId('council-running');
+    await waitFor(async () => expect(await latestRun()).not.toBeNull());
+    const first = (await latestRun()) as CouncilRecord;
+    // Two turns stored: the stored updatedAt has moved past the panel's copy.
+    await waitFor(
+      async () =>
+        expect(
+          (await getRun(first.runId))?.turns.filter((t) => t.status === 'done').length,
+        ).toBeGreaterThanOrEqual(2),
+      { timeout: 10_000 },
+    );
+    expect((await getRun(first.runId))?.updatedAt).not.toBe(first.updatedAt);
+    // The offscreen document crashes: no more writes, the Port drops.
+    dead = true;
+    for (const e of hostEnds) e.disconnect();
+    await screen.findByTestId('council-interrupted');
+    expect((await getRun(first.runId))?.status).toBe('interrupted');
+    expect(screen.getByRole('button', { name: 'Start again' })).toBeTruthy();
+    await waitFor(() => expect(headerMood()).toBe('idle'));
+  });
+
+  it('T3.33 a run started from another window shows up here (running, then done)', async () => {
+    const provider = mock({ delayMs: 10, chunkSize: 3 });
+    const { host } = wireHost(provider);
+    inject(provider);
+    await flagOn();
+    // This panel opened before any offscreen document existed: no Port yet.
+    councilIo.hasOffscreen = async () => false;
+    useStore.setState({ askMode: 'council' });
+    render(<App />);
+    await screen.findByTestId('council-setup');
+    // The other window's panel starts a run on the same host.
+    const [other, hostEnd] = createPortPair('council');
+    host.attach(hostEnd as never);
+    other.postMessage({
+      type: 'start',
+      v: 1,
+      runId: 'elsewhere',
+      scan: sampleScan,
+      provider: { kind: 'chrome' },
+      personas: ['brand', 'a11y'],
+      rounds: 1,
+      context: '',
+      resolvedAt: Date.now(),
+    });
+    await screen.findByTestId('council-running');
+    await screen.findByTestId('council-report', {}, { timeout: 10_000 });
+  });
+
+  it('T3.33 settings changed while the host was being created: nothing is sent', async () => {
+    for (const change of ['flag', 'provider'] as const) {
+      const { provider } = wireHost();
+      inject(provider);
+      await flagOn();
+      useStore.setState({ askMode: 'council' });
+      councilIo.ensure = async () => {
+        if (change === 'flag') await chrome.storage.local.set({ [flagKey('critique')]: false });
+        else inject(mock({ id: 'other-provider' }));
+      };
+      const r = render(<App />);
+      if (change === 'flag') {
+        // The click happens with the flag on; it goes off during ensure.
+        fireEvent.click(await screen.findByRole('button', { name: 'Ask the council' }));
+        await waitFor(async () => expect(await latestRun()).toBeNull());
+        expect(provider.calls).toHaveLength(0);
+      } else {
+        fireEvent.click(await screen.findByRole('button', { name: 'Ask the council' }));
+        expect((await screen.findByTestId('council-rejected')).textContent).toBe(SETTINGS_CHANGED);
+        expect(provider.calls).toHaveLength(0);
+        expect(await latestRun()).toBeNull();
+      }
+      r.unmount();
+      _resetCouncil();
+      Object.assign(councilIo, io);
+    }
+  });
+
+  it('T3.32 the final write failed twice: reopening still shows the verdict and stores it', async () => {
+    const { provider } = wireHost(mock({ delayMs: 2, chunkSize: 8 }), {
+      put: (rec) => (rec.status === 'running' ? putRun(rec) : Promise.reject(new Error('quota'))),
+    });
+    inject(provider);
+    await flagOn();
+    useStore.setState({ askMode: 'council' });
+    const first = render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask the council' }));
+    await screen.findByTestId('council-report', {}, { timeout: 10_000 });
+    expect((await latestRun())?.status).toBe('running');
+    first.unmount();
+    _resetCouncil();
+    render(<App />);
+    await screen.findByTestId('council-report');
+    await waitFor(async () => expect((await latestRun())?.status).toBe('done'));
+  });
+
+  it('T3.32 a slow host that answers after the attach timeout still wins', async () => {
+    const rec = record({ runId: 'live', status: 'running', verdict: null });
+    await putRun(rec);
+    councilIo.hasOffscreen = async () => true;
+    councilIo.attachTimeoutMs = 30;
+    councilIo.connect = () => {
+      const [panel, hostEnd] = createPortPair('council');
+      hostEnd.onMessage.addListener(((m: { type: string }) => {
+        if (m.type === 'attach')
+          setTimeout(
+            () => hostEnd.postMessage({ type: 'snapshot', record: { ...rec, updatedAt: 9 } }),
+            150,
+          );
+      }) as never);
+      return panel as never;
+    };
+    inject(mock());
+    await flagOn();
+    useStore.setState({ askMode: 'council' });
+    render(<App />);
+    await screen.findByTestId('council-interrupted');
+    await screen.findByTestId('council-running');
   });
 });

@@ -55,7 +55,13 @@ export function createCouncilHost(deps: HostDeps) {
   const now = deps.now ?? Date.now;
   const put = deps.put ?? putRun;
   const ports = new Set<HostPort>();
-  let live: { record: CouncilRecord; ctl: AbortController } | null = null;
+  let live: { record: CouncilRecord; ctl: AbortController; resolvedAt: number } | null = null;
+  /** A start whose provider is still being built; a stop or halt in that window cancels it. */
+  let pending: { runId: string; resolvedAt: number; cancelled: boolean } | null = null;
+  /** The latest settings change the SW reported, kept even with no run live. */
+  let lastHaltAt = Number.NEGATIVE_INFINITY;
+  /** The last finished run, kept in memory: if its final write failed, a panel can still get it. */
+  let lastFinished: CouncilRecord | null = null;
 
   const post = (port: HostPort, msg: HostMsg) => {
     try {
@@ -82,23 +88,32 @@ export function createCouncilHost(deps: HostDeps) {
       post(port, { type: 'snapshot', record: live.record });
       return;
     }
+    if (pending) {
+      post(port, { type: 'rejected', runId: msg.runId, error: COUNCIL_REJECT.busy });
+      return;
+    }
+    // The panel read the settings before a change the SW already reported: they're stale.
+    if (msg.resolvedAt <= lastHaltAt) {
+      post(port, { type: 'rejected', runId: msg.runId, error: COUNCIL_REJECT.changed });
+      return;
+    }
+    const t = now();
+    const pend = { runId: msg.runId, resolvedAt: msg.resolvedAt, cancelled: false };
+    pending = pend;
     let provider: LLMProvider | null = null;
     try {
       provider = await deps.makeProvider(msg.provider);
     } catch {
       provider = null;
+    } finally {
+      pending = null;
     }
     if (!provider) {
       post(port, { type: 'rejected', runId: msg.runId, error: COUNCIL_REJECT.provider });
       return;
     }
-    if (live) {
-      post(port, { type: 'snapshot', record: (live as { record: CouncilRecord }).record });
-      return;
-    }
     const { scan } = msg;
     const plan = critiquePlan(provider, scan, { personas: msg.personas, rounds: msg.rounds });
-    const t = now();
     const record: CouncilRecord = {
       v: 1,
       runId: msg.runId,
@@ -118,7 +133,10 @@ export function createCouncilHost(deps: HostDeps) {
       updatedAt: t,
     };
     const ctl = new AbortController();
-    live = { record, ctl };
+    // Stopped or halted while the provider was built: store a stopped run, make no call.
+    if (pend.cancelled) ctl.abort();
+    live = { record, ctl, resolvedAt: msg.resolvedAt };
+    lastFinished = null;
     notify({ type: 'council.started', runId: record.runId });
     broadcast({ type: 'snapshot', record });
     // Stored before the first call, so a panel reopened right away finds the run.
@@ -153,6 +171,7 @@ export function createCouncilHost(deps: HostDeps) {
     // The final state: one retry, then give up (a reattach marks a stuck `running` interrupted).
     await put(structuredClone(record)).catch(() => put(structuredClone(record)).catch(() => {}));
     live = null;
+    lastFinished = record;
     broadcast({
       type: 'status',
       runId: record.runId,
@@ -176,18 +195,22 @@ export function createCouncilHost(deps: HostDeps) {
           return;
         }
         const msg = parsed.msg;
-        if (msg.type === 'attach') post(port, { type: 'snapshot', record: live?.record ?? null });
+        if (msg.type === 'attach')
+          post(port, { type: 'snapshot', record: live?.record ?? lastFinished });
         else if (msg.type === 'stop') {
           if (live?.record.runId === msg.runId) live.ctl.abort();
+          if (pending?.runId === msg.runId) pending.cancelled = true;
         } else void start(port, msg).catch(() => {});
       });
     },
     /**
-     * The service worker saw the flag, the provider or a key change at `at`. A run started after
-     * that already uses the new settings, so it is left alone.
+     * The service worker saw the flag, the provider or a key change at `at`. A run whose panel read
+     * the settings after that already uses the new ones, so it is left alone.
      */
     halt(at: number): void {
-      if (live && live.record.startedAt <= at) live.ctl.abort();
+      lastHaltAt = Math.max(lastHaltAt, at);
+      if (live && live.resolvedAt <= at) live.ctl.abort();
+      if (pending && pending.resolvedAt <= at) pending.cancelled = true;
     },
     get liveRunId(): string | null {
       return live?.record.runId ?? null;

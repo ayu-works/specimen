@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KEY_AI } from '../src/lib/aiSettings';
+import { KEY_AI, SESSION_KEY } from '../src/lib/aiSettings';
 import { _resetCouncilDb, latestRun, putRun } from '../src/lib/councilDb';
 import { BADGE, createCouncilGuard, shouldHalt } from '../src/lib/councilGuard';
 import { type CouncilRecord, SEEN_KEY } from '../src/lib/councilProtocol';
@@ -12,9 +12,10 @@ const groq = {
   byok: { preset: 'groq', baseUrl: 'u', model: 'm' },
 };
 
-function guard(offscreen = true) {
+function guard(offscreen = true, state: { seen?: string | null; flag?: boolean } = {}) {
   const halts: number[] = [];
   const badges: string[] = [];
+  let clears = 0;
   const g = createCouncilGuard({
     hasOffscreen: async () => offscreen,
     sendHalt: async (m) => {
@@ -23,9 +24,14 @@ function guard(offscreen = true) {
     setBadge: async (t) => {
       badges.push(t);
     },
+    getSeen: async () => state.seen ?? null,
+    flagOn: async () => state.flag ?? true,
+    clear: async () => {
+      clears++;
+    },
     now: () => 4242,
   });
-  return { g, halts, badges };
+  return { g, halts, badges, clears: () => clears };
 }
 
 beforeEach(async () => {
@@ -64,8 +70,8 @@ describe('council guard (service worker)', () => {
   it('T3.31 any key change halts; locking halts, unlocking does not; other keys never do', () => {
     expect(shouldHalt({ 'secrets.groq': { newValue: { key: 'x' } } }, 'local')).toBe(true);
     expect(shouldHalt({ 'secrets.groq': { oldValue: { key: 'x' } } }, 'local')).toBe(true);
-    expect(shouldHalt({ 'session.vaultKey': { oldValue: {} } }, 'session')).toBe(true);
-    expect(shouldHalt({ 'session.vaultKey': { newValue: {} } }, 'session')).toBe(false);
+    expect(shouldHalt({ [SESSION_KEY]: { oldValue: {} } }, 'session')).toBe(true);
+    expect(shouldHalt({ [SESSION_KEY]: { newValue: {} } }, 'session')).toBe(false);
     expect(shouldHalt({ 'shortcut.pending': { newValue: 1 } }, 'session')).toBe(false);
     expect(shouldHalt({ [SEEN_KEY]: { newValue: 'r' } }, 'local')).toBe(false);
     expect(shouldHalt({ 'secrets.groq': { newValue: 1 } }, 'sync')).toBe(false);
@@ -128,6 +134,13 @@ describe('council guard (service worker)', () => {
       setBadge: async () => {
         throw new Error('nope');
       },
+      getSeen: async () => {
+        throw new Error('nope');
+      },
+      flagOn: async () => true,
+      clear: async () => {
+        throw new Error('nope');
+      },
     });
     await expect(
       g.onRuntime({ type: 'council.finished', runId: 'r', status: 'done' }),
@@ -135,5 +148,31 @@ describe('council guard (service worker)', () => {
     await expect(
       g.onStorageChanged({ 'secrets.x': { newValue: 1 } }, 'local'),
     ).resolves.toBeUndefined();
+  });
+
+  it('T3.31 no ✓ for a run the open panel already marked seen (the seen write can arrive first)', async () => {
+    const { g, badges } = guard(true, { seen: 'r' });
+    await g.onRuntime({ type: 'council.finished', runId: 'r', status: 'done' });
+    expect(badges).toEqual([]);
+    const other = guard(true, { seen: 'older' });
+    await other.g.onRuntime({ type: 'council.finished', runId: 'r', status: 'done' });
+    expect(other.badges).toEqual([BADGE.done]);
+  });
+
+  it('T3.31 the flag going off halts, forgets stored runs and clears the badge; a late finish clears again', async () => {
+    const { g, halts, badges, clears } = guard(true);
+    await g.onStorageChanged({ [flagKey('critique')]: { oldValue: true } }, 'local');
+    expect(halts).toEqual([4242]);
+    expect(clears()).toBe(1);
+    expect(badges).toEqual(['']);
+    // The halted run's final write lands after the clear; its finish clears again, no badge.
+    const off = guard(true, { flag: false });
+    await off.g.onRuntime({ type: 'council.finished', runId: 'r', status: 'stopped' });
+    expect(off.clears()).toBe(1);
+    expect(off.badges).toEqual([]);
+    // A key change alone halts but keeps the history.
+    const key = guard(true);
+    await key.g.onStorageChanged({ 'secrets.groq': { newValue: {} } }, 'local');
+    expect(key.clears()).toBe(0);
   });
 });

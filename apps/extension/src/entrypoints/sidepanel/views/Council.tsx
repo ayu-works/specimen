@@ -312,7 +312,8 @@ export function Council() {
       </Card>
       <p className="text-[11px] text-muted-foreground" data-testid="council-privacy">
         Each turn sends the measured values (no page text) plus your goal text to {provider.label}.
-        The run continues with the panel closed.
+        The run continues with the panel closed. The last 5 runs, with your goal, are kept on this
+        device until you turn the council off in Labs.
       </p>
     </div>
   );
@@ -362,6 +363,7 @@ function Finished({
   onAgain: () => void;
 }) {
   const other = scanId !== null && rec.scanId !== scanId;
+  const currentHost = useStore((s) => s.scan?.host);
   return (
     <div className="flex flex-col gap-3" data-testid="council-finished">
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -374,7 +376,9 @@ function Finished({
       </div>
       {other && (
         <p className="m-0 text-xs text-muted-foreground" data-testid="council-other-scan">
-          This verdict is for an earlier scan of {rec.scanHost}.
+          {currentHost === rec.scanHost
+            ? 'This verdict is for an earlier scan of this site.'
+            : `This verdict is for ${rec.scanHost}, not the current scan.`}
         </p>
       )}
       {rec.status === 'done' && <Report rec={rec} />}
