@@ -54,6 +54,7 @@ returns only historical mentions; `pnpm lint` (Biome ignores md, but run it anyw
 - Check: the rg command returns only the three Phase 3–5 "tests deferred …, which shipped in PR #9" history lines. `pnpm lint` clean.
 
 - Lens A r1 (0C/1H/2M/2L) folded in: H1 owner-merge rule, M1 Netlify batching rule, M2 Commands, L1 HANDOFF video job, L2 Phase 3.8 superseded.
+- pe-5e checked 8e023c0: lens A approves PR #21 (2026-10-14).
 
 ## Next
 - PR #21 open, Linear comment posted, specimen-b0 told. pe-5e is reviewing the PR itself (doc-only skips lens B, not the PE review). r1 folded; doc-only fixes get no re-review. Waiting for the owner's merge.
