@@ -6,7 +6,7 @@ Open-source (MIT) Chrome MV3 extension that measures a website's design system (
 - Repo: https://github.com/ayu-works/specimen (public). "Specimen" is a working name.
 
 ## Workflow
-The team workflow (roles, the ticket loop, reviews, Linear) is in `docs/sprint/setup.md`, with the Linear mapping in `docs/sprint/linear.md` and current work in `docs/sprint/plan.md`. Until sprint 1 ends, these files live only on branch `sprint/log`; from `main`, read them with `git show sprint/log:docs/sprint/setup.md`.
+The team workflow (roles, the ticket loop, reviews, Linear) is in `docs/sprint/setup.md`, with the Linear mapping in `docs/sprint/linear.md` and current work in `docs/sprint/plan.md`. Handoffs live in `docs/sprint/handoffs/` (start with `orchestrator.md`), reviews in `docs/sprint/reviews/`, and standups in `docs/sprint/standups/`.
 
 Three rules hold everywhere:
 - Tests ship in the same PR as the code (test IDs from `docs/TESTING.md`).
