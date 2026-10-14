@@ -119,12 +119,12 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T3.18 | U | Critique panel (SPC-22 spike): every turn's system prompt has the persona brief, the page-data rule, and the contrast pairs (capped, before) + compactScan in one `<page_data>`; injection text stays inside it |
 | T3.19 | U | Critique panel: default 3 reviewers × 2 rounds + 1 summary in order; the cap (2–3 reviewers, 1–3 rounds) is enforced in the engine |
 | T3.20 | U | Critique panel: Stop mid-stream, before start, or by a stream that ends quietly on abort → turn and run `stopped`, no further call or summary |
-| T3.21 | U | Critique panel: a provider error mid-round ends the run with a fixed per-kind message (never the provider's text); a rate limit is retried once after a cancellable backoff |
+| T3.21 | U | Critique panel: a provider error mid-round ends the run with a fixed per-kind message (never the provider's text); a rate limit is retried up to 3 times after cancellable waits; known free-tier TPM limits (Groq) pace calls; a stalled stream times out; an empty reply is marked `empty` |
 | T3.22 | U | Critique panel: the brand sanitizer runs on every turn (snapshots, transcript, next request) and keeps measured values; an emptied turn is `filtered` |
 | T3.23 | U | Critique panel: a human message queued mid-turn reaches the next reviewer (clipped) without adding calls |
 | T3.24 | U | Critique panel: the transcript fits the context budget, keeping the newest turns and the latest human message |
 | T3.25 | U | Critique panel: `parseKeepChange` reads lenient keep/change lists and rejects prose |
-| T3.26 | C | Critique view: flag `flags.critique === true` gates the tab (bad values / storage error = off); no provider → Ask's setup hint; cap line; run, steer, Stop and scan change abort (mock provider) |
+| T3.26 | C | Critique view: flag `flags.critique === true` gates the tab (bad values / storage error = off); no provider → Ask's setup hint; cap line; run, steer; Stop, a scan change, the flag turned off, or a provider/key switch mid-run all stop the calls (mock provider) |
 | T3.27 | 🖐 | Owner: critique panel on 2–3 real sites with Groq (BYOK) in a dev build; go / no-go comment on SPC-22 |
 
 ## Phase 4: Library, Compose, Themes

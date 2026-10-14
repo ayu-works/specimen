@@ -33,10 +33,21 @@ function speaker(t: CritiqueTurn): string {
 
 function TurnBody({ t }: { t: CritiqueTurn }) {
   if (t.status === 'error') return <span className="text-destructive">{t.error}</span>;
-  if (t.status === 'retrying') {
+  if (t.status === 'waiting' || t.status === 'retrying') {
+    return (
+      <span className="text-muted-foreground" data-testid="critique-wait">
+        {t.status === 'waiting'
+          ? 'Pacing for the rate limit, next turn in '
+          : 'Rate limited by the provider, waiting '}
+        <Countdown at={t.retryAt ?? Date.now() + (t.retryInMs ?? 0)} />…
+      </span>
+    );
+  }
+  if (t.status === 'empty') {
     return (
       <span className="text-muted-foreground">
-        Rate limited, retrying in {Math.round((t.retryInMs ?? 0) / 1000)}s…
+        The model returned no text for this turn. If this keeps happening, pick another model in
+        Settings.
       </span>
     );
   }
@@ -61,6 +72,16 @@ function TurnBody({ t }: { t: CritiqueTurn }) {
       {t.status === 'stopped' && <span className="text-muted-foreground"> (stopped)</span>}
     </>
   );
+}
+
+/** Seconds left until `at`, ticking. */
+function Countdown({ at }: { at: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <>{Math.max(0, Math.ceil((at - now) / 1000))}s</>;
 }
 
 function asText(s: KeepChange): string {
@@ -150,7 +171,12 @@ export function Critique() {
   const modelTurns = c.turns.filter((t) => t.kind !== 'human');
   const current = Math.max(1, modelTurns.length);
   const summarizing = running && modelTurns[modelTurns.length - 1]?.kind === 'summary';
-  const cost = `${plan.totalTurns} calls · ~${Math.max(1, Math.round(plan.estTokens / 1000))}k tokens to ${provider.label}`;
+  const k = (n: number) => Math.max(1, Math.round(n / 1000));
+  const cost = `${plan.totalTurns} calls · ~${k(plan.estTokens)}k–${k(plan.maxTokens)}k tokens to ${provider.label}`;
+  const pace = plan.estMinutes
+    ? `Paced under ${k(plan.tokensPerMinute ?? 0)}k tokens/min (free-tier limit), so a run takes about ${plan.estMinutes} min.`
+    : null;
+  const runLabel = c.runProvider?.label ?? provider.label;
   const ownTranscript = c.scanId === scan.id;
 
   function toggle(p: PersonaId) {
@@ -202,6 +228,7 @@ export function Critique() {
           <p className="text-xs text-muted-foreground" data-testid="critique-cap">
             {cost}
           </p>
+          {pace && <p className="text-xs text-muted-foreground">{pace}</p>}
           <Button onClick={() => void c.start(provider, scan)}>Start panel</Button>
         </Card>
         <p className="text-[11px] text-muted-foreground">
@@ -217,7 +244,7 @@ export function Critique() {
         <span data-testid="critique-progress">
           {running ? `Turn ${current} of ${plan.totalTurns}` : `${plan.totalTurns} turns max`}
           {' · '}
-          {provider.label}
+          {runLabel}
         </span>
         {!running && (
           <Button variant="outline" size="sm" onClick={() => c.reset(scan.id)}>
@@ -263,7 +290,9 @@ export function Critique() {
       {c.phase === 'done' && c.summary && <Summary summary={c.summary} />}
       {c.phase === 'done' && !c.summary && (
         <p className="text-xs text-muted-foreground">
-          The summary wasn't a clean keep / change list; it's shown above as written.
+          {c.turns[c.turns.length - 1]?.content
+            ? "The summary wasn't a clean keep / change list; it's shown above as written."
+            : 'No summary was produced.'}
         </p>
       )}
       {c.phase === 'error' && (

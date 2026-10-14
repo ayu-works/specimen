@@ -71,6 +71,40 @@ describe('Critique panel (component, flag-gated)', () => {
     await waitFor(() => expect(screen.queryByRole('tab', { name: 'Critique' })).toBeNull());
   });
 
+  it('T3.26 switching the flag off mid-run stops the run (no hidden calls)', async () => {
+    const p = mock({ delayMs: 20, chunkSize: 2 });
+    inject(p);
+    await chrome.storage.local.set({ [flagKey('critique')]: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Start panel' }));
+    await waitFor(() => expect(p.calls.length).toBe(1));
+    await act(() => chrome.storage.local.set({ [flagKey('critique')]: false }));
+    await waitFor(() => expect(useCritique.getState().phase).toBe('setup'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(p.calls).toHaveLength(1);
+    expect(useStore.getState().activeTab).toBe('ask');
+  });
+
+  it('T3.26 switching provider or key mid-run stops sending to the old one', async () => {
+    const p1 = mock({ delayMs: 20, chunkSize: 2, label: 'Old AI' });
+    const p2 = mock({ label: 'New AI' });
+    inject(p1);
+    await chrome.storage.local.set({ [flagKey('critique')]: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Start panel' }));
+    await waitFor(() => expect(p1.calls.length).toBe(1));
+    expect(screen.getByTestId('critique-progress').textContent).toContain('Old AI');
+    inject(p2);
+    // Any settings or key change makes the panel resolve the provider again.
+    await act(() => chrome.storage.local.set({ 'settings.ai': { provider: 'byok' } }));
+    await waitFor(() => expect(useCritique.getState().phase).toBe('stopped'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(p1.calls).toHaveLength(1);
+    expect(p2.calls).toHaveLength(0);
+    // The transcript still names the provider it was sent to.
+    expect(screen.getByTestId('critique-progress').textContent).toContain('Old AI');
+  });
+
   it('T3.26 the flag is on only for the boolean true; a storage error means off', async () => {
     for (const v of ['true', 'false', 1, {}]) {
       await chrome.storage.local.set({ [flagKey('critique')]: v });
@@ -96,7 +130,7 @@ describe('Critique panel (component, flag-gated)', () => {
     inject(p);
     renderCritique();
     expect((await screen.findByTestId('critique-cap')).textContent).toMatch(
-      /^7 calls · ~\d+k tokens to Mock AI$/,
+      /^7 calls · ~\d+k–\d+k tokens to Mock AI$/,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Start panel' }));
     const summary = await screen.findByTestId('critique-summary');

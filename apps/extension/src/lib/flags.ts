@@ -36,8 +36,9 @@ export function watchFlag(name: FlagName, cb: (on: boolean) => void): () => void
   return () => chrome.storage.onChanged.removeListener(onChange);
 }
 
-export function useFlag(name: FlagName): boolean {
-  const [on, setOn] = useState(false);
+/** The flag's value, or null until it has been read (treat null as off, but don't act on it). */
+export function useFlag(name: FlagName): boolean | null {
+  const [on, setOn] = useState<boolean | null>(null);
   useEffect(() => {
     let live = true;
     void loadFlag(name).then((v) => {

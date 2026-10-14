@@ -183,6 +183,45 @@ spike). `pnpm gate` (incl. check-ids --all) green.
 - `docs/TESTING.md`: T3.18–T3.27 rows. No `site/` change, no schema change, no manifest/permission change.
 - `pnpm gate` green locally (secrets step skipped: gitleaks not installed locally; CI runs it).
 
+## Review round 1 (lens A `SPC-22-a-r1.md`, lens B + privacy `SPC-22-b-r1.md`), fixed in one commit
+- **A-M1** `parseKeepChange`: a heading must be the word alone or followed by a colon (`/^(keep|changes?)\b\s*(?::…)?$/`);
+  the probe is in T3.25.
+- **A-M2 / B-M1** flag off mid-run: `Panel` resets the run when the flag reads `false`. `useFlag` is now
+  `boolean | null` (null while loading), so a first render doesn't reset the run or move the tab. Tested in T3.26.
+- **B-M2** provider/key switch mid-run: the store keeps `runProvider`; `guardProvider(ai.provider)` in `Panel` stops
+  the run when the resolved provider changes. A `webllm` → `webllm` reload is exempt, because a local model sends
+  nothing off the device. The progress line shows the run's provider. Tested in T3.26.
+- **B-M3** stall: per-attempt idle timer (120 s to the first text, which covers a local model load; 30 s between
+  pieces of text) ends the run with a fixed "stopped responding" message. A user Stop is told apart from a stall.
+  Tested in T3.21.
+- **B-H1** Groq free tier (orchestrator asked for a waiting state, not a failure):
+  - **Measured.** Grounding on the real captures is 2.8–4.0k chars. Input per turn is ~1.0–2.4k tokens (at 3.5
+    chars/token), growing with the transcript. A default run is ~13–15k tokens at ~250 output tokens per turn, and
+    ≤ ~22k if every reply uses its full `maxTokens`. Lens B's ~5k/call assumed a 14k-char page-data block; real scans
+    use about a quarter of that.
+  - **Pacing.** `PROVIDER_TPM = { groq: 8000 }`. Before each call the engine reserves input chars/3 plus `maxTokens`
+    in a rolling 60 s window, and waits (status `waiting`, live countdown, Stop cancels) until the call fits. The cap
+    line says "Paced under 8k tokens/min, about N min" (≈ 3 min for a default run).
+  - **Retries.** On a 429 that still slips through, the turn retries up to 3 times after 20/30/30 s waits ("Rate
+    limited by the provider, waiting Ns"). Only after that does the run end.
+  - **Not done:** `retry-after` header parsing. It needs `httpError`/`ProviderError` (outside lane C, PE contract);
+    it's a follow-up if pacing proves insufficient.
+- **B-H2** runtime flag ships with the next release: **owner decision, pending** (the orchestrator asked me not to
+  change the flag mechanism until they reply).
+- **A-L1 / B-L2** cost: the cap line shows a range (`estTokens`–`maxTokens`), and the upper bound counts the full
+  `maxTokens`, which includes reasoning.
+- **A-L2** 4k contexts: per-turn `maxTokens = min(1200, contextTokens/4)` (summary `min(1500, …)`).
+- **A-L3** T3.18 now checks each call's brief, in order, including the summary's.
+- **B-L1** an empty reply → turn `empty` ("returned no text…"); the run continues; an empty summary shows "No
+  summary was produced". `reasoning_effort` for gpt-oss is an adapter change (outside lane), noted as a follow-up.
+- **B-L3** the system prompt is now rules → `<page_data>` → role brief, so every turn shares a cacheable prefix
+  (T3.18 asserts that the prefix is identical).
+- **B-L4** (partial brand prefix in a stopped or truncated turn): justified, not fixed. It's a prefix, not the name;
+  stopped turns aren't fed forward; a whole-word filter can't judge a half word. Known limitation.
+- **B-L5** (a message sent during a backoff reaches the next reviewer, not the retried one): justified. The queued
+  bubble already says "Queued for the next reviewer". Known limitation.
+- **B-L6** WebLLM keeps generating after the panel closes: known limitation (audit H2, SPC-18).
+
 ## Next
 - Reviews: PE lens A + lens B + privacy. Fold findings as new commits.
 - Owner: T3.27 (Groq on 2–3 real sites, go/no-go on SPC-22). Steps are in the PR body.

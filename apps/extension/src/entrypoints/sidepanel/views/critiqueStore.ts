@@ -23,6 +23,8 @@ interface CritiqueState {
   queued: string[];
   summary: KeepChange | null;
   error: string | null;
+  /** The provider the current/last run sends to (the UI shows its label, not the current one). */
+  runProvider: LLMProvider | null;
   setPersonas: (p: PersonaId[]) => void;
   setRounds: (n: number) => void;
   start: (provider: LLMProvider, scan: DesignScan) => Promise<void>;
@@ -44,13 +46,22 @@ export const useCritique = create<CritiqueState>((set, get) => ({
   queued: [],
   summary: null,
   error: null,
+  runProvider: null,
   setPersonas: (personas) => set({ personas }),
   setRounds: (rounds) => set({ rounds }),
   start: async (provider, scan) => {
     if (controller) return;
     const ctl = new AbortController();
     controller = ctl;
-    set({ scanId: scan.id, phase: 'running', turns: [], queued: [], summary: null, error: null });
+    set({
+      scanId: scan.id,
+      phase: 'running',
+      turns: [],
+      queued: [],
+      summary: null,
+      error: null,
+      runProvider: provider,
+    });
     const { personas, rounds } = get();
     const r = await runCritique(provider, scan, {
       personas,
@@ -84,9 +95,29 @@ export const useCritique = create<CritiqueState>((set, get) => ({
   reset: (scanId = null) => {
     controller?.abort();
     controller = null;
-    set({ scanId, phase: 'setup', turns: [], queued: [], summary: null, error: null });
+    set({
+      scanId,
+      phase: 'setup',
+      turns: [],
+      queued: [],
+      summary: null,
+      error: null,
+      runProvider: null,
+    });
   },
 }));
+
+/**
+ * Stop a run when the chosen provider changes: a new key, preset or provider means page data
+ * must not keep going to the old one. A local model that only reloads (same `webllm` id) sends
+ * nothing off the device, so its state changes don't stop the run.
+ */
+export function guardProvider(current: LLMProvider | null): void {
+  const { phase, runProvider, stop } = useCritique.getState();
+  if (phase !== 'running' || !runProvider || current === runProvider) return;
+  if (runProvider.id === 'webllm' && current?.id === 'webllm') return;
+  stop();
+}
 
 // A different scan (new scan, Library, Compose) aborts the run: its transcript no longer applies.
 useStore.subscribe((s, prev) => {

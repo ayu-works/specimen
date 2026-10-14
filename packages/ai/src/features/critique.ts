@@ -50,14 +50,29 @@ const CONTRAST_PAIRS = 12;
 /** The user message never gets a budget below this (it always fits the latest Human message). */
 export const MESSAGE_FLOOR = 2000;
 const OMITTED = '[earlier discussion omitted]';
-const DEFAULT_RETRY_MS = 8000;
+/**
+ * Waits before each retry of a rate-limited turn (at most 3 retries, ~80 s in all). Groq's free
+ * tier counts tokens per minute, so the wait has to cover most of a minute.
+ */
+export const DEFAULT_RETRY_DELAYS_MS = [20_000, 30_000, 30_000];
+/**
+ * Known free-tier tokens-per-minute limits, by provider id. The panel paces its calls under
+ * these so a default run waits instead of failing (Groq free tier: 8K TPM for gpt-oss-20b).
+ */
+export const PROVIDER_TPM: Record<string, number> = { groq: 8000 };
+const PACE_WINDOW_MS = 60_000;
+
+/** A turn with no text for this long counts as stalled (the first wait covers a local model load). */
+export const DEFAULT_STALL_MS = { first: 120_000, gap: 30_000 };
+export const STALLED_ERROR =
+  'The provider stopped responding. Try again, or pick another model in Settings.';
 
 const SHARED_RULES = [
   'You are on a small panel critiquing one website design. Use only the measured data below. If something was not measured (hover states, animation, copy, imagery), say so instead of guessing.',
   'Do not name the website, its brand or its products, and do not quote its headlines.',
 ].join(' ');
 
-const SUMMARY_BRIEF =
+export const SUMMARY_BRIEF =
   "You are the panel's moderator. Turn the discussion into a short decision list. Reflect the Human's priorities when the Human spoke.";
 
 const SUMMARY_INSTRUCTION = [
@@ -78,7 +93,16 @@ export const CRITIQUE_ERRORS: Record<Exclude<ProviderErrorKind, 'aborted'>, stri
   other: 'The provider returned an error. Try again, or pick another model in Settings.',
 };
 
-export type TurnStatus = 'streaming' | 'retrying' | 'done' | 'stopped' | 'error' | 'filtered';
+/** `empty` = the model returned no text (a reasoning model can spend its whole budget thinking). */
+export type TurnStatus =
+  | 'streaming'
+  | 'waiting'
+  | 'retrying'
+  | 'done'
+  | 'stopped'
+  | 'error'
+  | 'filtered'
+  | 'empty';
 
 export interface CritiqueTurn {
   kind: 'persona' | 'human' | 'summary';
@@ -88,8 +112,9 @@ export interface CritiqueTurn {
   status: TurnStatus;
   /** Fixed, user-facing message for `error`. */
   error?: string;
-  /** Set while `retrying`: the backoff before the one retry. */
+  /** Set while `waiting` (pacing) or `retrying` (rate limited): how long, and until when (epoch ms). */
   retryInMs?: number;
+  retryAt?: number;
 }
 
 export interface CritiqueOptions {
@@ -100,8 +125,14 @@ export interface CritiqueOptions {
   onTurn?: (index: number, turn: CritiqueTurn) => void;
   /** Drains the human's queued messages; called before every model turn. */
   takeHuman?: () => string[];
-  /** Backoff before retrying a rate-limited turn (tests shorten it). */
-  retryDelayMs?: number;
+  /** Waits before each retry of a rate-limited turn; its length is the retry limit (tests shorten it). */
+  retryDelaysMs?: number[];
+  /** Pace calls under this many tokens per minute (default: `PROVIDER_TPM[provider.id]`; 0 = off). */
+  tokensPerMinute?: number;
+  /** The pacing window (tests shorten it). */
+  paceWindowMs?: number;
+  /** Stall timeouts: to the first text, and between pieces of text. */
+  stallMs?: { first: number; gap: number };
 }
 
 export interface KeepChange {
@@ -121,8 +152,13 @@ export interface CritiquePlan {
   rounds: number;
   /** Model calls: personas × rounds + 1 summary (rate-limit retries excluded). */
   totalTurns: number;
-  /** Rough tokens sent and received for a whole run. */
+  /** Rough tokens sent and received for a whole run, at the expected reply length. */
   estTokens: number;
+  /** Upper bound: every reply uses its full `maxTokens` (reasoning models can). */
+  maxTokens: number;
+  /** The pacing limit in force (null = none), and the rough run time it implies. */
+  tokensPerMinute: number | null;
+  estMinutes: number | null;
 }
 
 function clampPersonas(list: PersonaId[] | undefined): PersonaId[] {
@@ -167,18 +203,19 @@ export function critiqueSystemPrompt(
   scan: DesignScan,
   role: PersonaId | 'summary',
 ): string {
+  // The same prefix on every turn (rules + data) lets providers cache it; the role comes last.
   return [
-    role === 'summary' ? SUMMARY_BRIEF : PERSONAS[role].brief,
     SHARED_RULES,
     PAGE_DATA_RULE,
     wrapPageData(critiqueGrounding(scan), pageDataBudget(provider.capabilities.contextTokens)),
+    role === 'summary' ? SUMMARY_BRIEF : PERSONAS[role].brief,
   ].join('\n\n');
 }
 
 export function critiquePlan(
-  provider: Pick<LLMProvider, 'capabilities'>,
+  provider: Pick<LLMProvider, 'capabilities' | 'id'>,
   scan: DesignScan,
-  opts: Pick<CritiqueOptions, 'personas' | 'rounds'> = {},
+  opts: Pick<CritiqueOptions, 'personas' | 'rounds' | 'tokensPerMinute'> = {},
 ): CritiquePlan {
   const personas = clampPersonas(opts.personas ?? DEFAULT_PERSONAS);
   const rounds = clampRounds(opts.rounds);
@@ -186,8 +223,56 @@ export function critiquePlan(
   const systemTokens = Math.ceil(critiqueSystemPrompt(provider, scan, 'brand').length / 4);
   // Each call resends the system prompt plus the transcript so far.
   const transcript = (EXPECTED_TURN_TOKENS * (totalTurns * (totalTurns - 1))) / 2;
-  const estTokens = totalTurns * (systemTokens + EXPECTED_TURN_TOKENS) + transcript;
-  return { personas, rounds, totalTurns, estTokens: Math.round(estTokens) };
+  const sent = totalTurns * systemTokens + transcript;
+  const estTokens = sent + totalTurns * EXPECTED_TURN_TOKENS;
+  const maxTokens =
+    sent + (totalTurns - 1) * turnMaxTokens(provider, false) + turnMaxTokens(provider, true);
+  const tpm = paceLimit(provider, opts.tokensPerMinute);
+  return {
+    personas,
+    rounds,
+    totalTurns,
+    estTokens: Math.round(estTokens),
+    maxTokens: Math.round(maxTokens),
+    tokensPerMinute: tpm,
+    // Pacing reserves each call's full maxTokens, so the upper bound sets the pace.
+    estMinutes: tpm ? Math.max(1, Math.ceil(maxTokens / tpm)) : null,
+  };
+}
+
+function paceLimit(provider: Pick<LLMProvider, 'id'>, override?: number): number | null {
+  const tpm = override ?? PROVIDER_TPM[provider.id] ?? 0;
+  return tpm > 0 ? tpm : null;
+}
+
+/** Tokens a call may count against a TPM limit: its input (≈ 3 chars/token for JSON) plus maxTokens. */
+function callTokens(req: ChatRequest): number {
+  const chars = (req.system?.length ?? 0) + String(req.messages[0]?.content ?? '').length;
+  return Math.ceil(chars / 3) + (req.maxTokens ?? 0);
+}
+
+/** How long to wait so the calls in the last window plus `next` stay under `tpm`. */
+export function paceWait(
+  log: { at: number; tokens: number }[],
+  next: number,
+  tpm: number,
+  windowMs: number,
+  now: number,
+): number {
+  const live = log.filter((e) => now - e.at < windowMs).sort((a, b) => a.at - b.at);
+  let sum = live.reduce((a, e) => a + e.tokens, 0);
+  for (const e of live) {
+    if (sum + next <= tpm) break;
+    sum -= e.tokens;
+    if (sum + next <= tpm || sum === 0) return Math.max(0, e.at + windowMs - now);
+  }
+  return 0;
+}
+
+/** Generous for reasoning models, but at most a quarter of a small (4k) context. */
+function turnMaxTokens(provider: Pick<LLMProvider, 'capabilities'>, summary: boolean): number {
+  const cap = summary ? SUMMARY_MAX_TOKENS : TURN_MAX_TOKENS;
+  return Math.min(cap, Math.floor(provider.capabilities.contextTokens / 4));
 }
 
 function label(t: CritiqueTurn): string {
@@ -266,9 +351,10 @@ export function parseKeepChange(text: string): KeepChange | null {
   let seen = false;
   for (const raw of text.split('\n')) {
     const line = raw.trim().replace(/^[#*_\s]+|[*_\s]+$/g, '');
-    const head = /^(keep|change)\s*:?\s*(.*)$/i.exec(line);
+    // A heading is the word alone or followed by a colon ("Keeping…" / "Changes like…" are prose).
+    const head = /^(keep|changes?)\b\s*(?::\s*(.*))?$/i.exec(line);
     if (head && !/^(?:[-*•]|\d+[.)])\s/.test(raw.trim())) {
-      cur = (head[1] as string).toLowerCase() as keyof KeepChange;
+      cur = (head[1] as string).toLowerCase().startsWith('keep') ? 'keep' : 'change';
       seen = true;
       const rest = (head[2] ?? '').trim();
       if (rest) out[cur].push(rest);
@@ -310,8 +396,10 @@ export async function runCritique(
   scan: DesignScan,
   opts: CritiqueOptions = {},
 ): Promise<CritiqueResult> {
-  const { personas, rounds } = critiquePlan(provider, scan, opts);
+  const { personas, rounds, tokensPerMinute: tpm } = critiquePlan(provider, scan, opts);
   const { signal } = opts;
+  const windowMs = opts.paceWindowMs ?? PACE_WINDOW_MS;
+  const paceLog: { at: number; tokens: number }[] = [];
   const turns: CritiqueTurn[] = [];
   const emit = (i: number) => {
     const t = turns[i];
@@ -342,7 +430,7 @@ export async function runCritique(
 
     const role = step.kind === 'summary' ? 'summary' : step.persona;
     const system = critiqueSystemPrompt(provider, scan, role);
-    const maxTokens = step.kind === 'summary' ? SUMMARY_MAX_TOKENS : TURN_MAX_TOKENS;
+    const maxTokens = turnMaxTokens(provider, step.kind === 'summary');
     const instruction =
       step.kind === 'summary'
         ? SUMMARY_INSTRUCTION
@@ -370,6 +458,28 @@ export async function runCritique(
     const idx = turns.push(turn) - 1;
     emit(idx);
 
+    if (tpm) {
+      const tokens = callTokens(req);
+      const wait = paceWait(paceLog, tokens, tpm, windowMs, Date.now());
+      if (wait > 0) {
+        turn.status = 'waiting';
+        turn.retryInMs = wait;
+        turn.retryAt = Date.now() + wait;
+        emit(idx);
+        const ok = await backoff(wait, signal);
+        delete turn.retryInMs;
+        delete turn.retryAt;
+        if (!ok) {
+          turn.status = 'stopped';
+          emit(idx);
+          return done('stopped');
+        }
+        turn.status = 'streaming';
+        emit(idx);
+      }
+      paceLog.push({ at: Date.now(), tokens });
+    }
+
     const outcome = await runTurn(provider, scan, req, turn, () => emit(idx), opts);
     if (outcome.status === 'stopped') return done('stopped');
     if (outcome.status === 'error') return done('error', outcome.error);
@@ -392,44 +502,75 @@ async function runTurn(
   opts: CritiqueOptions,
 ): Promise<{ status: 'done' | 'stopped' | 'error'; error?: string }> {
   const { signal } = opts;
+  const delays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  const stall = opts.stallMs ?? DEFAULT_STALL_MS;
   const stop = () => {
     turn.status = 'stopped';
     emit();
     return { status: 'stopped' as const };
   };
+  const fail = (message: string) => {
+    turn.status = 'error';
+    turn.error = message;
+    emit();
+    return { status: 'error' as const, error: message };
+  };
   for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) return stop();
+    // Per-attempt signal: the run's Stop, or a stall timer that restarts on every piece of text.
+    const attemptCtl = new AbortController();
+    const onAbort = () => attemptCtl.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    let stalled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        stalled = true;
+        attemptCtl.abort();
+      }, ms);
+    };
+    arm(stall.first);
     let raw = '';
+    let thrown: unknown = null;
     try {
-      for await (const d of provider.chat(req, signal)) {
+      for await (const d of provider.chat(req, attemptCtl.signal)) {
+        arm(stall.gap);
         raw += d;
         turn.content = safe(raw, scan);
         emit();
       }
     } catch (e) {
-      const err = mapThrown(e);
-      if (err.kind === 'aborted' || signal?.aborted) return stop();
-      if (err.kind === 'rate' && attempt === 0) {
-        const ms = opts.retryDelayMs ?? DEFAULT_RETRY_MS;
+      thrown = e;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    }
+    // Stop wins; some hosts end the stream quietly on abort instead of throwing.
+    if (signal?.aborted) return stop();
+    if (stalled) return fail(STALLED_ERROR);
+    if (thrown) {
+      const err = mapThrown(thrown);
+      if (err.kind === 'aborted') return stop();
+      const wait = delays[attempt];
+      if (err.kind === 'rate' && wait !== undefined) {
         turn.content = '';
         turn.status = 'retrying';
-        turn.retryInMs = ms;
+        turn.retryInMs = wait;
+        turn.retryAt = Date.now() + wait;
         emit();
-        const ok = await backoff(ms, signal);
+        const ok = await backoff(wait, signal);
         delete turn.retryInMs;
+        delete turn.retryAt;
         if (!ok) return stop();
         turn.status = 'streaming';
         emit();
         continue;
       }
-      turn.status = 'error';
-      turn.error = CRITIQUE_ERRORS[err.kind];
-      emit();
-      return { status: 'error', error: turn.error };
+      return fail(CRITIQUE_ERRORS[err.kind]);
     }
-    // Some hosts end the stream quietly on abort instead of throwing.
-    if (signal?.aborted) return stop();
     turn.content = safe(raw, scan);
-    turn.status = raw.trim() && !turn.content.trim() ? 'filtered' : 'done';
+    turn.status = !raw.trim() ? 'empty' : !turn.content.trim() ? 'filtered' : 'done';
     emit();
     return { status: 'done' };
   }

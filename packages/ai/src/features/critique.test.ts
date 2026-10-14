@@ -8,11 +8,17 @@ import {
   type CritiqueTurn,
   critiquePlan,
   critiqueSystemPrompt,
+  DEFAULT_RETRY_DELAYS_MS,
   MESSAGE_FLOOR,
   messageBudget,
   PERSONAS,
+  type PersonaId,
+  PROVIDER_TPM,
+  paceWait,
   parseKeepChange,
   runCritique,
+  STALLED_ERROR,
+  SUMMARY_BRIEF,
 } from './critique';
 import { compactScan } from './pageData';
 
@@ -25,6 +31,7 @@ const scan: DesignScan = {
   title: 'Zentrix',
 };
 
+const ORDER = ['brand', 'a11y', 'frontend', 'brand', 'a11y', 'frontend', 'summary'];
 const SUMMARY = 'Keep:\n- Accent #0d9488 on white\nChange:\n- Raise muted text to 4.5:1';
 
 /** Answers each turn with "turn N" (the summary gets a keep/change list). */
@@ -70,8 +77,13 @@ describe('critique panel engine', () => {
       const outside = sys.replace(data, '');
       expect(outside).not.toContain(injected.vibe?.summary);
       expect(sys).toContain('untrusted data');
-      if (i < 6)
-        expect(sys).toContain(Object.values(PERSONAS).find((x) => sys.includes(x.brief))?.brief);
+      const expected =
+        ORDER[i] === 'summary' ? SUMMARY_BRIEF : PERSONAS[ORDER[i] as PersonaId].brief;
+      // The role comes last, so every turn shares the same cacheable prefix.
+      expect(sys.endsWith(expected)).toBe(true);
+      expect(sys.slice(0, sys.indexOf('</page_data>'))).toBe(
+        (p.calls[0]?.system ?? '').slice(0, sys.indexOf('</page_data>')),
+      );
     });
   });
 
@@ -121,6 +133,11 @@ describe('critique panel engine', () => {
     const def = critiquePlan(p, scan);
     expect(def.totalTurns).toBe(7);
     expect(def.estTokens).toBeGreaterThan(5000);
+    // The upper bound counts every reply at its full maxTokens (6 × 1200 + 1500 more output).
+    expect(def.maxTokens - def.estTokens).toBe(6 * 1200 + 1500 - 7 * 250);
+    // Small contexts get a quarter of the window per reply.
+    const small = critiquePlan(createMockProvider({ contextTokens: 4096 }), scan);
+    expect(small.maxTokens - small.estTokens).toBe(7 * 1024 - 7 * 250);
   });
 
   it('T3.20 Stop mid-stream: the turn is stopped and no further call or summary runs', async () => {
@@ -208,23 +225,137 @@ describe('critique panel engine', () => {
     expect(JSON.stringify([r, seen])).not.toContain('boom');
   });
 
-  it('T3.21 a rate limit is retried once after a backoff and the run continues', async () => {
+  it('T3.21 a rate limit is retried after a backoff and the run continues', async () => {
     const p = failing([undefined, undefined, new ProviderError('rate', 'slow down')]);
     const seen: CritiqueTurn[] = [];
-    const r = await runCritique(p, scan, { retryDelayMs: 1, onTurn: (_i, t) => seen.push(t) });
+    const r = await runCritique(p, scan, {
+      retryDelaysMs: [1, 1, 1],
+      onTurn: (_i, t) => seen.push(t),
+    });
     expect(r.status).toBe('done');
     expect(p.calls).toHaveLength(8); // 7 turns + 1 retry
     expect(r.turns).toHaveLength(7);
     expect(seen.some((t) => t.status === 'retrying' && t.retryInMs === 1)).toBe(true);
   });
 
-  it('T3.21 a second rate limit on the same turn fails the run', async () => {
+  it('T3.21 a rate limit that outlasts every retry fails the run (at most 3 retries per turn)', async () => {
     const rate = new ProviderError('rate', 'slow down');
-    const p = failing([undefined, rate, rate]);
-    const r = await runCritique(p, scan, { retryDelayMs: 1 });
+    const p = failing([undefined, rate, rate, rate, rate, undefined]);
+    const r = await runCritique(p, scan, { retryDelaysMs: [1, 1, 1] });
     expect(r.status).toBe('error');
     expect(r.error).toBe(CRITIQUE_ERRORS.rate);
-    expect(p.calls).toHaveLength(3);
+    expect(p.calls).toHaveLength(5); // turn 1 + turn 2 tried 4 times
+  });
+
+  it('T3.21 the default retry waits cover most of a minute and are capped', () => {
+    expect(DEFAULT_RETRY_DELAYS_MS).toHaveLength(3);
+    expect(DEFAULT_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(90_000);
+    expect(DEFAULT_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('T3.21 paceWait holds a call until enough of the last minute has expired', () => {
+    expect(paceWait([], 4000, 8000, 60_000, 0)).toBe(0);
+    expect(paceWait([{ at: 0, tokens: 3000 }], 4000, 8000, 60_000, 1000)).toBe(0);
+    expect(paceWait([{ at: 0, tokens: 5000 }], 4000, 8000, 60_000, 10_000)).toBe(50_000);
+    const two = [
+      { at: 0, tokens: 3000 },
+      { at: 20_000, tokens: 3000 },
+    ];
+    expect(paceWait(two, 4000, 8000, 60_000, 30_000)).toBe(30_000);
+    // Entries older than the window no longer count.
+    expect(paceWait([{ at: 0, tokens: 7000 }], 4000, 8000, 60_000, 61_000)).toBe(0);
+  });
+
+  it('T3.21 Groq is paced under its free-tier TPM: turns wait (shown) instead of failing', async () => {
+    const groq = numbered({ id: 'groq' });
+    expect(critiquePlan(groq, scan).tokensPerMinute).toBe(PROVIDER_TPM.groq);
+    expect(critiquePlan(groq, scan).estMinutes).toBeGreaterThanOrEqual(2);
+    expect(critiquePlan(numbered(), scan).tokensPerMinute).toBeNull();
+
+    const seen: CritiqueTurn[] = [];
+    const r = await runCritique(groq, scan, {
+      tokensPerMinute: 1, // every call needs the window to itself
+      paceWindowMs: 15,
+      onTurn: (_i, t) => seen.push(t),
+    });
+    expect(r.status).toBe('done');
+    expect(groq.calls).toHaveLength(7);
+    expect(seen.filter((t) => t.status === 'waiting')).toHaveLength(6);
+    expect(seen.find((t) => t.status === 'waiting')?.retryAt).toBeGreaterThan(0);
+  });
+
+  it('T3.21 Stop during a pacing wait stops with no further call', async () => {
+    const ctl = new AbortController();
+    const p = numbered();
+    const r = await runCritique(p, scan, {
+      signal: ctl.signal,
+      tokensPerMinute: 1,
+      paceWindowMs: 60_000,
+      onTurn: (_i, t) => {
+        if (t.status === 'waiting') ctl.abort();
+      },
+    });
+    expect(r.status).toBe('stopped');
+    expect(p.calls).toHaveLength(1);
+    expect(r.turns[1]?.status).toBe('stopped');
+  });
+
+  /** Yields `before` chunks, then hangs until its signal aborts. */
+  function hanging(before: string[]) {
+    const calls: ChatRequest[] = [];
+    const p: LLMProvider & { calls: ChatRequest[] } = {
+      id: 'h',
+      label: 'H',
+      capabilities: { vision: false, streaming: true, contextTokens: 8192 },
+      status: async () => ({ state: 'ready' }),
+      calls,
+      async *chat(req, signal) {
+        calls.push(req);
+        for (const c of before) yield c;
+        if (!signal?.aborted) {
+          await new Promise((res) => signal?.addEventListener('abort', res, { once: true }));
+        }
+        throw new ProviderError('aborted', 'Stopped');
+      },
+    };
+    return p;
+  }
+
+  it('T3.21 a stalled stream (no first token, or a long gap) ends the run with a fixed message', async () => {
+    for (const before of [[], ['some words']]) {
+      const p = hanging(before);
+      const r = await runCritique(p, scan, { stallMs: { first: 20, gap: 20 } });
+      expect(r.status).toBe('error');
+      expect(r.error).toBe(STALLED_ERROR);
+      expect(r.turns[0]?.status).toBe('error');
+      expect(p.calls).toHaveLength(1);
+    }
+  });
+
+  it('T3.21 Stop while a stream hangs is a stop, not a stall', async () => {
+    const ctl = new AbortController();
+    const p = hanging(['x']);
+    const r = await runCritique(p, scan, {
+      signal: ctl.signal,
+      stallMs: { first: 60_000, gap: 60_000 },
+      onTurn: (_i, t) => {
+        if (t.content) ctl.abort();
+      },
+    });
+    expect(r.status).toBe('stopped');
+    expect(r.turns[0]?.status).toBe('stopped');
+  });
+
+  it('T3.21 an empty reply is marked empty, left out of later prompts, and the run continues', async () => {
+    let n = 0;
+    const p = createMockProvider({
+      respond: () => (++n === 1 ? '' : `turn ${n} at 16px.`),
+      chunks: undefined,
+    });
+    const r = await runCritique(p, scan);
+    expect(r.status).toBe('done');
+    expect(r.turns[0]?.status).toBe('empty');
+    expect(userMsg(p.calls[1])).not.toContain('[Brand designer]');
   });
 
   it('T3.21 Stop during the rate-limit backoff stops with no retry call', async () => {
@@ -232,7 +363,7 @@ describe('critique panel engine', () => {
     const p = failing([new ProviderError('rate', 'slow down')]);
     const r = await runCritique(p, scan, {
       signal: ctl.signal,
-      retryDelayMs: 60_000,
+      retryDelaysMs: [60_000],
       onTurn: (_i, t) => {
         if (t.status === 'retrying') ctl.abort();
       },
@@ -320,6 +451,12 @@ describe('critique panel engine', () => {
       keep: ['inline'],
       change: ['x'],
     });
+    // Prose lines that start with "Keeping" / "Changes" are not headings (lens A M1 probe).
+    expect(
+      parseKeepChange(
+        'Keep:\n- 4px grid\nKeeping the accent is right.\nChange:\n- raise muted text\nChanges like this matter.\nChanges:\n- one more',
+      ),
+    ).toEqual({ keep: ['4px grid'], change: ['raise muted text', 'one more'] });
     expect(parseKeepChange('Just some prose about the design.')).toBeNull();
     expect(parseKeepChange('Keep:\nChange:')).toBeNull();
     const many = `Keep:\n${'- k\n'.repeat(8)}Change:\n- c`;

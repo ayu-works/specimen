@@ -12,6 +12,7 @@ import { type TabId, useStore } from './store';
 import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
 import { Critique } from './views/Critique';
+import { guardProvider, useCritique } from './views/critiqueStore';
 import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
 import { Library } from './views/Library';
@@ -99,14 +100,22 @@ export default function App() {
 
 function Panel() {
   const { activeTab, setTab, scan, succeed, status } = useStore();
-  const critique = useFlag('critique');
+  const flag = useFlag('critique');
+  const critique = flag === true;
   const tabs = TABS.filter((t) => t.id !== 'critique' || critique);
   useShortcut();
 
-  // Leave the Critique tab if its flag is switched off.
+  const ai = useAiContext();
+  // Switching the flag off stops any run (no hidden calls to the provider).
   useEffect(() => {
-    if (!critique && activeTab === 'critique') setTab('ask');
-  }, [critique, activeTab, setTab]);
+    if (flag === false) useCritique.getState().reset(null);
+  }, [flag]);
+  // So does switching the provider or key: data goes only to the one the user has chosen.
+  useEffect(() => guardProvider(ai.provider), [ai.provider]);
+  // ...and leaves its tab.
+  useEffect(() => {
+    if (flag === false && activeTab === 'critique') setTab('ask');
+  }, [flag, activeTab, setTab]);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('demo') === '1') {
