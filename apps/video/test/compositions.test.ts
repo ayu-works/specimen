@@ -2,10 +2,15 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { Composition } from 'remotion';
 import { describe, expect, it, vi } from 'vitest';
 import { Root } from '../src/Root';
-import { DURATION, FPS, SCENES, sceneRange, toReal, VARIANTS } from '../src/timeline';
+import { BEAT, DURATION, FPS, SCENES, sceneRange, toReal, VARIANTS } from '../src/timeline';
 
 // The scenes load fonts and audio; this test only needs the registration metadata.
 vi.mock('../src/Main', () => ({ Main: () => null }));
+// Lets the test check that src/index.ts registers the same Root it walks.
+vi.mock('remotion', async (orig) => ({
+  ...(await orig<typeof import('remotion')>()),
+  registerRoot: vi.fn(),
+}));
 
 /**
  * The spec, written out by hand (not recomputed with `framesFor`): each cut's on-screen
@@ -31,6 +36,8 @@ type Comp = {
   width: number;
   height: number;
   defaultProps?: { variant?: string; audio?: string };
+  /** Overrides fps/duration at render time, so the static props would no longer be the truth. */
+  calculateMetadata?: unknown;
 };
 type Expected = { id: string; cut: string; frames: number; width: number; height: number };
 
@@ -59,7 +66,8 @@ function readCompositions(): { found: Comp[]; errors: string[] } {
       return;
     }
     const el = node as ReactElement<Record<string, unknown> & { children?: ReactNode }>;
-    const name = String((el.type as { name?: string }).name);
+    const name =
+      typeof el.type === 'string' ? el.type : String((el.type as { name?: string }).name);
     // A Fragment's type is a symbol; walk into it. Anything else (a Folder, a wrapper) is an error.
     if (el.type === Composition) found.push(el.props as unknown as Comp);
     else if (typeof el.type === 'symbol') walk(el.props.children);
@@ -85,6 +93,11 @@ function checkCompositions(found: Comp[], expected: Expected[]): string[] {
       errors.push(`${c.id}: not in the spec table`);
       continue;
     }
+    if (c.calculateMetadata != null) {
+      errors.push(
+        `${c.id}: has calculateMetadata, so its rendered fps/duration aren't the checked props`,
+      );
+    }
     if (c.fps !== EXPECTED_FPS) errors.push(`${c.id}: fps ${c.fps}, expected ${EXPECTED_FPS}`);
     if (!Number.isInteger(c.durationInFrames) || c.durationInFrames <= 0) {
       errors.push(`${c.id}: durationInFrames ${c.durationInFrames} is not a positive integer`);
@@ -106,6 +119,13 @@ function checkCompositions(found: Comp[], expected: Expected[]): string[] {
 }
 
 describe('T7.04 Remotion compositions: frame count = fps × duration', () => {
+  it('T7.04 src/index.ts registers the Root this test reads', async () => {
+    const { registerRoot } = await import('remotion');
+    await import('../src/index');
+    expect(registerRoot).toHaveBeenCalledTimes(1);
+    expect(registerRoot).toHaveBeenCalledWith(Root);
+  });
+
   it('T7.04 every registered composition matches the spec table, without rendering', () => {
     const { found, errors } = readCompositions();
     expect(errors).toEqual([]);
@@ -132,8 +152,10 @@ describe('T7.04 Remotion compositions: frame count = fps × duration', () => {
     }
     const [lastId] = SCENES[SCENES.length - 1] as [Parameters<typeof sceneRange>[0], number];
     const [lastStart, lastEnd] = sceneRange(lastId);
-    expect(lastStart).toBeLessThan(DURATION);
-    expect(lastEnd).toBe(DURATION);
+    // sceneRange ends the last scene at DURATION by definition; the real risk is that it's too short.
+    expect(lastEnd - lastStart, 'the last scene runs at least one bar').toBeGreaterThanOrEqual(
+      4 * BEAT,
+    );
     // And in real frames, the last scene starts before each cut's final frame.
     for (const v of VARIANTS) {
       const frames = Math.round((CUT_SECONDS[v.id] as number) * EXPECTED_FPS);
@@ -179,6 +201,17 @@ describe('T7.04 Remotion compositions: frame count = fps × duration', () => {
       expect(checkCompositions(comps, EXPECTED)).toContain(
         `${first.id}: durationInFrames ${first.frames + 0.5} is not a positive integer`,
       );
+    });
+
+    it('T7.04 calculateMetadata overriding the duration is caught', () => {
+      const comps = good();
+      (comps.find((x) => x.id === first.id) as Comp).calculateMetadata = () => ({
+        durationInFrames: 1,
+        fps: 25,
+      });
+      expect(checkCompositions(comps, EXPECTED)).toEqual([
+        `${first.id}: has calculateMetadata, so its rendered fps/duration aren't the checked props`,
+      ]);
     });
 
     it('T7.04 a missing, an extra and a duplicate composition', () => {

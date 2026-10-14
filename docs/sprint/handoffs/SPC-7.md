@@ -1,6 +1,6 @@
 # SPC-7 handoff: T7.04 Remotion compositions have frame count = fps × duration
 
-Executor: spc-7-08 (lane A) · Branch: `exec/spc-7` · Status: **built, PR open, waiting for reviews** (PE approved 2026-10-14 with changes, folded in below)
+Executor: spc-7-08 (lane A) · Branch: `exec/spc-7` · Status: **r1 findings folded in, waiting for re-review** (PE approved 2026-10-14 with changes, folded in below)
 
 ## PE approval changes (2026-10-14, pe-5e) — these win over the plan below
 1. Assertion 3 (scenes fit within DURATION) is required. Done: scene starts strictly increase from 0, the last
@@ -101,6 +101,21 @@ and the three formats (16x9 1920×1080, 1x1 1080×1080, 9x16 1080×1920).
   installed locally, so the secret scan skipped; CI scans).
 
 - Root.tsx comment "Six" → "Twelve compositions" (orchestrator asked for it in this PR; comment only), 749eb35.
+
+- Review r1 folded (2026-10-14), files in `docs/sprint/reviews/SPC-7-{a,b}-r1.md`:
+  - B-H1: a composition with `calculateMetadata` now fails (its render-time fps/duration would bypass the static
+    props). New failure case. Mutation re-run: `calculateMetadata={() => ({durationInFrames: 1, fps: 25})}` on Root
+    → red.
+  - B-M1: `registerRoot` mocked; the test imports `src/index.ts` and asserts it registers exactly the `Root` the test
+    walks. Mutation re-run: `registerRoot(() => null)` → red.
+  - A-L1/B-L3: `test` added to `apps/video/tsconfig.json` include; `typecheck:video` is clean.
+  - A-L2: the tautological `lastEnd === DURATION` was replaced by "the last scene runs ≥ 1 bar (4 × BEAT)".
+  - B-L1: the video job's changed-filter also watches `package.json`, `tsconfig.base.json`, `.github/workflows/ci.yml`.
+  - B-L4: host elements are named by tag in the "unexpected element" error.
+  - B-L2 (jsdom in the video install via the shared vitest peer set): no change, noted here.
+  - A-L3 / B-L4 scope: the Root.tsx comment was fixed in-PR at the orchestrator's request (specimen-b0, 2026-10-14),
+    after the PE's plan note said follow-up; comment only.
+  - Now 10 tests; lint clean.
 
 ## Next
 - Reviews (PE lens A + lens B) → fold findings → owner merges.
