@@ -13,7 +13,7 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 Merged & Done today: #26 SPC-24 Council v2 (behind Labs), #28 SPC-16 key-safe errors, #27 SPC-25 fullscreen scan.
 
 **Open PRs (merge only on the owner's explicit "merge N"; check CI green + mergeStateStatus first):**
-- **#29 SPC-17** (lane A): sanitizer camelCase + DesignScan **v4** (owner OK'd v4). Lens A r1 approved; lens B r1 (2H/2M/3L) folded in fc69291. **Waiting: pe-99 re-review of fc69291.** Then ask the owner to merge.
+- **#29 SPC-17** (lane A): sanitizer camelCase + DesignScan **v4** (owner OK'd v4). Lens A r1 approved; lens B r1 (2H/2M/3L) folded in fc69291. **pe-99 r2 APPROVED fc69291 (0 findings).** Ready for the owner's merge once CI is green. Rebase rule for the second of #29/#30: db.ts must keep `DesignScanSchema.parse` in saveScan/updateScan/replaceStoredScan/saveCompose AND `await chatsReady` in loadChat/saveChat; gate green.
 - **#30 SPC-26** (lane B): panel restore + one-time history scrub (knownKeys). Lens A r1 approved (1 LOW). **Waiting: lens-B + privacy reviewer (pane w1:p12, tab "review").** Close that pane only after `herdr agent wait --until idle`.
 - ⚠️ #29 and #30 both touch `apps/extension/src/lib/db.ts`: the second to merge must rebase on main, keeping both the write validation (SPC-17) and the scrub (SPC-26). The PE checks.
 
