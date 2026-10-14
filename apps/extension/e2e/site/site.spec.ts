@@ -1,13 +1,14 @@
 // T7.01 + T7.03: the website in site/ (plain HTML, no build step; Netlify publishes the folder as is).
 // "Website builds" (TESTING.md) means here: the folder serves with no errors under the live CSP.
-// Nothing leaves the machine: external requests get an empty 200 and external links are only
-// compared as href strings.
+// Nothing leaves the machine: the fonts are self-hosted, external requests get an empty 200 and
+// external links are only compared as href strings.
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { type Browser, type BrowserContext, test as base, expect } from '@playwright/test';
 import {
   ctaProblems,
+  FONT_PATHS,
   fontProblems,
   isolate,
   linkProblems,
@@ -29,7 +30,7 @@ async function createContext(
   browser: Browser,
   origin: string,
   phone = false,
-  fonts: 'vendored' | 'blocked' = 'vendored',
+  fonts: 'web' | 'blocked' = 'web',
 ) {
   const context = await browser.newContext(phone ? { viewport: PHONE, isMobile: true } : {});
   await isolate(context, origin, fonts);
@@ -41,7 +42,7 @@ const test = base.extend<{
   newContext: (
     origin: string,
     phone?: boolean,
-    fonts?: 'vendored' | 'blocked',
+    fonts?: 'web' | 'blocked',
   ) => Promise<BrowserContext>;
 }>({
   newContext: async ({ browser }, use) => {
@@ -109,8 +110,16 @@ test.describe('website (site/)', () => {
     }) => {
       const context = await newContext(server.origin, true, 'blocked');
       const { page, problems } = await openPage(context, server.origin + p, server.origin);
-      expect(problems).toEqual([]);
-      // Proves the font check isn't vacuous: with the stylesheet emptied, neither face loads.
+      // The only problems are the two font 404s (blocked on purpose) and their console errors.
+      const notFound =
+        'console error: Failed to load resource: the server responded with a status of 404 (Not Found)';
+      expect(problems.sort()).toEqual(
+        [
+          ...FONT_PATHS.map((f) => `HTTP 404 for ${server.origin}${f}`),
+          ...FONT_PATHS.map(() => notFound),
+        ].sort(),
+      );
+      // Proves the font check isn't vacuous: with the font files missing, neither face loads.
       expect(await fontProblems(page)).toEqual([
         'font not loaded: Press Start 2P',
         'font not loaded: VT323',
@@ -149,7 +158,7 @@ test.describe('website checks catch breakage', () => {
         '<div class="inner">',
         `<div class="inner"><div id="too-wide-scene" style="width:500px;height:10px"></div><p>${LONG_TOKEN}</p>`,
       );
-      return once(out, 'family=VT323', 'family=VT32');
+      return once(out, "@font-face{font-family:'VT323'", "@font-face{font-family:'VT32'");
     });
     edit('privacy/index.html', (h) =>
       once(

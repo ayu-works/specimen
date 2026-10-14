@@ -1,7 +1,5 @@
 // Checks for the website tests. Each returns a list of human-readable problems (empty = pass), so a
 // failing test names the broken href, the CSP violation or the overflowing element.
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
 import { type Redirect, shortLink } from './netlify';
 
@@ -11,59 +9,37 @@ declare global {
   }
 }
 
-const FONTS_DIR = path.join(import.meta.dirname, 'fonts');
-/** The site's web fonts, served from local copies (see fonts/README.md). */
+/** The site's self-hosted web fonts (site/fonts/; see site/README.md). */
 const FONTS: [family: string, file: string][] = [
-  ['Press Start 2P', 'pressstart2p-latin.woff2'],
+  ['Press Start 2P', 'pressstart2p-regular.woff2'],
   ['VT323', 'vt323-latin.woff2'],
 ];
-const FONT_CSS = FONTS.map(([family, file]) => [
-  family,
-  `@font-face{font-family:'${family}';font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/specimen-test/${file}) format('woff2')}`,
-]);
+export const FONT_PATHS = FONTS.map(([, file]) => `/fonts/${file}`);
 
 /**
- * With fonts blocked, the families are declared with a source that never loads. A declared
- * @font-face hides an installed font of the same name, so a machine with VT323 installed still
- * measures the fallback.
- */
-const BLOCKED_CSS = FONTS.map(
-  ([family]) => `@font-face{font-family:'${family}';src:local('__specimen_no_such_font__')}`,
-).join('\n');
-
-/**
- * Keeps every request on the machine. Google Fonts get the vendored copies (or, with
- * `fonts: 'blocked'`, faces that never load: what users see while fonts load or when they're blocked);
- * anything else not on `origin` gets an empty 200. CSP still applies first, so a host the policy
- * forbids is reported, not fulfilled.
+ * Keeps every request on the machine: anything not on `origin` gets an empty 200. The site's own
+ * fonts come from the local server, or, with `fonts: 'blocked'`, get a 404 (what users see while the
+ * fonts load or when they fail). CSP still applies first, so a host the policy forbids is reported,
+ * not fulfilled.
  */
 export async function isolate(
   context: BrowserContext,
   origin: string,
-  fonts: 'vendored' | 'blocked' = 'vendored',
+  fonts: 'web' | 'blocked' = 'web',
 ): Promise<void> {
   await context.route(
     (url) => url.origin !== origin,
     async (route) => {
-      const url = new URL(route.request().url());
-      if (fonts === 'vendored' && url.hostname === 'fonts.googleapis.com') {
-        // Only the faces the site actually asks for, so a typo in its `family=` fails the font check.
-        const asked = url.searchParams.getAll('family').map((f) => f.split(':')[0]);
-        const css = FONT_CSS.filter(([family]) => asked.includes(family)).map(([, face]) => face);
-        return route.fulfill({ status: 200, contentType: 'text/css', body: css.join('\n') });
-      }
-      if (fonts === 'blocked' && url.hostname === 'fonts.googleapis.com') {
-        return route.fulfill({ status: 200, contentType: 'text/css', body: BLOCKED_CSS });
-      }
-      const font = FONTS.find(([, file]) => url.pathname === `/specimen-test/${file}`);
-      if (fonts === 'vendored' && url.hostname === 'fonts.gstatic.com' && font) {
-        const body = await readFile(path.join(FONTS_DIR, font[1]));
-        return route.fulfill({ status: 200, contentType: 'font/woff2', body });
-      }
       const css = route.request().resourceType() === 'stylesheet';
       return route.fulfill({ status: 200, contentType: css ? 'text/css' : 'text/plain', body: '' });
     },
   );
+  if (fonts === 'blocked') {
+    await context.route(
+      (url) => url.origin === origin && FONT_PATHS.includes(url.pathname),
+      (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not found' }),
+    );
+  }
   await context.addInitScript(() => {
     window.__cspViolations = [];
     document.addEventListener('securitypolicyviolation', (e) => {

@@ -1,0 +1,71 @@
+# T7.02: Lighthouse report for the website (site/ served locally, never the live site). Non-blocking by owner
+# decision (2026-10-14): scores move between runs on shared machines, so this job reports and never fails.
+# The scores land in the job summary; the full HTML reports are an artifact.
+name: Lighthouse
+on:
+  pull_request:
+    paths:
+      - site/**
+      - netlify.toml
+      - apps/extension/e2e/site/**
+      - .github/workflows/lighthouse.yml
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - netlify.toml
+      - apps/extension/e2e/site/**
+      - .github/workflows/lighthouse.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: T7.02 Lighthouse (report only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm i --frozen-lockfile --filter '!@specimen/video'
+      - id: pw
+        run: echo "version=$(pnpm -F @specimen/extension exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm -F @specimen/extension exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm -F @specimen/extension exec playwright install-deps chromium
+      # Exit codes: 0 pass, 1 a score under 95, 2 (or anything else) Lighthouse did not run. Recorded, never fatal.
+      - id: lh
+        run: |
+          set +e
+          pnpm -F @specimen/extension lighthouse --out "$RUNNER_TEMP/lighthouse-report"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+      - if: steps.lh.outputs.code == '1'
+        run: echo "::warning title=T7.02 Lighthouse::A score is under 95 (see the job summary)"
+      - if: steps.lh.outputs.code != '0' && steps.lh.outputs.code != '1'
+        run: |
+          echo "::warning title=T7.02 Lighthouse::Lighthouse did not run (exit ${{ steps.lh.outputs.code }}); no scores this time"
+          echo "**T7.02: Lighthouse did not run (exit ${{ steps.lh.outputs.code }}).** See the step log." >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: ${{ runner.temp }}/lighthouse-report
+          if-no-files-found: ignore
+          retention-days: 14
