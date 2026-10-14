@@ -1,6 +1,6 @@
 # SPC-6 handoff: T6.07 gitleaks scan of the whole history (CI + local)
 
-Executor: exec-spc-6 (lane A) · Branch: `exec/spc-6` · Status: **built; PR open** (PE approved 2026-10-14 with changes, folded in below)
+Executor: exec-spc-6 (lane A) · Branch: `exec/spc-6` · Status: **reviews done, approved; waiting for the owner's merge** (PE approved 2026-10-14 with changes, folded in below)
 
 ## PE approval changes (2026-10-14, pe-5e) — these win over the plan below
 1. Missing binary: warn+skip locally; fail when `CI` is truthy (set, not ""/"0"/"false") or `SPECIMEN_REQUIRE_GITLEAKS=1`.
@@ -117,15 +117,18 @@ Lens B (`SPC-6-b-r1.md`, 0C/1H/2M/4L):
 - **M2 fixed:** ci.yml has top-level `permissions: contents: read`, and both checkouts set `persist-credentials: false`.
 - **L1 fixed (hint):** the findings message says every local ref is scanned and gives `git branch -a --contains <commit>`.
 - **L2 fixed:** a T6.07 test asserts `.gitleaks.toml` has no allowlist section and still extends the default rules.
-- **L3 not fixed here, raised with the orchestrator:** CODEOWNERS for `.gitleaks.toml`/`.gitleaksignore` is outside
-  lane A (`.github/CODEOWNERS`, not `.github/workflows/`). The owner already reviews every merge.
+- **L3 won't fix: single maintainer** (orchestrator decision, 2026-10-14). The owner reviews and approves every merge,
+  so CODEOWNERS on `.gitleaks.toml`/`.gitleaksignore` adds nothing.
 - **L4 fixed:** `curl --retry 3 --retry-all-errors` (sha256 still checked); ENOBUFS has its own message.
 - New ignore entry: committing the lens-A review (02e2e88) added its quote of the same dummy key to history; ignored by
   fingerprint rather than editing the reviewer's file.
 - 16/16 T6.07 tests pass with `CI=true`; full `pnpm gate` green before the push.
 
+## Review round 2 (2026-10-14)
+- Lens A r2 (`SPC-6-a-r2.md`): 0C/0H/0M/1L, approved. **L1 fixed:** the config test also forbids `disabledRules`.
+
 ## Next
-- PE round 2 (lens A + a check of the lens-B HIGH).
+- Nothing for the executor. The orchestrator asks the owner to merge PR #18.
 
 ## How to resume
 Read this file, then the ticket SPC-6 (and its comments). Branch `exec/spc-6` in this worktree.

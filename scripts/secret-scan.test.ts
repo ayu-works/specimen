@@ -58,9 +58,10 @@ describe('secret scan decisions', () => {
     assert.match(onScan(null, err).message, /too large/);
   });
 
-  test('T6.07 .gitleaks.toml has no allowlist (false positives go in .gitleaksignore by fingerprint)', () => {
+  test('T6.07 .gitleaks.toml has no allowlist or disabled rules (false positives go in .gitleaksignore by fingerprint)', () => {
     const toml = readFileSync(join(import.meta.dirname, '..', '.gitleaks.toml'), 'utf8');
     assert.doesNotMatch(toml, /^\s*\[{1,2}\s*(?:rules\.)?allowlists?\b/im);
+    assert.doesNotMatch(toml, /^\s*disabledRules\b/im);
     assert.match(toml, /useDefault\s*=\s*true/);
   });
 
