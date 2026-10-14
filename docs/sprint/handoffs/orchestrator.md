@@ -6,7 +6,7 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 ## UPDATE 2026-10-14 (#20 merged; SPC-12 started; owner decisions)
 
 - **SPC-7 Done:** #20 merged as 31fa181; main CI green.
-- **Owner decisions:** (1) move both folders into one `specimen-herdr/` folder **at the end of the sprint** (no live agents; `git worktree repair`; copy the Claude memory dir to the new path key). (2) Lighthouse **option A**: self-host the fonts, CSP font-src 'self', drop fonts.googleapis. The PE kept `connect-src 'none'`, so SEO stays 91 as a labelled CSP artifact; Press Start 2P uses the unmodified upstream font (OFL Reserved Font Name). (3) **No release yet:** SPC-16 to SPC-21 stay in the Backlog.
+- **Owner decisions:** (1) move both folders into one `specimen-herdr/` folder **at the end of the sprint** (no live agents; `git worktree repair`; copy the Claude memory dir to the new path key). (2) Lighthouse **option A**: self-host the fonts, CSP font-src 'self', drop fonts.googleapis. CSP `connect-src 'self'` (the owner's option A as presented; a brief 'none' detour was withdrawn); Press Start 2P uses the unmodified upstream font (OFL Reserved Font Name). (3) **No release yet:** SPC-16 to SPC-21 stay in the Backlog.
 - Live: pe-5e (w1:p9), spc-11-14 (w1:pF, stacked on exec/spc-8), spc-12-f8 (w1:pH, docs, base main). The SPC-12 CLAUDE.md pointer notes the sprint docs are on sprint/log until the end of the sprint.
 - Remaining: SPC-11 → fold into #19 → merge #19 (1 deploy); SPC-12; SPC-14 last (after SPC-11). Then: merge sprint/log, move folders, close the sprint.
 - herdr: `pane split` only takes right|down.
