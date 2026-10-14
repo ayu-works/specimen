@@ -37,6 +37,7 @@ behind the owning lane's open ticket ("blocked by" in Linear).
 and PRs as they come, and works on SPC-13 when idle.
 
 ## Backlog (not in this sprint; the owner picks)
+- **Audit fixes (Extension project, from SPC-13):** SPC-16 key echo in provider errors (H5, H12), SPC-17 brand leak and schema (H3, H4), SPC-18 llmHost abort (H1, H2), SPC-19 import atomicity (H6, H7), SPC-20 scan failure paths (H8, H9, H11), SPC-21 deny-capable stubs (H10, H13). These are real user-facing bugs, so they need a v1.0.1 CWS release.
 - Expose the existing token exports (Tailwind, CSS vars, shadcn, DTCG, Figma) in the side panel.
 - Re-capture the `fixtures/raw/*` real sites and measure extraction accuracy against them (a `measurement` ticket).
 - The MCP bridge's future (SPC-10).

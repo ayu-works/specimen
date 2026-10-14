@@ -3,6 +3,14 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-14 (reviews running; audit filed)
+
+- PR #18 (SPC-6): lens A r2 approved and lens B r1 folded in. Waiting for the executor to commit the review files, then CI green, then **ask the owner to merge**.
+- PR #19 (SPC-8 + SPC-15): r1 folded in (and a second real overflow fixed in site/index.html); PE round 2 underway. Both site/ changes go live on merge.
+- SPC-13 is Done; HIGHs filed as SPC-16 to SPC-21 in the new Extension project (Backlog). The owner decides whether to pull them into the sprint.
+- The owner added the "In review" status, so the `in-review` label is retired. Unknown: whether "On PR merge → No action" was set.
+- Reviewer panes are closed after `herdr agent wait --until idle`.
+
 ## UPDATE 2026-10-14 (team running)
 
 - SPC-5 is Done. The owner chose auto mode for agents and skipped the /login test; desktop alerts work.
