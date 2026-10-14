@@ -9,6 +9,7 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 ## UPDATE 2026-10-15 ~22:20 (CURRENT STATE: read this block first)
 
 - **Orchestrator session is now `specimen-c8`** (pane w1:p3); all live agents told.
+- 22:25: SPC-17 sec review done (1H/2M/3L, reviews/SPC-17-sec-r1.md). spc-17 panes + worktree + local branch removed. New **SPC-32** (H1+M1: long title freeze / sanitizer throw → fail closed), lane A, proposed ahead of SPC-18 (owner can reply "18 first"). M2+L1–L3 folded into SPC-19 via an overrides comment; M2's schema bounds = contract (PE + owner OK).
 - SPC-17 **Done** in Linear (main CI green on df0297c, closing comment added). Post-merge security review still running: session spc-17-82, pane w1:p13 (tab review) → SPC-17-sec-r1.md. spc-17-13 (w1:pZ) idle; close it + the spc-17 worktree after the sec review finishes, then kick off SPC-18.
 - #30 SPC-26: lens B r1 in (0C/0H/1M/6L, SPC-26-b-r1.md); reviewer pane p12 already closed. spc-26-81 is folding. GitHub says CLEAN + CI green, but after the fold the PE must confirm db.ts keeps SPC-17's write validation (rebase rule below) before the owner's merge.
 
