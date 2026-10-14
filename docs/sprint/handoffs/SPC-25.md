@@ -149,8 +149,9 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
 5. Optional: Stage Manager on; a second display.
 
 ## Next
-- CI gate green on the PR head → orchestrator moves on (owner decides the merge after the macOS checks above).
-- Follow-up (orchestrator to file): the `waitForTabLoad` race (see above).
+- Nothing left for the executor. CI green on 8f5b502; PE lens A r4 approved; the owner did the macOS full-screen check
+  and it works (relayed by the orchestrator, 2026-10-15). The orchestrator merges on the owner's word.
+- Follow-up filed by the orchestrator: SPC-28 (`waitForTabLoad` race), lane B after SPC-20.
 
 ## How to resume
 Worktree `specimen-herdr/worktrees/spc-25`, branch `exec/spc-25`. Read this file, then `git log origin/main..` and the
