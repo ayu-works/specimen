@@ -40,7 +40,7 @@ Add a role only when a lane has queued work and the owner approves.
   Each lane "Owns" its files (plan.md); no two executors edit the same files at once.
 
 ## The ticket loop
-1. **Kickoff** (orchestrator): ticket → In Progress; worktree `../Specimen-wt/<ticket>` on branch `exec/<ticket>`
+1. **Kickoff** (orchestrator): ticket → In Progress; worktree `../worktrees/<ticket>` on branch `exec/<ticket>`
    from `origin/main`; alert hooks copied in; pane opened; kickoff sent (saved in the orchestrator's scratchpad).
 2. **Plan** (executor): written at the top of `docs/sprint/handoffs/<ticket>.md` in its worktree: approach, files,
    tests, and failure modes (atomicity, idempotency, partial failure, errors during cleanup, concurrency, drift
@@ -67,7 +67,7 @@ A reviewed script is never edited in place after review: new commit, and the dif
 ## Rules for every agent
 - **Folder rule:** write, edit, move or delete only inside your own worktree and your session scratchpad. Stop only
   processes you started, by exact pid. Never `pkill`, `killall`, a process group, `-1` or `0`. Everything else on the
-  machine is read-only. The sprint docs (`../Specimen-wt/sprint-log/`) are read-only for everyone but the
+  machine is read-only. The sprint docs (`docs/sprint/`, and the live copy on branch `sprint/log` at `../worktrees/sprint-log/`) are read-only for everyone but the
   orchestrator.
 - **Secrets:** never print `.env*`, keys, tokens, or process argv/env near credentialed commands. Never copy env
   files between worktrees without the owner's OK. API keys only ever live in `chrome.storage.local` (CLAUDE.md).
@@ -106,6 +106,10 @@ A reviewed script is never edited in place after review: new commit, and the dif
 milestone event (ticket done, blocker, owner needed) plus a daily digest. Five lines is fine.
 
 ## Tooling
+**Folders (since 2026-10-15):** everything lives in `/Users/ayushmayank/Claude coding/Projects/specimen-herdr/`: the main
+checkout is `specimen/` and agent worktrees are `worktrees/<ticket>`. Sprint docs are on `main` in `docs/sprint/`; during a sprint the
+orchestrator keeps the live log on branch `sprint/log` (worktree `worktrees/sprint-log`) and merges it at the end of the sprint.
+
 **herdr 0.9.3** (verified 2026-10-14). The orchestrator runs inside herdr (`HERDR_ENV=1`); the `claude` integration is
 installed (`herdr integration status` → `claude: current`). Workspace `w1` "Specimen". Never run bare `herdr` from a
 pane, never `herdr server stop`, never kill the herdr process.
@@ -116,8 +120,8 @@ reviewer, closed when its review is done). Pane and agent names: lowercase, ≤ 
 
 Opening an agent (read every id from herdr's JSON, never guess):
 ```bash
-git worktree add ../Specimen-wt/<ticket> -b exec/<ticket> origin/main
-cp docs/sprint/hooks/settings.local.json ../Specimen-wt/<ticket>/.claude/settings.local.json   # from sprint/log
+git worktree add ../worktrees/<ticket> -b exec/<ticket> origin/main
+cp docs/sprint/hooks/settings.local.json ../worktrees/<ticket>/.claude/settings.local.json
 herdr pane split <pane> --direction right --cwd <worktree> --no-focus   # → .result.pane.pane_id
 #   or: herdr tab create --workspace w1 --cwd <worktree> --label <name> --no-focus   # → .result.root_pane
 herdr pane rename <pane> <name>
