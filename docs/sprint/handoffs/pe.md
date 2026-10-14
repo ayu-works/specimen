@@ -1,62 +1,56 @@
-# PE handoff (session pe-5e → fresh PE, 2026-10-15)
+# PE handoff (session pe-1b, 2026-10-15)
 
-Read your brief (`sprint-log/docs/sprint/briefs/principal-engineer.md`), then this file. Orchestrator: `the orchestrator (read ListAgents for its current name)`
-(restarted 2026-10-15; it was `specimen-b0`). Find executors with ListAgents. Their names look like `spc-14-6b`.
+Read your brief (`specimen-herdr/worktrees/sprint-log/docs/sprint/briefs/principal-engineer.md`), then this file.
+Orchestrator: check ListAgents (it was `specimen-53`). Worktree: `specimen-herdr/worktrees/pe`, branch `pe/sprint-2`.
 
-## State: Sprint 1 is finished (all tickets merged)
-| Ticket | PR | Lens A |
-|---|---|---|
-| SPC-6 gitleaks (T6.07) | #18 merged | approved r2 |
-| SPC-7 video frame counts (T7.04) | #20 merged | approved r2 |
-| SPC-8 site e2e (T7.01, T7.03) + SPC-15 CSS fix | #19 merged (bbc8854) | approved r2 |
-| SPC-11 Lighthouse (T7.02) + self-hosted fonts | #22 → exec/spc-8, shipped in #19 | approved r2 + OK on 2cb856a |
-| SPC-12 docs drift | #21 | approved (fix 8e023c0) |
-| SPC-14 check-ids 0–7, ⊘ dropped format | #23 merged (1150d70) | approved r3 |
-| SPC-13 failure-path audit | on sprint/log (a8211ee) | done: 0C/13H/21M/12L |
+## State
+| Item | Result |
+|---|---|
+| PR #24 sprint/log → main (doc-only) | r1 0C/0H/2M/6L, folded in 8c9e434, merged e1e8a6e. Sprint 1 closed |
+| SPC-22 critique spike, PR #25 | plan approved (7 changes); lens A r1 2M → r2 APPROVED on ed91231. Owner: GO with a redesign → superseded by SPC-24; #25 not merged |
+| SPC-24 Council v2 | my architecture note `docs/sprint/reviews/SPC-24-pe-architecture.md` (this worktree); plan approved with 7 changes; **executor spc-24-3e is building** (worktree `worktrees/spc-24`, branched from exec/spc-22) |
 
-## Open threads
-- None for the PE. The SPC-13 HIGHs are for the orchestrator to file as tickets. The file ends with six groupings; the
-  real bugs are:
-  - the llmHost abort truncates another chat;
-  - a Port disconnect doesn't stop generation;
-  - a camelCase CSS-var brand leaks into DESIGN.md;
-  - `migrate()` accepts a non-hex `hex`;
-  - a partial import duplicates scans on retry;
-  - provider error bodies are echoed into errors.
-  Expect plans for these next. Each must drive the failure (see the audit's "Fix test" column).
-- (Resolved 2026-10-15: the `pe/spc-13-audit` branch was removed; the audit is on sprint/log as a8211ee.)
+## Open thread: SPC-24 PR review (lens A)
+Check against `worktrees/spc-24/docs/sprint/handoffs/SPC-24.md` ("PE changes" + "Frozen contract v1, final"):
+- **Run host:** in the offscreen document (`councilHost.ts`), never the service worker. No new permission; offscreen
+  reason still `WORKERS`.
+- **Closed panel:** a closed panel's Port throws on post → the host try/catches each post, and the engine's `emit`
+  guards `onTurn`. The test's fake port must throw after disconnect, as Chrome does.
+- **Key:** only in the host's memory. T3.32 serializes every host message, the stored record, `council.started` and
+  `council.finished`, and finds no fake key.
+- **Records:** a separate Dexie DB `specimen-council`, one atomic put plus prune-to-5 per turn end. The
+  `interrupted` fix-up is conditional on `updatedAt`. The SW's onStartup/onInstalled mark `running` records
+  `interrupted`.
+- **SW guard:** `council.halt{at}`, ignored if the run started after `at`. It halts on flag off, a settings
+  fingerprint change, a `secrets.*` change or a vault lock.
+- **Contract v1:** `rejected{runId|null, error}` is separate from `status`. `council.started` clears the badge.
+- **TESTING.md:** T3.25 and T3.26 are ⊘ (replaced by T3.29 and T3.33); T3.28–T3.33 and T3.34 🖐 are new. Run
+  `pnpm check-ids --all` yourself.
+- **llmHost:** `attachLlmPort` is a pure refactor (the T3.11 tests are unedited: diff them).
+- **SPC-22 guarantees still hold:** the cap, Groq pacing (`PROVIDER_TPM` keyed by provider id = preset id `groq`), 3
+  retries, the stall timer, the sanitizer on every turn and on the verdict, the flag `=== true`, mock-only tests.
+- **Merge:** none before the owner's go (the runtime flag would ship in a CWS build).
+Review file: `worktrees/spc-24/docs/sprint/reviews/SPC-24-a-r1.md`. Then comment on Linear and message the executor
+and the orchestrator.
 
-## Contracts now in force
-- **TESTING.md ⊘ (owner OK, 2026-10-15).** A dropped row keeps its ID. The Type cell is exactly `⊘` (only in a Type
-  cell). The Test cell starts `**Dropped YYYY-MM-DD** (reason)`, then the struck-through original.
-- **check-ids `--all`.** It gates every `## Phase <n>` heading (0–7 must exist). Only real `it(`/`test(` calls count;
-  skip-only fails; a dropped ID that still has a test fails.
-  - T7.04 runs outside `pnpm gate` (video CI job only).
-  - T7.02 is report-only (a non-blocking Lighthouse job).
-- **Site.**
-  - CSP: `font-src 'self'` and `connect-src 'self'` (owner option A; with 'none', Lighthouse's robots.txt fetch is
-    blocked and SEO drops to 0.91).
-  - Fonts are self-hosted in `site/fonts/`. Press Start 2P must stay the full, unmodified font, because its OFL
-    Reserved Font Name rules out a subset or a rename.
-  - Every `site/` merge costs a Netlify deploy (15 of 300 credits), so batch site changes.
-- **gitleaks.** The findings exit code is 3. refs/stash is excluded. False positives go in `.gitleaksignore` by
-  fingerprint only, with no allowlist and no `disabledRules`.
+## Contracts in force (added this session)
+- **Council Port/runtime protocol v1** (SPC-24, frozen): Port `council`.
+  - Panel → host: `start`, `stop`, `attach`.
+  - Host → panel: `snapshot`, `turn`, `status`, `rejected`.
+  - Host → SW: `council.started`, `council.finished`. SW → host: `council.halt{at}`.
+- **`ProviderError` has no `retryAfterMs`.** Adding one is a contract change: a plan plus the owner's OK, reading
+  the header only, never the body (H5).
+- **Earlier contracts** (TESTING ⊘ format, check-ids, site CSP, gitleaks): unchanged; see git history of this file.
 
-## Lessons for the next PE
-1. **Never quote secret-shaped strings in review files.** My SPC-6 r1 quote had to be added to `.gitleaksignore`.
-2. **Check the owner's actual decision before overriding a plan detail.** I asked for `connect-src 'none'` against the
-   owner's option A and had to withdraw it.
-3. **The best catches came from asking "can this test fail on its claimed path?":**
-   - the `.scene{overflow:hidden}` that made the 375px check vacuous;
-   - a fixture ID that the repo-wide check-ids scan would count as real;
-   - gitleaks exiting 1 on both errors and findings;
-   - a pass bar not fixed before measuring.
-4. **Measurements.** Require the CI number, not only the local one, and a pass bar written before the first run.
-5. **Run things yourself when cheap** (`pnpm check-ids --all`, `gh pr view`, `gh run view`) instead of trusting a
-   claim. Verify every "merged / green" claim in docs PRs with `gh`.
-6. **Review files go in the executor's worktree** (`docs/sprint/reviews/<ticket>-a-r<n>.md`). After a review, comment
-   on Linear and message the executor and the orchestrator with the counts. For post-review commits, give a one-line
-   OK.
-7. **A new orchestrator session name:** confirm it with ListAgents and the Linear comments before acting on a
-   resume or stop.
-8. **Delegate wide audits** to read-only subagents (one per package), then verify each HIGH yourself before filing.
+## Known limitations carried (not SPC-24's job)
+- The sanitizer's camelCase gap (H3) belongs to SPC-17.
+- The WebLLM abort/disconnect bugs (H1, H2) belong to SPC-18.
+- The TPM is keyed by provider, not model.
+
+## Lessons
+1. **Probe claims cheaply.** A 3-line tsx probe found the parseKeepChange corruption; reading alone missed it.
+2. **Check that a test's fake matches production.** The pacing test used `id: 'groq'`, so I confirmed the real BYOK
+   provider gets `preset.id`.
+3. **Background work in MV3:** a service worker dies after ~30 s idle, and an offscreen document is the durable
+   host. Every listener post to a Port must survive a disconnected peer.
+4. **Write architecture decisions before the plan arrives.** It saved a rework round on SPC-24.
