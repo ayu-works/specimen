@@ -118,7 +118,7 @@ and the three formats (16x9 1920×1080, 1x1 1080×1080, 9x16 1080×1920).
   - Now 10 tests; lint clean.
 
 ## Next
-- Reviews (PE lens A + lens B) → fold findings → owner merges.
+- Lens A r2: 0/0/0/0, approved (Root.tsx comment acknowledged). Waiting for lens B r2 → owner merges.
 
 ## How to resume
 Worktree `Specimen-wt/spc-7`, branch `exec/spc-7`. Read this file and any `docs/sprint/reviews/SPC-7-*.md`.
