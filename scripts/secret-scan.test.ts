@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import {
   checkVersion,
-  LOG_OPTS,
+  commitsScanned,
+  FINDINGS_EXIT,
   onMissing,
   onScan,
   onShallow,
@@ -16,19 +17,36 @@ import {
   scan,
 } from './secret-scan';
 
+const SCANNED = 'INF 12 commits scanned.';
+
 describe('secret scan decisions', () => {
-  test('T6.07 a findings exit (1) fails the scan', () => {
-    const r = onScan(1);
+  test('T6.07 the findings exit fails the scan as found secrets', () => {
+    const r = onScan(FINDINGS_EXIT, undefined, SCANNED);
     assert.equal(r.ok, false);
     assert.match(r.message, /found secrets/);
   });
 
-  test('T6.07 an unexpected exit code or spawn error fails as a scan error, never as clean', () => {
-    for (const r of [onScan(2), onScan(126), onScan(null), onScan(0, new Error('EACCES'))]) {
+  test('T6.07 exit 1 (a gitleaks fatal error), other exits and spawn errors fail as a scan error', () => {
+    for (const r of [
+      onScan(1, undefined, SCANNED),
+      onScan(2, undefined, SCANNED),
+      onScan(126, undefined, SCANNED),
+      onScan(null),
+      onScan(0, new Error('EACCES'), SCANNED),
+    ]) {
       assert.equal(r.ok, false);
-      assert.doesNotMatch(r.message, /clean/);
+      assert.doesNotMatch(r.message, /clean|found secrets/);
     }
-    assert.equal(onScan(0).ok, true);
+    const ok = onScan(0, undefined, SCANNED);
+    assert.equal(ok.ok, true);
+    assert.match(ok.message, /12 commits/);
+  });
+
+  test('T6.07 a clean exit that scanned no commits fails', () => {
+    assert.equal(commitsScanned('INF 1 commits scanned.'), 1);
+    assert.equal(commitsScanned('no leaks found'), null);
+    assert.equal(onScan(0, undefined, 'INF 0 commits scanned.\nINF no leaks found').ok, false);
+    assert.equal(onScan(0, undefined, 'INF no leaks found').ok, false);
   });
 
   test('T6.07 missing gitleaks locally warns and skips; missing in CI or when required fails', () => {
@@ -63,10 +81,6 @@ describe('secret scan decisions', () => {
     assert.equal(checkVersion('8.19.0'), null);
     assert.equal(checkVersion('v8.30.1'), null);
     assert.equal(checkVersion('9.0.0'), null);
-  });
-
-  test('T6.07 the scan excludes the shared stash ref, with --exclude before --all', () => {
-    assert.equal(LOG_OPTS, '--exclude=refs/stash --all');
   });
 });
 
@@ -126,6 +140,32 @@ describe('secret scan against a real git history', { skip }, () => {
       assert.match(r.output, /leaks found: [1-9]/);
       assert.ok(!r.output.includes(FAKE), 'the secret must be redacted');
       assert.ok(!r.message.includes(FAKE));
+    });
+  });
+
+  test('T6.07 a broken gitleaks config fails as a scan error, not as found secrets', () => {
+    withRepo((dir) => {
+      writeFileSync(join(dir, 'README.md'), 'nothing here\n');
+      git(dir, 'add', '.');
+      git(dir, 'commit', '-q', '-m', 'readme');
+      const config = join(dir, 'broken.toml');
+      writeFileSync(config, '[[\n');
+      const r = scan({ repo: dir, env: gitEnv, config });
+      assert.equal(r.ok, false);
+      assert.match(r.message, /scan error \(exit 1\)/);
+    });
+  });
+
+  test('T6.07 a key that exists only in the shared stash is not scanned', () => {
+    withRepo((dir) => {
+      writeFileSync(join(dir, 'README.md'), 'nothing here\n');
+      git(dir, 'add', '.');
+      git(dir, 'commit', '-q', '-m', 'readme');
+      writeFileSync(join(dir, 'settings.py'), `api_key = "${FAKE}"\n`);
+      git(dir, 'stash', 'push', '-q', '-u', '-m', 'wip');
+      const r = scan({ repo: dir, env: gitEnv });
+      assert.equal(r.ok, true, r.output + r.message);
+      assert.match(r.message, /\(1 commits\)/);
     });
   });
 

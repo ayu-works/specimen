@@ -101,8 +101,13 @@ secret-scanning or push-protection noise.
 - Known limit: gitleaks reads `git log -p`, which shows no diff for merge commits, so a secret introduced only in a
   merge conflict resolution isn't seen. Accepted (default gitleaks behaviour); not in scope.
 
+- Lens A r1 (0/0/1/3) folded in locally: M1 findings exit is now 3 (gitleaks exits 1 on its own fatal errors), with a
+  real broken-config test; L1 a clean exit with 0 or no "commits scanned" fails, and the count is printed; L2 a real
+  stash-only-key test (verified it fails when `--exclude=refs/stash` is removed); L3 was already in the PR body.
+  12/12 T6.07 tests pass with CI=true. Committed, **not pushed** (orchestrator: wait for lens B too).
+
 ## Next
-- Fold in review findings (PE lens A, lens B, security) from `docs/sprint/reviews/`.
+- Wait for lens B + security (`docs/sprint/reviews/SPC-6-b-r1.md`), fold it in, then push once and tell both reviewers what changed.
 
 ## How to resume
 Read this file, then the ticket SPC-6 (and its comments). Branch `exec/spc-6` in this worktree.

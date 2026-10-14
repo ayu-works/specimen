@@ -56,18 +56,37 @@ export function onShallow(): Outcome {
   };
 }
 
-/** Maps the gitleaks exit status. Only exit 0 is clean; 1 is findings; anything else is an error. */
-export function onScan(status: number | null, error?: Error): Outcome {
+/** gitleaks' findings exit code. Not 1: gitleaks also exits 1 on its own fatal errors (bad config, git failure). */
+export const FINDINGS_EXIT = 3;
+
+/** Commit count from gitleaks' "N commits scanned." line, or null when it's missing. */
+export function commitsScanned(output: string): number | null {
+  const m = output.match(/(\d+) commits? scanned/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Maps the gitleaks result. Clean needs exit 0 and at least one commit scanned;
+ * FINDINGS_EXIT is findings; anything else is an error.
+ */
+export function onScan(status: number | null, error?: Error, output = ''): Outcome {
   if (error || status === null) {
     return {
       ok: false,
       message: `secrets: FAILED, gitleaks did not run (${error?.message ?? 'killed'})`,
     };
   }
-  if (status === 0) return { ok: true, message: 'secrets: clean, whole history scanned' };
-  if (status === 1)
+  if (status === FINDINGS_EXIT) {
     return { ok: false, message: 'secrets: FAILED, gitleaks found secrets (above)' };
-  return { ok: false, message: `secrets: FAILED, gitleaks scan error (exit ${status})` };
+  }
+  if (status !== 0) {
+    return { ok: false, message: `secrets: FAILED, gitleaks scan error (exit ${status})` };
+  }
+  const commits = commitsScanned(output);
+  if (!commits) {
+    return { ok: false, message: 'secrets: FAILED, gitleaks scanned no commits' };
+  }
+  return { ok: true, message: `secrets: clean, whole history scanned (${commits} commits)` };
 }
 
 export interface ScanResult extends Outcome {
@@ -76,7 +95,11 @@ export interface ScanResult extends Outcome {
 }
 
 /** Runs the whole check against `repo` with this repo's gitleaks config and ignore file. */
-export function scan({ repo = root, env = process.env as Env } = {}): ScanResult {
+export function scan({
+  repo = root,
+  env = process.env as Env,
+  config = join(root, '.gitleaks.toml'),
+} = {}): ScanResult {
   const bin = env.GITLEAKS_BIN || 'gitleaks';
   const ver = spawnSync(bin, ['version'], { encoding: 'utf8', env });
   if ((ver.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
@@ -106,9 +129,9 @@ export function scan({ repo = root, env = process.env as Env } = {}): ScanResult
       '--no-banner',
       '--no-color',
       '--exit-code',
-      '1',
+      String(FINDINGS_EXIT),
       '--config',
-      join(root, '.gitleaks.toml'),
+      config,
       '--gitleaks-ignore-path',
       join(root, '.gitleaksignore'),
       `--log-opts=${LOG_OPTS}`,
@@ -117,7 +140,7 @@ export function scan({ repo = root, env = process.env as Env } = {}): ScanResult
     { encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 },
   );
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-  const outcome = onScan(run.status, run.error);
+  const outcome = onScan(run.status, run.error, output);
   const version = ver.stdout.trim();
   return {
     ...outcome,
