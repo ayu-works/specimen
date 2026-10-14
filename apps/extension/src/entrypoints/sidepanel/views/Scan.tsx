@@ -119,13 +119,35 @@ function Captures({ scan }: { scan: DesignScan }) {
           </p>
         </>
       )}
-      {!mobile && mine && extras.mobile !== 'running' && extras.mobile !== 'wide' && (
-        <Row label="Mobile">
-          <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
-            capture
-          </button>
-        </Row>
+      {!mobile && mine && extras.mobile === 'fullscreen' && (
+        <>
+          <Row label="Mobile">
+            <span data-testid="mobile-fullscreen">skipped in full screen</span>
+          </Row>
+          <p data-testid="mobile-fullscreen-note" className="text-[11px] text-muted-foreground">
+            Mobile capture is skipped in full screen. Exit full screen and{' '}
+            <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
+              capture
+            </button>
+            , or capture with permission to emulate a phone in this tab (Chrome shows a "debugging
+            this browser" bar for a few seconds).
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
+            Capture with permission
+          </Button>
+        </>
       )}
+      {!mobile &&
+        mine &&
+        extras.mobile !== 'running' &&
+        extras.mobile !== 'wide' &&
+        extras.mobile !== 'fullscreen' && (
+          <Row label="Mobile">
+            <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
+              capture
+            </button>
+          </Row>
+        )}
       {theme !== 'idle' && (
         <Row label={modeName}>
           {theme === 'running' && <span role="status">checking…</span>}

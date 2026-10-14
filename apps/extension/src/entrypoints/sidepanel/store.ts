@@ -19,7 +19,7 @@ export interface Extras {
   tabId: number | null;
   hints: RawHints | null;
   /** `wide` = Chrome kept the popup wider than a phone and the debugger permission isn't held. */
-  mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide';
+  mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide' | 'fullscreen';
   /** `offer` = the page only reacts to the OS setting: needs the one-time debugger permission. */
   theme: 'idle' | 'running' | 'measured' | 'none' | 'offer' | 'failed';
   page: 'idle' | 'running';
