@@ -12,7 +12,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
     if (!res.ok) throw await httpError(res);
     return await res.json();
   } catch (e) {
-    throw mapThrown(e);
+    throw mapThrown(e, { fixedText: true });
   }
 }
 

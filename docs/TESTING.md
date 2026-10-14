@@ -103,8 +103,8 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T3.02 | U | `openaiCompat` builds the correct request (URL, headers, body) for OpenAI, OpenRouter, Groq, Ollama presets and a custom base URL; parses SSE stream (mocked fetch) |
 | T3.03 | U | `anthropic` sends `anthropic-dangerous-direct-browser-access`, parses SSE events |
 | T3.04 | U | `gemini` uses the `x-goog-api-key` header, parses the stream |
-| T3.05 | U | Error mapping: 401 → "invalid key", 429 → "rate limited", network → "offline" |
-| T3.06 | U | Abort signal stops streaming in every adapter |
+| T3.05 | U | Error mapping: 401 → "invalid key", 429 → "rate limited", network → "offline"; every message is fixed text, and no error (message, string, stack, JSON, cause) holds any 8+ character piece of the key, for any status, body shape, mid-stream error event or thrown fetch error (adapters + `listModels`); `scrubLegacyProviderText` cleans pre-SPC-16 stored text |
+| T3.06 | U | Abort signal stops streaming in every adapter, including `chromeBuiltin` (stubbed `LanguageModel`: each `status()` state, `unsupported`, abort before and during the stream, `destroy()` once, a throwing `destroy()` never masks the result) |
 | T3.07 | U | `polishPrompt` rejects model output missing any token value and falls back to the original |
 | T3.08 | U | `ask()` system prompt includes compact scan JSON; page snippets wrapped in `<page_data>` |
 | T3.09 | U | Prompt-injection fixture ("ignore previous instructions…" in page text) stays inside `<page_data>` and is truncated |

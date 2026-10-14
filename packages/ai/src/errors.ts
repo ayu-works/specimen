@@ -1,6 +1,25 @@
 import { ProviderError } from './types';
 
-/** Map an HTTP failure to a friendly ProviderError. The body is read only to find a short reason. */
+/*
+ * Every message built here is fixed text. Provider error bodies, stream error events and thrown
+ * errors on the HTTP path are read only to pick a kind and are never copied into a message or a
+ * `cause`: some providers echo the API key ("Incorrect API key provided: sk-…"), and these
+ * errors reach the UI and stored chats.
+ */
+
+/** Shown when a 400 says the model can't take the image; `vibe` compares against it to retry text-only. */
+export const IMAGE_REJECTED_TEXT = "This model can't read images.";
+export const MID_STREAM_TEXT = 'The provider reported an error mid-response.';
+export const HTTP_FAILED_TEXT = 'The provider request failed.';
+
+/** Providers phrase "this model can't take images" differently; treat these 400s as that. */
+const IMAGE_REJECTED =
+  /content must be a string|image|vision|multimodal|multi-modal|image_url|unsupported content/i;
+
+const RATE_TEXT =
+  'The provider is rate-limiting requests. Wait a minute and try again, or pick a smaller model.';
+
+/** Map an HTTP failure to a friendly ProviderError. The body is read only to classify it. */
 export async function httpError(res: Response): Promise<ProviderError> {
   let detail = '';
   try {
@@ -15,45 +34,80 @@ export async function httpError(res: Response): Promise<ProviderError> {
   } catch {
     /* body unreadable */
   }
-  detail = detail.replace(/\s+/g, ' ').trim().slice(0, 200);
-  const suffix = detail ? ` (${detail})` : '';
+  detail = detail.replace(/\s+/g, ' ').trim().slice(0, 500);
   if (res.status === 401 || res.status === 403) {
-    return new ProviderError('auth', `Invalid API key, or the key can't use this model${suffix}`);
+    return new ProviderError('auth', "Invalid API key, or the key can't use this model.");
   }
   if (res.status === 400 && /api[_ ]key/i.test(detail)) {
-    return new ProviderError('auth', `Invalid API key${suffix}`);
+    return new ProviderError('auth', 'Invalid API key.');
+  }
+  if (res.status === 429 || /rate[_ -]?limit/i.test(detail)) {
+    return new ProviderError('rate', RATE_TEXT);
+  }
+  if ((res.status === 400 || res.status === 422) && IMAGE_REJECTED.test(detail)) {
+    return new ProviderError('other', IMAGE_REJECTED_TEXT);
   }
   if (res.status === 404 || /model.*(not (exist|found)|decommission|deprecat)/i.test(detail)) {
     return new ProviderError(
       'other',
-      `This model isn't available for your key. In Settings, click "Fetch models" and pick one${suffix}`,
+      `This model isn't available for your key. In Settings, click "Fetch models" and pick one.`,
     );
   }
-  // Never echo the body here: rate-limit responses can carry org ids and account details.
-  if (res.status === 429 || /rate[_ -]?limit/i.test(detail)) {
-    return new ProviderError(
-      'rate',
-      'The provider is rate-limiting requests. Wait a minute and try again, or pick a smaller model.',
-    );
+  if (res.status >= 500) {
+    return new ProviderError('other', 'The provider had a server error. Try again in a minute.');
   }
-  if (res.status >= 500)
-    return new ProviderError('other', `The provider had a server error${suffix}`);
-  return new ProviderError('other', `Request failed with HTTP ${res.status}${suffix}`);
+  return new ProviderError('other', `Request failed with HTTP ${res.status}.`);
 }
 
-/** Map anything thrown by fetch / a stream reader. */
-export function mapThrown(e: unknown): ProviderError {
+/**
+ * Map an `{error: …}` event inside a 200 stream. Only the event's `type` / `code` / `status`
+ * fields are looked at, to tell a rate limit or overload (so callers can back off) from the rest.
+ */
+export function streamError(err: unknown): ProviderError {
+  const e = (err && typeof err === 'object' ? err : {}) as Record<string, unknown>;
+  const hint = [e.type, e.code, e.status].map((v) => String(v ?? '')).join(' ');
+  if (/rate[_ -]?limit|overload|exhausted|\b429\b|\b529\b/i.test(hint))
+    return new ProviderError('rate', RATE_TEXT);
+  return new ProviderError('other', MID_STREAM_TEXT);
+}
+
+/**
+ * Map anything thrown by fetch / a stream reader. With `fixedText` (the HTTP path) no thrown text
+ * and no `cause` is kept: a fetch TypeError can carry the URL or a header value.
+ */
+export function mapThrown(e: unknown, opts: { fixedText?: boolean } = {}): ProviderError {
   if (e instanceof ProviderError) return e;
+  const keep = opts.fixedText ? undefined : { cause: e };
   const name = (e as { name?: unknown } | null)?.name;
-  if (name === 'AbortError') return new ProviderError('aborted', 'Stopped', { cause: e });
+  if (name === 'AbortError') return new ProviderError('aborted', 'Stopped', keep);
   if (e instanceof TypeError) {
     return new ProviderError(
       'network',
       "Can't reach the provider. Check your connection and the base URL.",
-      {
-        cause: e,
-      },
+      keep,
     );
   }
-  return new ProviderError('other', e instanceof Error ? e.message : String(e), { cause: e });
+  if (opts.fixedText) return new ProviderError('other', HTTP_FAILED_TEXT);
+  return new ProviderError('other', e instanceof Error ? e.message : String(e), keep);
+}
+
+/** The ` (<provider detail>)` suffix that messages carried before SPC-16. */
+const LEGACY_SUFFIX = new RegExp(
+  `(${[
+    "Invalid API key, or the key can't use this model",
+    'Invalid API key',
+    `This model isn't available for your key\\. In Settings, click "Fetch models" and pick one`,
+    'The provider had a server error',
+    'Request failed with HTTP \\d+',
+  ].join('|')}) \\([\\s\\S]*\\)$`,
+);
+const KEY_SHAPES =
+  /(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,})/g;
+
+/**
+ * Clean error text stored before SPC-16 (it may hold provider detail that echoed the key): drop
+ * the old ` (<detail>)` suffix and redact anything shaped like an API key. Pure; safe to run twice.
+ */
+export function scrubLegacyProviderText(text: string): string {
+  return text.replace(LEGACY_SUFFIX, '$1').replace(KEY_SHAPES, '[redacted]');
 }

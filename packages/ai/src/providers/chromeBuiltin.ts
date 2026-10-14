@@ -91,7 +91,11 @@ export function createChromeBuiltin(): LLMProvider {
       } catch (e) {
         throw mapThrown(e);
       } finally {
-        session?.destroy();
+        try {
+          session?.destroy();
+        } catch {
+          // Never let cleanup mask the real error or fail a finished answer.
+        }
       }
     },
   };
