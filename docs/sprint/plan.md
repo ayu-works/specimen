@@ -1,37 +1,26 @@
-# Sprint 2 plan: critique-panel spike (SPC-22)
+# Sprint 3 plan: the backlog (bug fixes + panel state)
 
-Approved by the owner on 2026-10-14/15 ("right after this sprint"; tests it with their own **Groq** key). Sprint 1's plan
-and results are in git history and `standups/2026-10-15-sprint-1-summary.md`.
+Approved by the owner on 2026-10-15 ("start working on all the other tickets"). **No CWS release** in this sprint
+(the owner's call): fixes merge to `main` and ship with the next release, whenever the owner decides. Sprint 2 (Council
+v2, SPC-22/24) is merged and summarised in git history.
 
-**Done when:** the owner can open a dev build of the extension, scan a site, start a "critique panel" where 2–3 AI
-reviewers with different viewpoints discuss the scan in turns, type into the discussion to steer it, and get a short
-"keep / change" list at the end, using Groq through the existing BYOK preset. The owner then decides go / no-go (a
-comment on SPC-22).
+**Done when:** every ticket below is merged with green CI, or explicitly parked by the owner.
 
-**Hard limits (from CLAUDE.md and the owner):**
-- **No CWS release.** The feature sits behind an off-by-default flag. The owner tests it in a dev build loaded unpacked
-  (`pnpm build`, then load `apps/extension/.output/chrome-mv3`). The published extension is unchanged.
-- **Grounded in the scan:** every reviewer sees the same `compactScan` in `<page_data>`, the same as `ask()`. No brand names in
-  output (the guardrail sanitizer applies to every turn).
-- **Cost cap:** a visible turn/round limit (default: 3 reviewers × 2 rounds + 1 summary), with a Stop button. Abort
-  stops all streaming.
-- **Provider-agnostic:** it uses `LLMProvider` only. Works with any configured provider; with no provider it shows the
-  same setup hint as Ask (degrades gracefully).
-- **Keys:** agents never handle the real key; tests use the mock provider. The owner enters the Groq key in Options.
-- **No `site/` change** (no Netlify deploy). No `DesignScan` schema change.
-
-## Lanes
-| Lane | Owns | Ticket |
+## Lanes (2 executors; no two lanes edit the same files at once)
+| Lane | Tickets, in order | Main files (Owns while active) |
 |---|---|---|
-| **C** | `packages/ai/src/features/critique*.ts` (+ tests), `apps/extension/src/entrypoints/sidepanel/views/Critique*.tsx` (+ tests), the minimal wiring in the side-panel nav/App, and the flag (Options or storage), as agreed in the plan | SPC-22 |
-| **PE** | reviews; `docs/sprint/reviews/` | |
+| **A** (core / ai / offscreen) | SPC-16 → SPC-17 → SPC-18 → SPC-21 | `packages/ai/src/errors.ts` + providers (16); `packages/core` sanitize + schema/migrate (17); `offscreen/llmHost.ts` (18); `test/helpers/chrome.ts`, wxt e2e config (21) |
+| **B** (side panel / scan flow) | SPC-25 → SPC-26 → SPC-19 → SPC-20 → SPC-27 | `lib/captureFlow.ts`, `Scan.tsx` (25); `sidepanel/store.ts`, `App.tsx`, `lib/db.ts` (26); `lib/libraryIO.ts`, `scanFlow.ts` (19); `runScan.ts`, `scanFlow.ts`, `background.ts` capture, `core/cssText.ts` (20); `views/Inspect` (27) |
 
-## Tickets
-| Ticket | What | Reviews |
-|---|---|---|
-| SPC-22 | Critique-panel spike behind a flag. **Done 2026-10-15: the owner said GO with a redesign** | PE lens A + lens B + privacy |
-| SPC-24 | Council v2: merge Ask + Council; human context box; runs in the background (panel closed); mascot status, click to reopen; verdict-only report (no prompt); "show discussion" collapsed. Branch from exec/spc-22; PR #25 superseded | PE lens A (+ the background architecture call) + lens B + privacy |
+Cross-lane rules:
+- SPC-21 changes the shared chrome stub that every test uses: it runs last in lane A and must stay backward compatible (deny is opt-in).
+- `docs/TESTING.md`: each ticket adds its own rows; the second PR to merge rebases. No ID reuse.
+- **Contracts needing the owner's OK:** SPC-17's `DesignScan` `schemaVersion` bump plus the migration.
+- SPC-18 vs Council: `llmHost` now serves the council too (SPC-24); keep `attachLlmPort` behaviour, and the PE checks the council tests.
 
-## Backlog (owner picks next)
-SPC-16 to SPC-21 (audit bugs, need v1.0.1), SPC-23 (/fonts Cache-Control, batch with site work), SPC-9 (manual checks),
-SPC-10 (MCP), token exports in the side panel, extraction-accuracy measurement.
+## Not in this sprint
+- **SPC-23** (/fonts Cache-Control): a `site/` change, so it costs a Netlify deploy (15 of 300). Hold until other site work, or the owner says go.
+- **SPC-9, SPC-10:** the owner's own items (manual checks, MCP decision).
+
+## Reviews
+Code PRs: PE lens A + a fresh lens B (security for 16, 17, 18; privacy for 26: what is stored). Contract changes go to the owner.
