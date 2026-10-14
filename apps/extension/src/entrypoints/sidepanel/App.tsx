@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiProvider, openSettings, useAiContext } from '@/lib/aiContext';
 import { unlockKeys } from '@/lib/aiSettings';
+import { scrubStoredChats } from '@/lib/chatScrub';
 import { initCouncil, moodFor, useCouncil } from '@/lib/council';
 import { useFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import { sampleScan } from './dev/sampleScan';
+import { rememberPanel, restorePanel } from './restore';
 import { type TabId, useStore } from './store';
 import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
@@ -58,6 +60,8 @@ function UnlockBanner() {
     if (ok) {
       setPass('');
       ai.refresh();
+      // The key is readable now: let the one-time scrub finish its exact-key pass (no-op once done).
+      void scrubStoredChats();
     }
   }
   return (
@@ -124,7 +128,18 @@ function Panel() {
       succeed(sampleScan, null, null);
       const t = new URLSearchParams(location.search).get('tab');
       if (t) setTab(t as TabId);
+      return;
     }
+    // Reopen where the user left off (SPC-26), then keep remembering it for this window.
+    let stop: (() => void) | undefined;
+    let live = true;
+    void restorePanel().then((windowId) => {
+      if (live && windowId !== undefined) stop = rememberPanel(windowId);
+    });
+    return () => {
+      live = false;
+      stop?.();
+    };
   }, [succeed, setTab]);
 
   return (

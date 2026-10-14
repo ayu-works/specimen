@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { replaceStoredScan } from '@/lib/db';
 import { ensureSiteAccess, friendlyScanError, sameUrl, scanTab } from '@/lib/scanFlow';
 import { loadMobilePref, runMediaCapture, runMobileCapture, saveMobilePref } from '../extras';
+import { openOffer } from '../restore';
 import { runTabScan } from '../runScan';
 import { useStore } from '../store';
 
@@ -209,7 +210,7 @@ function Captures({ scan }: { scan: DesignScan }) {
 }
 
 export function Scan() {
-  const { scan, screenshot, favicon, status, error, setTab } = useStore();
+  const { scan, screenshot, favicon, status, error, setTab, offer } = useStore();
 
   const run = runTabScan;
 
@@ -240,6 +241,16 @@ export function Scan() {
             <ScanLine size={18} />
             {scanning ? 'Scanning…' : 'Scan this page'}
           </Button>
+          {offer && !scanning && (
+            <button
+              type="button"
+              data-testid="last-scan-offer"
+              onClick={() => void openOffer()}
+              className="mt-1 text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              Last scan: {offer.host} · Open
+            </button>
+          )}
         </div>
       )}
       {scanning && (

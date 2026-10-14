@@ -103,6 +103,29 @@ export async function listScans(): Promise<StoredScan[]> {
   });
 }
 
+/** One saved scan by id, or null when it is gone or no longer validates. */
+export async function getStoredScan(id: string): Promise<StoredScan | null> {
+  const row = await db.scans.get(id);
+  return row ? toStored(row) : null;
+}
+
+/** Saved scans of one host, newest first. Rows that no longer validate are skipped. */
+export async function scansForHost(host: string): Promise<StoredScan[]> {
+  const rows = await db.scans.where('host').equals(host).toArray();
+  return rows
+    .sort((a, b) => b.scannedAt - a.scannedAt)
+    .flatMap((r) => {
+      const s = toStored(r);
+      return s ? [s] : [];
+    });
+}
+
+/** The newest saved scan, or null. */
+export async function latestScan(): Promise<StoredScan | null> {
+  const row = await db.scans.orderBy('scannedAt').last();
+  return row ? toStored(row) : null;
+}
+
 export async function countScans(): Promise<number> {
   return db.scans.count();
 }
@@ -158,7 +181,16 @@ export async function thumbBlobs(): Promise<Map<string, Blob>> {
   return new Map(rows.map((r) => [r.scanId, r.blob]));
 }
 
+/** Settles when the one-time chat scrub (lib/chatScrub.ts) is over; chat text waits for it. */
+let chatsReady: Promise<unknown> = Promise.resolve();
+
+/** Hold every read and write of chat text until `work` settles (it never rejects the readers). */
+export function whenChatsReady(work: Promise<unknown>): void {
+  chatsReady = work.catch(() => {});
+}
+
 export async function loadChat(scanId: string): Promise<ChatMessage[]> {
+  await chatsReady;
   try {
     return (await db.chats.get(scanId))?.messages ?? [];
   } catch {
@@ -167,6 +199,7 @@ export async function loadChat(scanId: string): Promise<ChatMessage[]> {
 }
 
 export async function saveChat(scanId: string, messages: ChatMessage[]): Promise<void> {
+  await chatsReady;
   try {
     // Only persist scans that live in the library.
     if (!(await db.scans.get(scanId))) return;

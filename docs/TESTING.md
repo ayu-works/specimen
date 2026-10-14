@@ -146,6 +146,8 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T4.07 | C | Library search filters by host/title/tag |
 | T4.08 | E | Scan → appears in Library after a panel reload |
 | T4.09 | E | Compose two scans → Generate shows the mixed prompt |
+| T4.10 | C | Side panel reopen restores the last scan of the active page (session memo per window, else a Library scan of the same page ≤ 24 h), its tab and its Ask history (a Library or composed scan keeps its origin); a different page, a memo older than 24 h or from another build, a stale scan, an empty or failing Library, a deleted scan, failing session storage, another window and a scan started meanwhile restore nothing stale; an unknown page offers the last scan without applying it |
+| T4.11 | U | One-time scrub of stored Ask history: known keys (verbatim, URL-encoded) leave error and assistant text, key shapes leave error text only, real answers and user text stay; marker set once and a re-run is a no-op; a write failing halfway leaves every row unchanged with no marker; a locked key withholds the marker; a malformed row is skipped; chat reads wait for the scrub; no key is logged. Limit: a rotated key in a format with no known shape is not found |
 
 ## Phase 5: Differentiators
 | ID | Type | Test |
