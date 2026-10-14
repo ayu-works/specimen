@@ -120,6 +120,9 @@ herdr pane rename <pane> <name>
 herdr pane run <pane> "claude --model claude-opus-5-5 --effort medium \"\$(cat <kickoff-file>)\""
 herdr pane read <pane> --source recent-unwrapped --lines 20   # confirm it started
 ```
+Closing a pane: only after `herdr agent wait <pane> --until idle --timeout 120000` (a reviewer keeps working after it
+sends its findings message). Then confirm the findings file is complete before `herdr pane close`.
+
 Watching: `herdr agent list`; `herdr agent read <name> --lines 120`. A `blocked` state can be a false reading: read
 the pane before acting. Permission prompts go to the owner; never choose "always allow".
 
