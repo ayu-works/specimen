@@ -3,6 +3,14 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-14 (website shipped in one deploy; SPC-14 last)
+
+- **Done:** SPC-5, 6, 7, 8, 11, 12, 13, 15. #19 (with #22 folded in) merged as bbc8854: **one Netlify deploy**; the live site was checked with curl (new CSP, self-hosted fonts, no Google requests, redirects OK); main CI and Lighthouse green. #21 merged as 78c07f6.
+- An exec/spc-8 conflict with main (pnpm-lock.yaml only) was fixed by the orchestrator in 18bb7f4 with `pnpm install --lockfile-only` + a frozen-install check. Lesson: a stacked/held PR goes stale while main moves, so check `mergeStateStatus` before waiting on CI (a conflicted PR gets no Actions run).
+- **Live:** pe-5e (w1:p9), spc-14-6b (w1:pK, worktree spc-14). SPC-14 changes the TESTING.md format (a contract): PE approval, then the **owner's OK**, before merge.
+- **Wrap-up after SPC-14:** merge sprint/log into main (a docs PR; no site/ change); move both folders into `specimen-herdr/` (no live agents; `git worktree repair`; copy the memory dir to the new project key); close the sprint; then the SPC-22 critique-panel spike (Groq via BYOK; the owner tests).
+- New backlog: SPC-22 (idea spike), SPC-23 (/fonts Cache-Control).
+
 ## UPDATE 2026-10-14 (#20 merged; SPC-12 started; owner decisions)
 
 - **SPC-7 Done:** #20 merged as 31fa181; main CI green.
