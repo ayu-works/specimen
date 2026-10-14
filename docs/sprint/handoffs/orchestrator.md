@@ -6,7 +6,13 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-15 ~22:15 (CURRENT STATE: read this block first)
+## UPDATE 2026-10-15 ~22:20 (CURRENT STATE: read this block first)
+
+- **Orchestrator session is now `specimen-c8`** (pane w1:p3); all live agents told.
+- SPC-17 **Done** in Linear (main CI green on df0297c, closing comment added). Post-merge security review still running: session spc-17-82, pane w1:p13 (tab review) → SPC-17-sec-r1.md. spc-17-13 (w1:pZ) idle; close it + the spc-17 worktree after the sec review finishes, then kick off SPC-18.
+- #30 SPC-26: lens B r1 in (0C/0H/1M/6L, SPC-26-b-r1.md); reviewer pane p12 already closed. spc-26-81 is folding. GitHub says CLEAN + CI green, but after the fold the PE must confirm db.ts keeps SPC-17's write validation (rebase rule below) before the owner's merge.
+
+## UPDATE 2026-10-15 ~22:15
 
 **Sprint 3 (backlog) in progress.** Plan: `docs/sprint/plan.md`. No CWS release (owner). Netlify: 1 deploy this month.
 
