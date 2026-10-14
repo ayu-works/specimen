@@ -15,6 +15,10 @@ How the Specimen agent team works. This file is the workflow source and replaces
 - **Team:** orchestrator + principal engineer (PE) + 2 executors + a fresh second reviewer per PR. All on the strongest
   model (`claude-opus-5-5`) at medium effort.
 - **Off-limits:** `.env*`, the CWS dashboard and its credentials, signing keys, anything outside your own worktree.
+- **Netlify Free plan (owner, 2026-10-14):** 300 credits/month; each production deploy costs 15 (≈ 20/month); previews
+  are free. If credits run out, the site **pauses until next month**. So: batch all `site/` changes into as few merges to
+  `main` as possible (stack site tickets on one branch); before a merge that touches `site/`, tell the owner it costs a
+  deploy. Merges that don't touch `site/` are skipped by `netlify.toml`'s `ignore` and should cost nothing.
 - **Alerts:** macOS desktop notifications (hooks below). Slack can come later.
 
 ## Roles
