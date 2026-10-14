@@ -5,17 +5,12 @@ Open-source (MIT) Chrome MV3 extension that measures a website's design system (
 - Product: [docs/PLAN.md](docs/PLAN.md) · Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Tasks: [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) · Tests: [docs/TESTING.md](docs/TESTING.md)
 - Repo: https://github.com/ayu-works/specimen (public). "Specimen" is a working name.
 
-## Workflow (mandatory)
-Each phase in IMPLEMENTATION.md runs this loop. Don't start phase N+1 until phase N is merged.
+## Workflow
+The team workflow (roles, the ticket loop, reviews, Linear) is in `docs/sprint/setup.md`, with the Linear mapping in `docs/sprint/linear.md` and current work in `docs/sprint/plan.md`. Until sprint 1 ends, these files live only on branch `sprint/log`; from `main`, read them with `git show sprint/log:docs/sprint/setup.md`.
 
-1. **Branch**: `phase-<n>-<slug>` from `main`.
-2. **Build the whole phase, code only**: a single Sonnet subagent (`Agent` with `model: "sonnet"`, run in the background) implements **every** task of the phase. It writes **no tests** and runs **no tests**; at most one `pnpm typecheck && pnpm lint` at the end so the code compiles. Subagents **do not commit or push**.
-3. **Review**: only once everything in the phase is implemented, Opus (the main session) reads the whole phase's code against ARCHITECTURE.md, the security rules below and the task ACs. Opus applies small, targeted fixes itself (faster than a new agent brief). Only large fix sets go back to Sonnet.
-4. **Lint**: `pnpm lint` must be clean. **Automated tests are deferred to the end of the whole product build** (user decision, 2026-10-09). Each phase's tests from `docs/TESTING.md` are written in a final testing pass, and then `pnpm gate` runs for all phases. Until then, the user tests by hand with `pnpm -F @specimen/extension try <url>`, and CI may be red.
-5. **Final testing pass** (after Phase 7): write the missing tests, run `pnpm gate` for every phase, fix failures in batches, and report the real output.
-6. **Ship**: Opus commits, pushes, and opens a PR with `gh`; it's merged when the user says so. Tick the phase in IMPLEMENTATION.md.
-
-Opus does planning, architecture and review. Sonnet does all implementation.
+Two rules hold everywhere:
+- Tests ship in the same PR as the code (test IDs from `docs/TESTING.md`).
+- `pnpm gate` is green before review.
 
 ## Commands
 ```bash
