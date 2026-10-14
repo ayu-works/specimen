@@ -1,8 +1,10 @@
 # Implementation Plan
 
-> Companion to [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Status: draft · 2026-10-08
+> Companion to [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Status: phases 0–7 shipped; v1.0.0 live on the Chrome Web Store (2026-10-13) · first drafted 2026-10-08
 
 ## How we work
+> The phases below were built this way. Current work follows `docs/sprint/setup.md` (on branch `sprint/log` until sprint 1 ends).
+
 - **Opus** plans, writes the task briefs, and reviews every phase diff. **Sonnet** subagents implement the tasks (each brief points to the relevant ARCHITECTURE.md section).
 - Each task ends with green `pnpm typecheck && pnpm test && pnpm lint` before the next task starts.
 - One feature branch per phase (`phase-1-extraction`, …) → PR → Opus review → merge to `main`.
@@ -88,7 +90,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 ---
 
 ## Phase 3: AI layer (≈ 3 days)
-> **Status: implemented (code only; tests deferred to the final testing pass).** Done: 3.1 (registry; the mock provider comes with the tests, `globalThis.__specimenProvider` is the injection hook), 3.2, 3.3, 3.4, 3.5, 3.6 and 3.7 except `nameRoles` (not built; `polishPrompt`, `vibe` and the Ask view are). Untested against a real model or real keys. 3.8 (review, tag) is pending.
+> **Status: implemented (code only; tests deferred to the final testing pass, which shipped in PR #9).** Done: 3.1 (registry; the mock provider comes with the tests, `globalThis.__specimenProvider` is the injection hook), 3.2, 3.3, 3.4, 3.5, 3.6 and 3.7 except `nameRoles` (not built; `polishPrompt`, `vibe` and the Ask view are). Untested against a real model or real keys. 3.8 (review, tag) is pending; superseded: shipped in v1.0.0, no per-phase tag.
 | ID | Task | AC |
 |---|---|---|
 | 3.1 🟦 | `LLMProvider` types, registry, mock provider | Unit tests use the mock |
@@ -110,7 +112,7 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 | 4.5 🟦 | Themes: derive dark/light counterpart from a palette (OKLCH lightness inversion) | Generated dark theme passes AA for text pairs |
 | 4.6 🟪 | Review; tag v0.3.0 | — |
 
-> **Phase 4 status:** 4.1–4.5 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 2 (adds `variants.light`; migration v1 → v2 is a no-op). Compose lives inside Library as a mode (no new tab); the dark/light theme is one checkbox in Generate; the counterpart is derived on demand rather than stored.
+> **Phase 4 status:** 4.1–4.5 implemented (code only; tests deferred to the final testing pass, which shipped in PR #9). `schemaVersion` is now 2 (adds `variants.light`; migration v1 → v2 is a no-op). Compose lives inside Library as a mode (no new tab); the dark/light theme is one checkbox in Generate; the counterpart is derived on demand rather than stored.
 
 ## Phase 5: Differentiators (≈ 4–5 days)
 | ID | Task | AC |
@@ -123,11 +125,11 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 | 5.6 🟦 | Multi-page merge: queue several URLs/tabs, merge weights, record `meta.pages` | Merged scan is stable |
 | 5.7 🟪 | Review; tag v0.4.0 | — |
 
-> **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
+> **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass, which shipped in PR #9). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
 
 ## Phase 6: Release (open source + Chrome Web Store) (≈ 1–2 days)
-> **Status:** 6.1–6.3 merged (PR #10), plus the pixel-critter icon, mascot UI and README banner. 6.4: screenshots and promo tiles are done (`store/images/`); the submission is on hold (user decision).
-MCP is **dropped from v1** (user decision 2026-10-09). The `phase-6-mcp` branch is kept for reference.
+> **Status:** 6.1–6.3 merged (PR #10), plus the pixel-critter icon, mascot UI and README banner. 6.4: screenshots and promo tiles are done (`store/images/`, PR #12); the store listing fix is PR #14. v1.0.0 is **live on the Chrome Web Store** (2026-10-13). T6.07, the gitleaks scan of the whole history, runs in the gate and CI (PR #18).
+MCP is **dropped from v1** (user decision 2026-10-09), and its tests T6.01–T6.05 with it. The `phase-6-mcp` branch is kept for reference; its future is SPC-10 (owner backlog).
 
 | ID | Task | AC |
 |---|---|---|
@@ -137,22 +139,24 @@ MCP is **dropped from v1** (user decision 2026-10-09). The `phase-6-mcp` branch 
 | 6.4 🟦👤 | Screenshots (1280×800) planned from the user's own usage captures; the user submits with their developer account | Submitted |
 
 ## Phase 7: Website (≈ 1–2 days)
-The promo video is done (PR #11, `apps/video`); the approved cut is `mix`. The site goes live on **Vercel** and hosts `/privacy` for the store listing.
+The promo video is done (PR #11, `apps/video`); the approved cut is `mix`. The site is plain HTML in `site/` (no build), deployed by **Netlify** from `main` via `netlify.toml` (PRs #15–#17), and hosts `/privacy` for the store listing. Netlify is on the Free plan: batch `site/` changes into few merges.
+> **Status:** T7.04 (compositions: frame count = fps × duration) is in CI (PR #20). T7.01 + T7.03 (website e2e) are in progress (SPC-8, PR #19, open). T7.02 (Lighthouse) is SPC-11.
 
 | ID | Task | AC |
 |---|---|---|
 | 7.1 🟪 | Site design: scan 2–3 reference sites with our own tool and Compose the look | Design approved 👤 |
-| 7.2 🟦 | `apps/web` Astro landing page (hero demo, how-it-works, features, privacy/local AI, OSS CTA, Add to Chrome), `/privacy`, deploy to Vercel | Lighthouse ≥ 95 |
+| 7.2 🟦 | Landing page in `site/`, plain HTML (hero demo, how-it-works, features, privacy/local AI, OSS CTA, Add to Chrome), `/privacy`, deployed by Netlify | Lighthouse ≥ 95, measured by a non-blocking CI report (SPC-11) |
 | 7.3 ✅ | Remotion promo video (`apps/video`): four cuts × three formats; `mix` approved | Approved 👤 |
 
 ---
 
 ## Milestone checklist
-- [ ] v0.1.0: scan + inspect + exports (Phases 0–2)
-- [ ] v0.2.0: local Gemma + BYOK + Ask
-- [ ] v0.3.0: Library + Compose + Themes
-- [ ] v0.4.0: Diff, components, responsive/dark, a11y
-- [ ] v1.0.0: Web Store + open source + website
+v0.1–v0.4 were never released on their own (no git tags); their scope shipped in v1.0.0.
+- [x] v0.1.0: scan + inspect + exports (Phases 0–2)
+- [x] v0.2.0: local Gemma + BYOK + Ask
+- [x] v0.3.0: Library + Compose + Themes
+- [x] v0.4.0: Diff, components, responsive/dark, a11y
+- [x] v1.0.0: Web Store + open source + website (live on the Chrome Web Store 2026-10-13; MCP dropped)
 
 ## Risks & mitigations
 | Risk | Mitigation |

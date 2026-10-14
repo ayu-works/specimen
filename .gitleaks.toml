@@ -1,0 +1,7 @@
+# gitleaks config for `pnpm secrets` (T6.07). Default rules only.
+# Never add a path or regex allowlist here: it would hide a real future leak in that path.
+# A reviewed false positive goes in .gitleaksignore, by fingerprint, with a reason.
+title = "specimen"
+
+[extend]
+useDefault = true

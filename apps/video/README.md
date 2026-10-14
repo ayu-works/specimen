@@ -6,6 +6,7 @@ The Specimen promo, in four cuts (mix, suno, 30s, 40s), each in three formats, m
 pnpm -F @specimen/video render                  # all twelve → apps/video/out/
 pnpm -F @specimen/video render Promo30s-1x1     # just one
 pnpm -F @specimen/video studio                  # live preview in the browser
+pnpm -F @specimen/video test                    # T7.04: frame counts = fps × duration (no rendering)
 ```
 
 | Cut | Picture | Music | Compositions |

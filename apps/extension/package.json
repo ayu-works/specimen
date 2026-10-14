@@ -13,6 +13,7 @@
     "build:sampler": "node scripts/build-sampler.mjs",
     "e2e": "node scripts/e2e.mjs",
     "try": "node scripts/try.mjs",
+    "lighthouse": "tsx e2e/site/lighthouse.ts",
     "fetch:model-libs": "node scripts/fetch-model-libs.mjs"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
