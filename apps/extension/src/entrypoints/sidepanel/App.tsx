@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiProvider, openSettings, useAiContext } from '@/lib/aiContext';
 import { unlockKeys } from '@/lib/aiSettings';
+import { scrubStoredChats } from '@/lib/chatScrub';
 import { initCouncil, moodFor, useCouncil } from '@/lib/council';
 import { useFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
@@ -59,6 +60,8 @@ function UnlockBanner() {
     if (ok) {
       setPass('');
       ai.refresh();
+      // The key is readable now: let the one-time scrub finish its exact-key pass (no-op once done).
+      void scrubStoredChats();
     }
   }
   return (

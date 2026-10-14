@@ -5,8 +5,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/entrypoints/sidepanel/App';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
-import { memoKey, restorePanel } from '../src/entrypoints/sidepanel/restore';
+import { memoKey, rememberPanel, restorePanel } from '../src/entrypoints/sidepanel/restore';
 import { NO_EXTRAS, useStore } from '../src/entrypoints/sidepanel/store';
+import { _resetChatScrub } from '../src/lib/chatScrub';
 import { db, saveChat, saveScan } from '../src/lib/db';
 import { type FakeChrome, fakeProvider, installChrome } from './helpers/chrome';
 
@@ -41,6 +42,7 @@ const fresh = () =>
 
 beforeEach(async () => {
   chrome = installChrome();
+  _resetChatScrub();
   // The scrub ran long ago on this "install".
   chrome.storage.local.data.set('migrations.chatScrub', 1);
   Element.prototype.scrollIntoView = vi.fn();
@@ -65,6 +67,7 @@ describe('T4.10 the side panel restores its last state on reopen', () => {
     ]);
     chrome.storage.session.data.set(memoKey(1), {
       scanId: 's1',
+      origin: 'tab',
       activeTab: 'ask',
       askMode: 'quick',
       at: Date.now(),
@@ -92,6 +95,7 @@ describe('T4.10 the side panel restores its last state on reopen', () => {
     await saveScan(scanOf('s1', URL_A), null);
     chrome.storage.session.data.set(memoKey(1), {
       scanId: 's1',
+      origin: 'tab',
       activeTab: 'generate',
       askMode: 'quick',
       at: Date.now(),
@@ -126,6 +130,7 @@ describe('T4.10 the side panel restores its last state on reopen', () => {
     await saveScan(scanOf('kept', URL_A, { scannedAt: Date.now() - HOUR }), null);
     chrome.storage.session.data.set(memoKey(1), {
       scanId: 'deleted',
+      origin: 'tab',
       activeTab: 'ask',
       askMode: 'council',
       at: Date.now(),
@@ -183,6 +188,7 @@ describe('T4.10 the side panel restores its last state on reopen', () => {
     await saveScan(scanOf('s1', URL_A), null);
     chrome.storage.session.data.set(memoKey(1), {
       scanId: 's1',
+      origin: 'tab',
       activeTab: 'generate',
       askMode: 'quick',
       at: Date.now(),
@@ -214,7 +220,67 @@ describe('T4.10 the side panel restores its last state on reopen', () => {
       'activeTab',
       'askMode',
       'at',
+      'origin',
       'scanId',
     ]);
+  });
+
+  it('T4.10 a memo pointing to a scan older than 24 h is not applied', async () => {
+    await saveScan(scanOf('s1', URL_A, { scannedAt: Date.now() - 21 * 24 * HOUR }), null);
+    chrome.storage.session.data.set(memoKey(1), {
+      scanId: 's1',
+      origin: 'saved',
+      activeTab: 'generate',
+      askMode: 'quick',
+      at: Date.now(),
+    });
+    onTab(URL_A);
+    await restorePanel();
+    expect(useStore.getState().scan).toBeNull();
+    expect(useStore.getState().activeTab).toBe('scan');
+  });
+
+  it('T4.10 a Library scan keeps its origin: not reattached to the live tab', async () => {
+    await saveScan(scanOf('s1', URL_A, { scannedAt: Date.now() - HOUR }), null);
+    chrome.storage.session.data.set(memoKey(1), {
+      scanId: 's1',
+      origin: 'saved',
+      activeTab: 'inspect',
+      askMode: 'quick',
+      at: Date.now(),
+    });
+    onTab(URL_A);
+    await restorePanel();
+    expect(useStore.getState().scan?.id).toBe('s1');
+    expect(useStore.getState().origin).toBe('saved');
+    expect(useStore.getState().extras.tabId).toBeNull();
+  });
+
+  it('T4.10 a memo from another build (unknown tab, no origin) is ignored', async () => {
+    await saveScan(scanOf('s1', URL_A), null);
+    chrome.storage.session.data.set(memoKey(1), {
+      scanId: 's1',
+      activeTab: 'critique',
+      askMode: 'quick',
+      at: Date.now(),
+    });
+    onTab(URL_A);
+    await restorePanel();
+    expect(useStore.getState().scan?.id).toBe('s1'); // by the Library lookup
+    expect(useStore.getState().activeTab).toBe('inspect');
+  });
+
+  it('T4.10 a scan made before the memo writer starts is remembered at once', async () => {
+    useStore.getState().succeed(scanOf('s9', URL_A), null, null);
+    useStore.getState().setTab('generate');
+    const stop = rememberPanel(4);
+    await waitFor(() =>
+      expect(chrome.storage.session.data.get(memoKey(4))).toMatchObject({
+        scanId: 's9',
+        origin: 'tab',
+        activeTab: 'generate',
+      }),
+    );
+    stop();
   });
 });

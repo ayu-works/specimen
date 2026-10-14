@@ -3,20 +3,36 @@
  * history follows it (Ask.tsx loads it from the db), and the light UI state (which tab, which Ask
  * mode) lives in `chrome.storage.session`: in memory, this extension only, gone when the browser quits.
  */
-import { scrubStoredChats } from '@/lib/chatScrub';
+import { startChatScrub } from '@/lib/chatScrub';
 import { getStoredScan, latestScan, type StoredScan, scansForHost, thumbDataUrl } from '@/lib/db';
 import { sameUrl } from '@/lib/scanFlow';
-import { type AskMode, type TabId, useStore } from './store';
+import { type AskMode, type Origin, type TabId, useStore } from './store';
 
-/** A saved scan of the same page older than this is not restored on its own. */
+/** A saved scan older than this is never restored on its own (memo or Library lookup). */
 export const FRESH_MS = 24 * 60 * 60 * 1000;
 
 /** What the panel remembers per window: ids and names only, no page text, chat or keys. */
 export interface PanelMemo {
   scanId: string;
+  /** Where the scan came from; only a `'tab'` scan is reattached to the live tab. */
+  origin: Origin;
   activeTab: TabId;
   askMode: AskMode;
   at: number;
+}
+
+const TAB_IDS: readonly TabId[] = ['scan', 'inspect', 'generate', 'ask', 'library'];
+const ASK_MODES: readonly AskMode[] = ['quick', 'council'];
+const ORIGINS: readonly Origin[] = ['tab', 'saved', 'composed'];
+
+/** A memo from another build (renamed tab, missing field) is ignored rather than trusted. */
+function validMemo(v: unknown): PanelMemo | null {
+  const m = v as Partial<PanelMemo> | null | undefined;
+  if (!m || typeof m.scanId !== 'string') return null;
+  if (!TAB_IDS.includes(m.activeTab as TabId) || !ASK_MODES.includes(m.askMode as AskMode))
+    return null;
+  if (!ORIGINS.includes(m.origin as Origin) || typeof m.at !== 'number') return null;
+  return m as PanelMemo;
 }
 
 export const memoKey = (windowId: number) => `panel.last.${windowId}`;
@@ -24,7 +40,7 @@ export const memoKey = (windowId: number) => `panel.last.${windowId}`;
 async function readMemo(windowId: number): Promise<PanelMemo | null> {
   try {
     const got = await chrome.storage.session.get(memoKey(windowId));
-    return (got[memoKey(windowId)] as PanelMemo | undefined) ?? null;
+    return validMemo(got[memoKey(windowId)]);
   } catch {
     return null;
   }
@@ -65,7 +81,7 @@ const untouched = () => {
  * Returns the window id the panel belongs to (for `rememberPanel`), when known.
  */
 export async function restorePanel(): Promise<number | undefined> {
-  await scrubStoredChats();
+  await startChatScrub();
   const tab = await activeTab();
   const windowId = tab?.windowId;
   try {
@@ -81,7 +97,8 @@ export async function restorePanel(): Promise<number | undefined> {
     let fromMemo = false;
     if (memo) {
       const s = await getStoredScan(memo.scanId);
-      if (s && sameUrl(s.url, url)) {
+      // The memo can outlive a day (session storage lasts as long as the browser): same freshness rule.
+      if (s && sameUrl(s.url, url) && Date.now() - s.scannedAt <= FRESH_MS) {
         scan = s;
         fromMemo = true;
       }
@@ -91,9 +108,11 @@ export async function restorePanel(): Promise<number | undefined> {
     const screenshot = await thumbDataUrl(scan.id).catch(() => null);
     if (!untouched()) return windowId;
     const st = useStore.getState();
-    st.openScan(scan, 'tab', screenshot);
-    // Same page as the active tab, so dark capture and "Add another page" can use it.
-    if (tab?.id !== undefined) st.patchExtras({ tabId: tab.id });
+    // A Library or composed scan keeps its origin (banner shown, live captures off); only a tab scan
+    // of this page is reattached to the tab, so dark capture and "Add another page" can use it.
+    const origin: Origin = fromMemo && memo ? memo.origin : 'tab';
+    st.openScan(scan, origin, screenshot);
+    if (origin === 'tab' && tab?.id !== undefined) st.patchExtras({ tabId: tab.id });
     st.setTab(fromMemo && memo ? memo.activeTab : 'inspect');
     if (fromMemo && memo) st.setAskMode(memo.askMode);
   } catch {
@@ -116,18 +135,22 @@ export async function openOffer(): Promise<void> {
   useStore.getState().setTab('inspect');
 }
 
-/** Keep this window's memo current. Returns the unsubscribe. */
+/**
+ * Keep this window's memo current. Writes the current state right away (a scan made while the
+ * restore was still running counts too), then on every change. Returns the unsubscribe.
+ */
 export function rememberPanel(windowId: number): () => void {
   let last = '';
-  return useStore.subscribe((s) => {
+  const write = (s: ReturnType<typeof useStore.getState>) => {
     if (!s.scan) return;
     const memo: PanelMemo = {
       scanId: s.scan.id,
+      origin: s.origin,
       activeTab: s.activeTab,
       askMode: s.askMode,
       at: Date.now(),
     };
-    const sig = `${memo.scanId}|${memo.activeTab}|${memo.askMode}`;
+    const sig = `${memo.scanId}|${memo.origin}|${memo.activeTab}|${memo.askMode}`;
     if (sig === last) return;
     last = sig;
     try {
@@ -135,5 +158,7 @@ export function rememberPanel(windowId: number): () => void {
     } catch {
       /* no session storage: the next open restores by URL only */
     }
-  });
+  };
+  write(useStore.getState());
+  return useStore.subscribe(write);
 }

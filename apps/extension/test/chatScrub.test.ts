@@ -1,7 +1,13 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
-import { redactKnownKeys, SCRUB_MARKER, scrubStoredChats } from '../src/lib/chatScrub';
+import {
+  _resetChatScrub,
+  redactKnownKeys,
+  SCRUB_MARKER,
+  scrubStoredChats,
+  startChatScrub,
+} from '../src/lib/chatScrub';
 import { type ChatMessage, db, loadChat, saveScan } from '../src/lib/db';
 import { type FakeChrome, installChrome } from './helpers/chrome';
 
@@ -21,6 +27,7 @@ const storePlainKey = (preset: string, key: string) =>
 
 beforeEach(async () => {
   chrome = installChrome();
+  _resetChatScrub();
   await Promise.all([db.scans.clear(), db.chats.clear()]);
 });
 
@@ -140,6 +147,27 @@ describe('T4.11 one-time scrub of stored Ask history', () => {
     await scrub;
     expect(JSON.stringify(await read)).not.toContain(KEY);
     for (const s of spies) for (const call of s.mock.calls) expect(String(call)).not.toContain(KEY);
+  });
+
+  it('T4.11 the panel runs one scrub per open, and a chat read started right after waits for it', async () => {
+    storePlainKey('anthropic', KEY);
+    await saveScan({ ...sampleScan, id: 's1' }, null);
+    await rowOf('s1', [{ role: 'assistant', content: `x ${KEY}` }]);
+    const first = startChatScrub(); // as main.tsx does at module load
+    const read = loadChat('s1'); // as a view's mount effect would, before App's restore
+    expect(startChatScrub()).toBe(first); // restorePanel awaits the same run
+    expect(await first).toBe('done');
+    expect(JSON.stringify(await read)).not.toContain(KEY);
+  });
+
+  it('T4.11 a malformed row is skipped, the others are scrubbed and the marker is set', async () => {
+    storePlainKey('anthropic', KEY);
+    await db.chats.put({ scanId: 'bad', messages: 'not an array' as unknown as ChatMessage[] });
+    await rowOf('good', [{ role: 'assistant', content: `x ${KEY}` }]);
+    expect(await scrubStoredChats()).toBe('done');
+    expect(JSON.stringify(await db.chats.get('good'))).not.toContain(KEY);
+    expect((await db.chats.get('bad'))?.messages).toBe('not an array');
+    expect(chrome.storage.local.data.get(SCRUB_MARKER)).toBe(1);
   });
 
   it('T4.11 redactKnownKeys ignores keys shorter than 8 characters', () => {

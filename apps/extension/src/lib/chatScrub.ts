@@ -26,10 +26,13 @@ export function redactKnownKeys(text: string, knownKeys: readonly string[]): str
 }
 
 function scrubMessage(m: ChatMessage, keys: readonly string[]): ChatMessage {
-  if (m.role !== 'assistant') return m;
-  const next: ChatMessage = { ...m, content: redactKnownKeys(m.content, keys) };
+  if (!m || m.role !== 'assistant') return m;
+  const next: ChatMessage = {
+    ...m,
+    content: typeof m.content === 'string' ? redactKnownKeys(m.content, keys) : m.content,
+  };
   // Error text gets the full legacy scrub (key shapes too); answers only lose exact keys.
-  if (m.error !== undefined) next.error = scrubLegacyProviderText(m.error, keys);
+  if (typeof m.error === 'string') next.error = scrubLegacyProviderText(m.error, keys);
   return next;
 }
 
@@ -57,6 +60,8 @@ async function run(): Promise<ScrubResult> {
     await db.transaction('rw', db.chats, async () => {
       const rows = await db.chats.toArray();
       for (const row of rows) {
+        // A malformed row (old or hand-made) is left alone rather than failing every other row.
+        if (!Array.isArray(row.messages)) continue;
         const messages = row.messages.map((m) => scrubMessage(m, keys));
         if (JSON.stringify(messages) !== JSON.stringify(row.messages))
           await db.chats.put({ scanId: row.scanId, messages });
@@ -76,4 +81,20 @@ export function scrubStoredChats(): Promise<ScrubResult> {
   const p = run();
   whenChatsReady(p);
   return p;
+}
+
+let started: Promise<ScrubResult> | null = null;
+
+/**
+ * The panel's one scrub per open: called at module load (main.tsx) so the chat gate is armed before
+ * any view's effect can read a chat; `restorePanel` awaits the same promise.
+ */
+export function startChatScrub(): Promise<ScrubResult> {
+  started ??= scrubStoredChats();
+  return started;
+}
+
+/** Tests only: forget the memoized run. */
+export function _resetChatScrub(): void {
+  started = null;
 }

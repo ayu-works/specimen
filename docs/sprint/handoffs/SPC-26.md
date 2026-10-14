@@ -114,8 +114,25 @@ whenever `scan.id`, `activeTab` or `askMode` changes (only once a scan is shown;
   `Scan.tsx` "Last scan: <host> · Open". T4.10 (12 component tests). T4.10/T4.11 rows added to `docs/TESTING.md`.
 - `pnpm gate` green (gitleaks not installed locally; the fake keys are built with `join` so CI's scan stays quiet).
 
+- PR #30 opened (24011b9), linked on SPC-26, specimen-53 told.
+- Lens A r1 (pe-99): APPROVED 0C/0H/0M/1L. L1 folded: memoized `startChatScrub()` is called at module load in
+  `sidepanel/main.tsx` (not in demo mode) so the chat gate is armed before any child effect; `restorePanel` awaits the
+  same promise. New T4.11 test for it.
+
+- Lens B r1 (`docs/sprint/reviews/SPC-26-b-r1.md`): 0C/0H/1M/6L, folded:
+  - M1: the memo path now applies the 24 h rule too, and the memo stores `origin`; only a `'tab'` scan is reattached
+    to the live tab (`extras.tabId`), a Library/composed scan restores with its origin (banner on, captures off).
+  - L1: malformed `db.chats` rows are skipped, so one bad row can't block the scrub forever.
+  - L2: a successful unlock in `UnlockBanner` re-runs `scrubStoredChats()` (no-op once the marker is set).
+  - L3: accepted limit, written in TESTING.md T4.11 and the PR body: a rotated key in a format with no known shape
+    survives in old error text.
+  - L4: `readMemo` validates the memo (scanId, origin, tab, ask mode, at); anything else is ignored.
+  - L5: `rememberPanel` writes the current state right away, then on changes.
+  - L6: accepted: closed windows' memos (ids only) stay in session storage until the browser quits; in the PR.
+  - Tests: T4.10 +4 (stale memo, saved origin, foreign memo, early scan remembered), T4.11 +1 (malformed row).
+
 ## Next
-- PR, link on SPC-26, message specimen-53; then fold review findings.
+- CI green on #30; tell pe-99 the commits (lens A L1 + lens B folds); lens B re-check if asked.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-26`; `gh pr view` for the PR and reviews in `docs/sprint/reviews/`.
