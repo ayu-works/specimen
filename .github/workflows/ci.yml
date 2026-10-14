@@ -61,11 +61,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Skip unless apps/video changed
+      - name: Skip unless apps/video or its inputs changed
         id: changed
         run: |
           base=${{ github.event.pull_request.base.sha || github.event.before }}
-          if git diff --quiet "$base" HEAD -- apps/video pnpm-lock.yaml 2>/dev/null; then
+          if git diff --quiet "$base" HEAD -- apps/video pnpm-lock.yaml package.json tsconfig.base.json .github/workflows/ci.yml 2>/dev/null; then
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -81,3 +81,5 @@ jobs:
         run: pnpm i --frozen-lockfile --filter @specimen/video
       - if: steps.changed.outputs.run == 'true'
         run: pnpm typecheck:video
+      - if: steps.changed.outputs.run == 'true'
+        run: pnpm test:video
