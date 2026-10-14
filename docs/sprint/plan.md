@@ -29,7 +29,8 @@ comment on SPC-22).
 ## Tickets
 | Ticket | What | Reviews |
 |---|---|---|
-| SPC-22 | Critique-panel spike behind a flag | PE lens A + lens B + privacy (page data to a provider, cost) |
+| SPC-22 | Critique-panel spike behind a flag. **Done 2026-10-15: the owner said GO with a redesign** | PE lens A + lens B + privacy |
+| SPC-24 | Council v2: merge Ask + Council; human context box; runs in the background (panel closed); mascot status, click to reopen; verdict-only report (no prompt); "show discussion" collapsed. Branch from exec/spc-22; PR #25 superseded | PE lens A (+ the background architecture call) + lens B + privacy |
 
 ## Backlog (owner picks next)
 SPC-16 to SPC-21 (audit bugs, need v1.0.1), SPC-23 (/fonts Cache-Control, batch with site work), SPC-9 (manual checks),

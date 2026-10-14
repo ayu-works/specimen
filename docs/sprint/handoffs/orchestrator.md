@@ -6,6 +6,12 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (owner tested SPC-22: GO with a redesign → SPC-24)
+
+- Owner feedback: the live chat was hard to read. Wants: Ask + Council merged; a context box; a background run even with the panel closed; mascot status, click to reopen; a verdict-only report, no prompt; "show discussion" collapsed by default.
+- SPC-22 Done (spike); #25 stays unmerged (superseded). SPC-24 started: spc-24 executor (w1:pR, worktree worktrees/spc-24, branch exec/spc-24 from origin/exec/spc-22); pe-1b decides the background architecture.
+- The owner's test build of the spike is on ~/Desktop/specimen-critique-test (loaded unpacked). Lesson: tell the owner the test copy has separate storage from the store version (Labs/key must be set in the test copy's Options; disable the store copy).
+
 ## UPDATE 2026-10-15 (Sprint 2: SPC-22 waiting for the owner's test)
 
 - #24 merged (e1e8a6e): Sprint 1 is closed. Sprint 2 = SPC-22 (critique-panel spike), PR #25 (base main): lens A r2 approved, lens B + privacy r1 folded in, CI green.
