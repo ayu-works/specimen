@@ -339,8 +339,9 @@ Frozen contract v1, final (three amendments from A-r1 / B-r1, **owner OK 2026-10
 - **B-L5:** the note reads "for an earlier scan of this site" or "for <host>, not the current scan".
 
 ## Next
-- PR #26 is open. Round 1 is folded (above); pe-99 re-reviews (A round 2). Not to be merged before the owner's go
-  (T3.34).
+- Round 2 (`SPC-24-a-r2.md`, pe-99, also covering the lens-B folds): **APPROVED** on `3c3faaa`, 0C/0H/0M/0L.
+- Remaining: CI `gate` green on `3c3faaa`, then the owner's go/no-go after T3.34 (steps in the PR body). Not to be
+  merged before the owner's go. Then the orchestrator merges and closes #25.
 
 ## How to resume
 Branch `exec/spc-24` in `worktrees/spc-24`. Read this file, then `docs/sprint/reviews/SPC-24-*` for findings; fix in
