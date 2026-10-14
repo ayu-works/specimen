@@ -131,8 +131,11 @@ ticket's "migrate() rejects" check would become "migrate() repairs". I recommend
   new T1.01 tests failed on main first. TESTING.md rows T1.01/T2.03/T4.01/T4.03 widened (no new IDs);
   ARCHITECTURE.md §4.2 says v4. `pnpm gate` green: core 66, ai 158, extension 85, e2e 51.
 
+- PR #29 opened 2026-10-15; CI `gate` green on 79ab376. Lens A + contract r1 (pe-99): APPROVED, 0 findings
+  (`docs/sprint/reviews/SPC-17-a-r1.md`); its condition (CI green) is met.
+
 ## Next
-- Reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
+- Still to come: lens B and security reviews. Remaining reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-17`. Part 1 can be built once the PE approves; Part 2 waits for
