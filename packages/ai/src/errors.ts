@@ -44,14 +44,15 @@ export async function httpError(res: Response): Promise<ProviderError> {
   if (res.status === 429 || /rate[_ -]?limit/i.test(detail)) {
     return new ProviderError('rate', RATE_TEXT);
   }
-  if ((res.status === 400 || res.status === 422) && IMAGE_REJECTED.test(detail)) {
-    return new ProviderError('other', IMAGE_REJECTED_TEXT);
-  }
   if (res.status === 404 || /model.*(not (exist|found)|decommission|deprecat)/i.test(detail)) {
     return new ProviderError(
       'other',
       `This model isn't available for your key. In Settings, click "Fetch models" and pick one.`,
     );
+  }
+  // After the model-gone check: "gpt-4-vision-preview has been deprecated" is not an image rejection.
+  if ((res.status === 400 || res.status === 422) && IMAGE_REJECTED.test(detail)) {
+    return new ProviderError('other', IMAGE_REJECTED_TEXT);
   }
   if (res.status >= 500) {
     return new ProviderError('other', 'The provider had a server error. Try again in a minute.');
@@ -101,8 +102,9 @@ const LEGACY_SUFFIX = new RegExp(
     'Request failed with HTTP \\d+',
   ].join('|')}) \\([\\s\\S]*\\)$`,
 );
+/** Known key prefixes, plus any run of 32+ alphanumerics (Together, Mistral): error text never needs one. */
 const KEY_SHAPES =
-  /(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,})/g;
+  /(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,}|xai-[A-Za-z0-9_-]{8,}|[A-Za-z0-9]{32,})/g;
 
 /**
  * Clean error text stored before SPC-16 (it may hold provider detail that echoed the key): drop

@@ -137,6 +137,10 @@ Status: **Built, `pnpm gate` green, PR open (link on SPC-16).** Plan approved by
   `secrets` was SKIPPED; CI runs it.** The test key is built from parts (`['sk','proj',…].join('-')`) so the
   generic-api-key rule has no literal to match.
 
+- **Lens A r1 (pe-99): APPROVED, 0C/0H/0M/2L.** Folded in a new commit: L1 `KEY_SHAPES` adds `xai-…` and any run of 32+
+  alphanumerics (Together, Mistral), with test rows; L2 the model-gone check runs before the image check (a test: a deprecated
+  `gpt-4-vision-preview` 400 → "model unavailable").
+
 ## Next
 - Reviews (PE lens A, a lens-B reviewer, and a security review: keys). Fold findings in new commits.
 - The SPC-26 owner (lane B, db.ts) wires `scrubLegacyProviderText` into a one-time scrub of stored chat errors. Not done here.

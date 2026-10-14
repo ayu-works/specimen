@@ -179,6 +179,12 @@ describe('T3.05 httpError keeps classifying with fixed text', () => {
     expect((await httpError(res(422, 'boom'))).message).toBe('Request failed with HTTP 422.');
   });
 
+  it('a 400 saying a vision model is deprecated is "model unavailable", not an image rejection', async () => {
+    const e = await httpError(res(400, 'The model `gpt-4-vision-preview` has been deprecated'));
+    expect(e.message).toMatch(/Fetch models/);
+    expect(e.message).not.toBe(IMAGE_REJECTED_TEXT);
+  });
+
   it('a 400 that rejects the image gets the fixed image text', async () => {
     for (const m of [
       'messages.0.content must be a string',
@@ -234,6 +240,9 @@ describe('T3.05 scrubLegacyProviderText', () => {
       'gsk_AbCdEf0123456789XyZabc',
       'AIzaSyAbCdEf0123456789XyZ_-abc',
       'sk-AbCdEf0123456789XyZ',
+      ['xai', 'AbCdEf0123456789XyZabc'].join('-'),
+      'ab12'.repeat(16), // 64 hex, Together-style
+      ['AbCdEf0123456789', 'XyZabc0123456789'].join(''), // 32 alphanumerics, Mistral-style
     ];
     for (const k of keys) {
       const out = scrubLegacyProviderText(`Something broke: ${k}, sorry`);
