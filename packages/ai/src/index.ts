@@ -1,5 +1,23 @@
 export { httpError, mapThrown } from './errors';
 export { type AskTurn, ask, askSystemPrompt } from './features/ask';
+export {
+  CRITIQUE_ERRORS,
+  CRITIQUE_LIMITS,
+  type CritiqueOptions,
+  type CritiquePlan,
+  type CritiqueResult,
+  type CritiqueTurn,
+  clipContext,
+  critiquePlan,
+  DEFAULT_PERSONAS,
+  MAX_CONTEXT,
+  PERSONAS,
+  type PersonaId,
+  parseVerdict,
+  runCritique,
+  type TurnStatus,
+  type Verdict,
+} from './features/critique';
 export { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './features/pageData';
 export {
   measuredValues,

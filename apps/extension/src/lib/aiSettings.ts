@@ -38,7 +38,7 @@ export interface AiSettings {
 
 export const KEY_AI = 'settings.ai';
 export const SECRET_PREFIX = 'secrets.';
-const SESSION_KEY = 'session.vaultKey';
+export const SESSION_KEY = 'session.vaultKey';
 
 export function secretKey(preset: string): string {
   return `${SECRET_PREFIX}${preset}`;

@@ -116,6 +116,23 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T3.15 | 🖐 | Gemma downloads with progress, survives closing the side panel, then works **offline** (network disabled) |
 | T3.16 | 🖐 | Real-key smoke test: OpenAI, Anthropic, Gemini, OpenRouter, Ollama |
 | T3.17 | 🖐 | No WebGPU → clear fallback message |
+| T3.18 | U | Critique panel (SPC-22 spike): every turn's system prompt has the persona brief, the page-data rule, and the contrast pairs (capped, before) + compactScan in one `<page_data>`; injection text stays inside it |
+| T3.19 | U | Critique panel: default 3 reviewers × 2 rounds + 1 summary in order; the cap (2–3 reviewers, 1–3 rounds) is enforced in the engine |
+| T3.20 | U | Critique panel: Stop mid-stream, before start, or by a stream that ends quietly on abort → turn and run `stopped`, no further call or summary |
+| T3.21 | U | Critique panel: a provider error mid-round ends the run with a fixed per-kind message (never the provider's text); a rate limit is retried up to 3 times after cancellable waits; known free-tier TPM limits (Groq) pace calls; a stalled stream times out; an empty reply is marked `empty` |
+| T3.22 | U | Critique panel: the brand sanitizer runs on every turn (snapshots, transcript, next request) and keeps measured values; an emptied turn is `filtered` |
+| T3.23 | U | Critique panel: a human message queued mid-turn reaches the next reviewer (clipped) without adding calls |
+| T3.24 | U | Critique panel: the transcript fits the context budget, keeping the newest turns and the latest human message |
+| T3.25 | ⊘ | **Dropped 2026-10-15** (replaced by T3.29 / T3.33, SPC-24): ~~Critique panel: `parseKeepChange` reads lenient keep/change lists and rejects prose~~ |
+| T3.26 | ⊘ | **Dropped 2026-10-15** (replaced by T3.29 / T3.33, SPC-24): ~~Critique view: flag `flags.critique === true` gates the tab (bad values / storage error = off); no provider → Ask's setup hint; cap line; run, steer; Stop, a scan change, the flag turned off, or a provider/key switch mid-run all stop the calls (mock provider)~~ |
+| T3.27 | 🖐 | Owner: critique panel on 2–3 real sites with Groq (BYOK) in a dev build; go / no-go comment on SPC-22 |
+| T3.28 | U | Council (SPC-24): the user's goal reaches every call's user message as `[Goal]`, outside `<page_data>`, clipped to 1000 chars without control characters; the system prompt is identical with or without it; it survives budget trimming |
+| T3.29 | U | Council: `parseVerdict` reads a lenient verdict / works / change / disagreed report and rejects prose; it parses sanitized text (brand gone, measured values kept) |
+| T3.30 | U | Council host (offscreen): a run is stored once per turn end and ends `done` with a verdict; a closed panel (Port posts throwing) or a throwing `onTurn` never breaks it; a second panel attaches to the live run; one run per extension; the store keeps the newest 5 |
+| T3.31 | U | Council stop paths: `stop{runId}`; the SW's `halt{at}` with no panel open (it stops a run whose settings read `resolvedAt` ≤ the change; a start older than the last halt is rejected), during a retry wait or while the provider is still being built; the SW guard halts on flag off (and forgets stored runs), a provider change or any key change / lock (not on download-list changes); badge cleared on start, ✓ / ! on finish (none if already seen), cleared when seen |
+| T3.32 | U | Council failures: a provider error → fixed text, no verdict; malformed / wrong-version / unsupported-provider starts are `rejected` with nothing stored or called; the key never appears in any host message, record or SW notice; failing writes never break a run, and a run whose final write failed is still shown (and stored) on reopen; a dead host shows `interrupted` (no offscreen document, unknown run, no answer, a crash after stored turns, browser start / install), conditionally; a late answer still wins |
+| T3.33 | C | Ask + council view: flag-gated mode switch (bad values / storage error = off); no provider → setup hint; goal box limit and privacy line; a full run shows thinking, then a verdict-only report with "Show discussion" closed; the mascot turns happy when done and a click opens the verdict; Stop; a verdict for another scan is labelled; rejected starts show fixed text (mock provider, in-memory Port to a real host) |
+| T3.34 | 🖐 | Owner (SPC-24): in the branch build with Groq, give a goal, run the council, close the panel (also during a pacing wait), see the mascot / badge change when done, reopen to read the verdict, open "Show discussion"; go / no-go comment on SPC-24 |
 
 ## Phase 4: Library, Compose, Themes
 | ID | Type | Test |

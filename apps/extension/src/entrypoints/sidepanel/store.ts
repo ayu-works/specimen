@@ -5,6 +5,8 @@ import type { ChatMessage } from '@/lib/db';
 export type AskMessage = ChatMessage;
 
 export type TabId = 'scan' | 'inspect' | 'generate' | 'ask' | 'library';
+/** The Ask tab's two modes; the council only exists with the Labs flag on. */
+export type AskMode = 'quick' | 'council';
 /** Where the current scan came from: the live tab, a saved Library entry, or a Compose mix. */
 export type Origin = 'tab' | 'saved' | 'composed';
 export type Status = 'idle' | 'scanning' | 'done' | 'error';
@@ -42,6 +44,8 @@ interface State {
   status: Status;
   error: string | null;
   activeTab: TabId;
+  askMode: AskMode;
+  setAskMode: (m: AskMode) => void;
   origin: Origin;
   extras: Extras;
   /** Set by Library's "Check a build against this"; Generate scrolls to its check card once. */
@@ -71,6 +75,8 @@ export const useStore = create<State>((set) => ({
   status: 'idle',
   error: null,
   activeTab: 'scan',
+  askMode: 'quick',
+  setAskMode: (askMode) => set({ askMode }),
   origin: 'tab',
   extras: NO_EXTRAS,
   checkPending: false,

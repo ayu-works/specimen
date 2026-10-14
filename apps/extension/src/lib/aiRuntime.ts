@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { resolveByokProvider } from './aiByok';
 import { type AiSettings, loadAiSettings, loadKey, presetBase, watchAi } from './aiSettings';
+import type { ProviderSpec } from './councilProtocol';
 import { gemmaById } from './gemmaModels';
 import { send } from './messaging';
 
@@ -131,6 +132,47 @@ export async function resolveAi(): Promise<ResolvedAi> {
     default:
       return OFF;
   }
+}
+
+/**
+ * The provider config for the council host (SPC-24), read fresh at Start: the host builds the
+ * provider itself in the offscreen document, which can't read storage. Null when there's none.
+ * The key is in the returned spec; callers pass it straight into the `start` message.
+ */
+export async function resolveProviderSpec(): Promise<ProviderSpec | null> {
+  const injected = (globalThis as { __specimenProvider?: LLMProvider }).__specimenProvider;
+  if (injected)
+    return { kind: 'byok', cfg: { preset: injected.id, baseUrl: '', model: '', vision: false } };
+  const s = await loadAiSettings();
+  if (s.provider === 'chrome') return { kind: 'chrome' };
+  if (s.provider === 'webllm') {
+    const model = gemmaById(s.webllmModel);
+    return model
+      ? { kind: 'webllm', cfg: { modelId: model.id, contextTokens: model.contextTokens } }
+      : null;
+  }
+  if (s.provider !== 'byok') return null;
+  const preset = getPreset(s.byok.preset);
+  if (!preset) return null;
+  const baseUrl = presetBase(preset.id, s.byok.baseUrl);
+  const model = s.byok.model || preset.model;
+  if (!baseUrl || !model) return null;
+  let apiKey: string | undefined;
+  if (preset.needsKey) {
+    const k = await loadKey(preset.id);
+    if (k.status !== 'ok') return null;
+    apiKey = k.key;
+  }
+  return {
+    kind: 'byok',
+    cfg: {
+      preset: preset.id,
+      baseUrl,
+      model,
+      ...(apiKey ? { apiKey } : {}),
+      vision: s.byok.vision ?? preset.vision,
+    },
+  };
 }
 
 /** React hook: the resolved provider, refreshed when settings, keys or the model state change. */

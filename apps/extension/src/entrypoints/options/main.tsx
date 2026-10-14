@@ -14,6 +14,7 @@ import {
 } from '@/lib/aiSettings';
 import { cn } from '@/lib/utils';
 import { Byok } from './Byok';
+import { Labs } from './Labs';
 import { LocalGemma } from './LocalGemma';
 
 const CHOICES: { id: AiProviderId; label: string; hint: string }[] = [
@@ -79,6 +80,7 @@ function Options() {
       </Card>
       {settings.provider === 'webllm' && <LocalGemma settings={settings} onChange={setSettings} />}
       {settings.provider === 'byok' && <Byok settings={settings} onChange={setSettings} />}
+      {new URLSearchParams(location.search).get('labs') === '1' && <Labs />}
     </main>
   );
 }
