@@ -87,6 +87,8 @@ describe('check-ids', () => {
       'duplicate ID': phase(98, '| T98.01 | U | a |', '| T98.01 | U | b |'),
       '🖐 and ⊘ on one row': phase(98, `| T98.01 | 🖐 | ⊘ | ${DROP} |`),
       '⊘ without a Dropped prefix': phase(98, '| T98.01 | ⊘ | old text |'),
+      '⊘ without a reason': phase(98, '| T98.01 | ⊘ | **Dropped 2026-10-09** ~~old~~ |'),
+      'ID under another phase': phase(98, '| T98.01 | U | a |', '| T99.01 | U | b |'),
       '⊘ with a bad date': phase(98, '| T98.01 | ⊘ | **Dropped 2026-10** (cut) |'),
       'Dropped prefix without ⊘': phase(98, `| T98.01 | U | ${DROP} |`),
       '⊘ outside a Type cell': phase(98, '| T98.01 | ⊘ |').replace(

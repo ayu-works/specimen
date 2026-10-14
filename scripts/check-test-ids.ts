@@ -15,7 +15,7 @@ export interface Row {
 
 const MANUAL = '🖐';
 const DROPPED = '⊘';
-const DROPPED_PREFIX = /^\*\*Dropped \d{4}-\d{2}-\d{2}\*\*/;
+const DROPPED_PREFIX = /^\*\*Dropped \d{4}-\d{2}-\d{2}\*\* \([^)]+\)/;
 /** Phases the product has; `--all` fails if one is missing from TESTING.md. */
 export const REQUIRED_PHASES = ['0', '1', '2', '3', '4', '5', '6', '7'];
 
@@ -47,6 +47,7 @@ export function parseTestingMd(md: string): { phases: Set<string>; rows: Row[] }
       throw new Error(`docs/TESTING.md ${id}: ${why}`);
     };
     if (seen.has(id)) fail('duplicate ID');
+    if (id.slice(1, id.indexOf('.')) !== phase) fail(`listed under ## Phase ${phase}`);
     seen.add(id);
     if (test === MANUAL || test === DROPPED)
       fail(`${test} must be in a Type cell, not the Test cell`);
@@ -54,7 +55,7 @@ export function parseTestingMd(md: string): { phases: Set<string>; rows: Row[] }
     const dropped = types.includes(DROPPED);
     if (manual && dropped) fail(`marked both ${MANUAL} and ${DROPPED}`);
     if (dropped && !DROPPED_PREFIX.test(test))
-      fail(`${DROPPED} row must start with **Dropped YYYY-MM-DD**`);
+      fail(`${DROPPED} row must start with **Dropped YYYY-MM-DD** (reason)`);
     if (!dropped && /^\*\*Dropped\b/.test(test)) fail(`"Dropped" row needs Type ${DROPPED}`);
     rows.push({ id, phase, kind: dropped ? 'dropped' : manual ? 'manual' : 'auto' });
   }

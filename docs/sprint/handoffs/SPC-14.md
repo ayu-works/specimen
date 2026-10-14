@@ -92,8 +92,12 @@ rows, T7.02 row), this handoff. All lane A.
 - Red proofs (scratch edits, reverted): renaming T7.01 in site.spec.ts → "Missing tests … T7.01", exit 1;
   turning T6.01 back into a `U` row → "Missing tests … T6.01".
 
+- PR #23 opened 2026-10-15. PE lens A + contract r1 (`docs/sprint/reviews/SPC-14-a-r1.md`): approve, 0C/0H/0M/2L.
+  Folded both LOWs in a new commit: L1 the Dropped prefix must be followed by a `(reason)`; L2 an ID listed under
+  another phase's heading throws. Fixtures added for both; test:scripts 21/21, check-ids --all unchanged (92).
+
 ## Next
-- PR review (PE lens A, lens B, contract). Fold findings as new commits.
+- Lens B review; fold findings as new commits.
 
 ## How to resume
 Worktree /Users/ayushmayank/Claude coding/Projects/Specimen-wt/spc-14, branch exec/spc-14. Read this file and any
