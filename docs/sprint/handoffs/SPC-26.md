@@ -140,8 +140,11 @@ whenever `scan.id`, `activeTab` or `askMode` changes (only once a scan is shown;
   next to `initCouncil`; the council attaches on `council.started` regardless, so this is test timing, but worth a
   look if that test flakes again.
 
+- CI green on ef29d3e (gate incl. gitleaks, video). Orchestrator (specimen-c8): no new lens-B round; pe-99 doing the
+  final check (db.ts, M1 fold, ef29d3e). The owner stops the sprint after SPC-26.
+
 ## Next
-- CI green on #30; pe-99 and the orchestrator told; lens B re-check if the orchestrator asks.
+- Fold anything pe-99 sends, then stand by. Merge is the owner's call (from the main checkout).
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-26`; `gh pr view` for the PR and reviews in `docs/sprint/reviews/`.
