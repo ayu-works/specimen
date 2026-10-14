@@ -82,7 +82,8 @@ The original teardown feedback wasn't substantial, so the items marked ★ are *
 - Component + state specs, responsive/dark capture, a11y pass, **Fidelity Diff**, multi-page merge
 
 ### v1.0: Launch (Phases 6–7)
-- MCP bridge (`npx specimen-mcp`), Chrome Web Store, GitHub release, landing website, product video
+- Chrome Web Store, GitHub release plumbing, landing website, product video. Live on the Chrome Web Store 2026-10-13.
+- The MCP bridge (`npx specimen-mcp`) was dropped from v1 (2026-10-09); its future is SPC-10.
 
 ---
 
@@ -96,17 +97,18 @@ The original teardown feedback wasn't substantial, so the items marked ★ are *
 | 3 | AI layer | Provider interface, WebLLM Gemma, BYOK adapters, Ask, vibe | Sonnet / Opus |
 | 4 | Library + Compose | IndexedDB library, Compose, Themes | Sonnet / Opus |
 | 5 | Differentiators | Components/states, responsive/dark, a11y, Diff, multi-page | Sonnet / Opus |
-| 6 | MCP + release | MCP package, store listing, docs, CONTRIBUTING | Sonnet / Opus |
-| 7 | Website + video | Landing site (`apps/web`), Remotion product video | Sonnet / Opus |
+| 6 | Release | Store listing, docs, CONTRIBUTING (MCP dropped from v1, 2026-10-09) | Sonnet / Opus |
+| 7 | Website + video | Landing site (`site/`, plain HTML on Netlify), Remotion product video | Sonnet / Opus |
 
 **Model policy:** planning, architecture and code review use **Opus**. All implementation is delegated to **Sonnet** subagents. Opus reviews each phase's diff before the next phase starts.
 
 ---
 
 ## 6. Website & video (Phase 7)
-- **Website:** a single landing page in `apps/web` (Astro, static). Hero with a live before→after demo, "how it works" in 3 steps, the feature grid, the local-AI privacy story, an open-source/GitHub CTA, and an "Add to Chrome" button. The site should be designed *using the extension itself* (dogfooding).
+- **Website:** a single landing page in `site/` (plain HTML, no build, deployed by Netlify from `main`). Hero with a live before→after demo, "how it works" in 3 steps, the feature grid, the local-AI privacy story, an open-source/GitHub CTA, and an "Add to Chrome" button. The site should be designed *using the extension itself* (dogfooding).
 - **Product video:** built with **Remotion** (React → MP4) so it's versioned in the repo.
   - ⚠️ **Length to confirm:** the request said "3 sec". A 3-second clip only works as a looping teaser (scan → prompt → built page). Proposal: a **3 s loop** for social/hero plus a **30 s** full walkthrough.
+  - Answered: four cuts × three formats shipped in PR #11; the approved cut is `mix` (31.3 s).
 
 ---
 
