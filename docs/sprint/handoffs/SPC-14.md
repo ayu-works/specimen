@@ -112,8 +112,10 @@ rows, T7.02 row), this handoff. All lane A.
   - L3: TESTING.md legend: a new phase's table lands in the same PR as its first tests.
   - test:scripts 28/28 (+7); gate exit 0 (secrets skipped locally); red proof re-run (T7.01 rename → missing).
 
+- PE r3 on d5aef8a: 0 findings, still approved (contract unchanged; TESTING.md edits wording only).
+
 ## Next
-- PE round 2 on the lens-B fixes.
+- Owner's merge decision (orchestrator). Nothing open on my side.
 
 ## How to resume
 Worktree /Users/ayushmayank/Claude coding/Projects/Specimen-wt/spc-14, branch exec/spc-14. Read this file and any
