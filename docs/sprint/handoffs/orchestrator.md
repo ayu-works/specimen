@@ -6,6 +6,11 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (resumed after the Claude Code update)
+
+- The owner updated Claude Code (2.1.300) and resumed. **The orchestrator's session name is now `specimen-af`** (it was specimen-b0); agents were told. Session names change on restart: re-read ListAgents and re-send names.
+- The owner OK'd the SPC-14 ⊘ format; spc-14-6b is building; pe-5e will review (lens A + contract), plus a fresh lens-B reviewer.
+
 ## UPDATE 2026-10-14 14:01 (PAUSED by the owner)
 
 - The owner said "stop everything for now". Nothing merges and nothing new starts until they say resume.
