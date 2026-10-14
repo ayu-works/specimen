@@ -28,7 +28,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 **Schema & color (U)**
 | ID | Test |
 |---|---|
-| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields |
+| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields; v4 rejects a non-`#rrggbb` hex and a role id outside its palette; v1–v3 rows are repaired (idempotent, input not mutated); every fixture, merge, compose and derived variant passes v4 with no repair |
 | T1.02 | `parseColor` handles hex/rgb/rgba/hsl/oklch/`color()`/named/`transparent` → normalised value |
 | T1.03 | `contrast('#000','#fff') === 21`, `contrast('#777','#fff') ≈ 4.48` |
 | T1.04 | `deltaE2000` matches reference pairs (Sharma test data subset) within 0.01 |
@@ -82,7 +82,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 |---|---|---|
 | T2.01 | U | Prompt (generic) contains every role hex, the body + heading sizes, base unit, radii and the section list |
 | T2.02 | U | Each target (`claude-code`, `cursor`, `v0`, `lovable`) produces distinct wording and stack hints; snapshot |
-| T2.03 | U | **Ethics guardrail**: prompt never contains the site host/brand name, `title`, or heading snippets (fixture with brand text) |
+| T2.03 | U | **Ethics guardrail**: prompt never contains the site host/brand name, `title`, or heading snippets (fixture with brand text); DESIGN.md drops brands in camelCase, digit-suffixed and run-together CSS variable names (short brands only at boundaries); host forms (subdomain, `WWW.`, `.co.uk`, port, title-only) and the branded-font placeholder |
 | T2.04 | U | Prompt length 800–1500 tokens (approx. tokenizer) on all raw fixtures |
 | T2.05 | U | DESIGN.md has a table for colors, type, spacing, radii, shadows, layout; parses as valid Markdown (remark) |
 | T2.06 | U | Tailwind v4 `@theme` output compiles with `@tailwindcss/node`; utility `bg-accent` resolves to the accent hex |
@@ -137,9 +137,9 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 ## Phase 4: Library, Compose, Themes
 | ID | Type | Test |
 |---|---|---|
-| T4.01 | U | Dexie (fake-indexeddb): save/get/list/delete scans; thumbnails stored separately |
+| T4.01 | U | Dexie (fake-indexeddb): save/get/list/delete scans; thumbnails stored separately; a stored v3 row with an unreadable color lists repaired and generates |
 | T4.02 | U | Export `.specimen.json` → import round-trips identically; import runs schema migrations |
-| T4.03 | U | Import rejects malformed or oversized files with a clear error |
+| T4.03 | U | Import rejects malformed or oversized files with a clear error; a v4 scan with a non-hex color or a dangling role is skipped, an older one is imported repaired |
 | T4.04 | U | Compose: colors from A + type from B → valid DesignScan with A's palette and B's styles |
 | T4.05 | U | Compose contrast fix-up: when accentForeground on the new background fails AA, it's adjusted to pass |
 | T4.06 | U | Theme derivation: dark counterpart passes AA for textPrimary/background and textSecondary/background |

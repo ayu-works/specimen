@@ -111,7 +111,7 @@ interface RawSample {
 ### 4.2 `DesignScan` (canonical, stored, exported)
 ```ts
 interface DesignScan {
-  schemaVersion: 3; id: string; url: string; host: string; title: string;
+  schemaVersion: 4; id: string; url: string; host: string; title: string;
   scannedAt: number; viewport: { w: number; h: number }; colorScheme: 'light'|'dark';
   colors: {
     palette: ColorToken[];                       // clustered, weight-sorted
@@ -154,7 +154,7 @@ interface Section { index: number; kind: 'nav'|'hero'|'logos'|'features'|'stats'
 interface ComponentSpec { kind: 'button-primary'|'button-secondary'|'button-ghost'|'input'|'card'|'nav-link'|'badge';
   base: Record<string, string>; states: Partial<Record<'hover'|'focus'|'active'|'disabled', Record<string, string>>>; }
 ```
-`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read. v2 (Phase 4) only adds `variants.light`; v3 (Phase 5) only adds optional fields (the `measured` flag on theme variants, mobile details in `variants.mobile`, role/kind/fix on `a11y` pairs). Both v1 → v2 and v2 → v3 are no-ops that set the version. The fidelity report is never stored on a scan.
+`schemaVersion` bumps come with a migration in `core/schema/migrations.ts`. Imports and the Library run migrations on read. v2 (Phase 4) only adds `variants.light`; v3 (Phase 5) only adds optional fields (the `measured` flag on theme variants, mobile details in `variants.mobile`, role/kind/fix on `a11y` pairs). Both v1 → v2 and v2 → v3 are no-ops that set the version. v4 (SPC-17) changes no shape; it tightens validation: every palette `hex` (base and theme variants) is lower-case `#rrggbb`, and every role id points at a palette token (a variant's roles at its own palette, or the base palette when it has none). v1–v3 rows are repaired on read, not rejected: a hex culori can parse is normalised, an unreadable token is dropped with the roles that pointed at it, and a `Repaired on upgrade: …` line is added to `meta.warnings` (per read, since reads don't write back). A v4 row that breaks the rules is rejected, so the Library skips it and an import counts it as skipped. The fidelity report is never stored on a scan.
 
 **Compose (`core/compose`).** `compose(sources: Partial<Record<Facet, DesignScan>>, base)` takes each facet (`colors`, `typography`, `spacing`, `shape` = radii + shadows + borders, `layout`) from its source, else from `base`, and returns a new valid scan (`host: 'composed'`, `meta.pages` = source URLs). After mixing it repairs contrast by moving the foreground's OKLCH lightness (`textPrimary` and `accentForeground` ≥ 4.5, `textSecondary` ≥ 3) and records each change in `meta.warnings`. In the UI, Compose is a mode inside Library, not a tab.
 

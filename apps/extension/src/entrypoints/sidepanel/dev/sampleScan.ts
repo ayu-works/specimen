@@ -1,4 +1,4 @@
-import type { ColorToken, DesignScan } from '@specimen/core/schema';
+import { type ColorToken, type DesignScan, SCHEMA_VERSION } from '@specimen/core/schema';
 
 const tok = (id: string, hex: string, weight: number, usage: ColorToken['usage']): ColorToken => ({
   id,
@@ -11,7 +11,7 @@ const tok = (id: string, hex: string, weight: number, usage: ColorToken['usage']
 
 /** Plausible Linear-like scan for visual development (`sidepanel.html?demo=1`). */
 export const sampleScan: DesignScan = {
-  schemaVersion: 3,
+  schemaVersion: SCHEMA_VERSION,
   id: 'demo',
   url: 'https://linear.app/',
   host: 'linear.app',

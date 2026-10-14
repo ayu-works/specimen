@@ -1,6 +1,6 @@
 # SPC-17 handoff: brand leak via camelCase CSS vars (H3) + migrate() integrity (H4), plus M15, M16
 
-Executor session `spc-17-13`, branch `exec/spc-17`, lane A. Status: **PE APPROVED 2026-10-15 (pe-99, 3 changes folded in below). Part 1 building; Part 2 code waits for the owner's OK (PE relays it to specimen-53).**
+Executor session `spc-17-13`, branch `exec/spc-17`, lane A. Status: **Built; `pnpm gate` green; PR open, awaiting reviews.** PE approved 2026-10-15 (pe-99, 3 changes folded in); the owner OK'd the v4 contract 2026-10-15 (relayed by specimen-53).
 
 ## Plan
 
@@ -124,9 +124,15 @@ ticket's "migrate() rejects" check would become "migrate() repairs". I recommend
   `sanitize.ts` (`wordRegex` case-sensitive humps, `containsBrand` keeps case, new `nameHasBrand`) and `designmd.ts`.
   Core 62/62 with snapshots unchanged; `packages/ai` 158/158 (council tests green).
 
+- Part 2 built (owner OK 2026-10-15): tests first in `packages/core/test/schema.test.ts` (T1.01 strict v4, repair,
+  clean upgrade, real-data proof) and `apps/extension/test/library.test.ts` (T4.01 stored v3 row, T4.03 mixed import);
+  `HexSchema` + `danglingRoles` + `superRefine` in `scan.ts`; `repairColors` in `migrations.ts`; `SCHEMA_VERSION` 4 used
+  by extract/merge/compose/sampleScan. The real-data proof passed on main too (it's a guard, as intended); the other
+  new T1.01 tests failed on main first. TESTING.md rows T1.01/T2.03/T4.01/T4.03 widened (no new IDs);
+  ARCHITECTURE.md §4.2 says v4. `pnpm gate` green: core 66, ai 158, extension 85, e2e 51.
+
 ## Next
-- Waiting: the owner's OK on Part 2 (PE sent it to specimen-53). Then tests first (T1.01, T4.01, T4.03, real-data
-  proof) → schema code → TESTING.md and ARCHITECTURE.md rows → `pnpm gate` → PR.
+- Reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-17`. Part 1 can be built once the PE approves; Part 2 waits for

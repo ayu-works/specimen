@@ -1,7 +1,7 @@
 import { computeA11y } from '../a11y';
 import { type ColorEntry, clusterColors, deltaE2000 } from '../color';
 import type { ColorRole, ColorToken, DesignScan, TypeStyle } from '../schema';
-import { DesignScanSchema } from '../schema';
+import { DesignScanSchema, SCHEMA_VERSION } from '../schema';
 import { densityOf } from './layout';
 
 type Colors = DesignScan['colors'];
@@ -280,7 +280,7 @@ export function mergeScans(scans: DesignScan[]): DesignScan {
   for (const s of [...scans].reverse()) Object.assign(cssVariables, s.cssVariables);
 
   const out: DesignScan = {
-    schemaVersion: 3,
+    schemaVersion: SCHEMA_VERSION,
     id: first.id,
     url: first.url,
     host: first.host,

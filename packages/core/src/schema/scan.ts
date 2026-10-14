@@ -18,9 +18,12 @@ export const ColorRoleSchema = z.enum([
 ]);
 export type ColorRole = z.infer<typeof ColorRoleSchema>;
 
+/** Lower-case `#rrggbb`, as the extractor writes it (alpha lives in its own field). */
+export const HexSchema = z.string().regex(/^#[0-9a-f]{6}$/, 'expected #rrggbb');
+
 export const ColorTokenSchema = z.object({
   id: z.string(),
-  hex: z.string(),
+  hex: HexSchema,
   oklch: z.tuple([z.number(), z.number(), z.number()]),
   alpha: z.number(),
   weight: z.number(),
@@ -138,8 +141,8 @@ export const FamilySchema = z.object({
   weights: z.array(z.number()),
 });
 
-export const DesignScanSchema = z.object({
-  schemaVersion: z.literal(3),
+const DesignScanObject = z.object({
+  schemaVersion: z.literal(4),
   id: z.string(),
   url: z.string(),
   host: z.string(),
@@ -217,5 +220,40 @@ export const DesignScanSchema = z.object({
     warnings: z.array(z.string()),
     pages: z.array(z.string()).optional(),
   }),
+});
+
+type Roles = Partial<Record<ColorRole, string>>;
+
+/** Role entries whose id isn't in `palette` (the generators would silently drop them). */
+export function danglingRoles(roles: Roles, palette: readonly { id: string }[]): ColorRole[] {
+  const ids = new Set(palette.map((t) => t.id));
+  return (Object.entries(roles) as [ColorRole, string | undefined][])
+    .filter(([, id]) => id !== undefined && !ids.has(id))
+    .map(([r]) => r);
+}
+
+/**
+ * v4: every role points at a palette id. A theme variant's roles point into its own palette, or into
+ * the base palette when it has none (the same lookup `roleColors` uses).
+ */
+export const DesignScanSchema = DesignScanObject.superRefine((scan, ctx) => {
+  for (const r of danglingRoles(scan.colors.roles, scan.colors.palette)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['colors', 'roles', r],
+      message: 'role id not in palette',
+    });
+  }
+  for (const key of ['dark', 'light'] as const) {
+    const v = scan.variants?.[key];
+    if (!v?.roles) continue;
+    for (const r of danglingRoles(v.roles, v.palette ?? scan.colors.palette)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['variants', key, 'roles', r],
+        message: 'role id not in palette',
+      });
+    }
+  }
 });
 export type DesignScan = z.infer<typeof DesignScanSchema>;

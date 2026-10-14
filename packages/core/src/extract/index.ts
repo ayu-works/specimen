@@ -1,5 +1,5 @@
 import { computeA11y } from '../a11y';
-import { type DesignScan, DesignScanSchema, type RawPage } from '../schema';
+import { type DesignScan, DesignScanSchema, type RawPage, SCHEMA_VERSION } from '../schema';
 import { extractBorders } from './borders';
 import { analyzeColors, type ColorOptions, CSS_VAR_HINT } from './colors';
 import { extractComponents } from './components';
@@ -81,7 +81,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
     /* keep raw */
   }
   const scan: DesignScan = {
-    schemaVersion: 3,
+    schemaVersion: SCHEMA_VERSION,
     id: opts.id ?? `scan_${hash(`${raw.url}|${raw.scannedAt}`)}`,
     url: raw.url,
     host,

@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
-import { type DesignScan, migrate } from '@specimen/core/schema';
+import { generateDesignMd, generatePrompt } from '@specimen/core';
+import { type DesignScan, migrate, SCHEMA_VERSION } from '@specimen/core/schema';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import {
@@ -77,6 +78,33 @@ describe('Library db (fake-indexeddb)', () => {
   });
 });
 
+describe('Library db: stored rows from older builds', () => {
+  it('T4.01 a stored v3 row with an unreadable color still lists, repaired, and generates', async () => {
+    const row = scanOf('legacy');
+    const first = row.colors.palette[0];
+    if (!first) throw new Error('sample scan has no palette');
+    const old = {
+      ...row,
+      schemaVersion: 3,
+      colors: {
+        ...row.colors,
+        palette: row.colors.palette.map((t) => (t.id === first.id ? { ...t, hex: 'nope' } : t)),
+      },
+      tags: [],
+    };
+    await db.scans.put(old as unknown as Parameters<typeof db.scans.put>[0]);
+    const listed = (await listScans()).find((s) => s.id === 'legacy');
+    expect(listed).toBeDefined();
+    if (!listed) return;
+    expect(listed.colors.palette.map((t) => t.id)).not.toContain(first.id);
+    expect(Object.values(listed.colors.roles)).not.toContain(first.id);
+    expect(() => generatePrompt(listed)).not.toThrow();
+    // Reads don't write back: the stored row is untouched, and a second read gives the same result.
+    expect((await db.scans.get('legacy'))?.schemaVersion).toBe(3);
+    expect((await listScans()).find((s) => s.id === 'legacy')).toEqual(listed);
+  });
+});
+
 describe('Library import / export', () => {
   it('T4.02 export then import round-trips the scans identically', async () => {
     const originals = [
@@ -112,7 +140,7 @@ describe('Library import / export', () => {
     const old = { ...scanOf('old'), schemaVersion: 1 };
     const file = fileOf(JSON.stringify({ format: 'specimen', version: 1, scans: [old] }));
     expect(await importFile(file)).toEqual({ imported: 1, skipped: 0 });
-    expect((await db.scans.get('old'))?.schemaVersion).toBe(3);
+    expect((await db.scans.get('old'))?.schemaVersion).toBe(SCHEMA_VERSION);
     // A scan from a newer Specimen is skipped (and reported) rather than half-imported.
     const future = { ...scanOf('future'), schemaVersion: 99 };
     const mixed = fileOf(
@@ -141,6 +169,38 @@ describe('Library import / export', () => {
     const body = JSON.stringify({ format: 'specimen', version: 1, scans: [{ nope: true }, 5] });
     await expect(importFile(fileOf(body))).rejects.toThrow(/No valid scans/);
     expect(await db.scans.count()).toBe(0);
+  });
+
+  it('T4.03 a v4 scan with a non-hex color or a dangling role is skipped; an older one is repaired', async () => {
+    const badHex = scanOf('bad-hex');
+    badHex.colors = {
+      ...badHex.colors,
+      palette: badHex.colors.palette.map((t, i) => (i === 0 ? { ...t, hex: 'zzz' } : t)),
+    };
+    const dangling = scanOf('dangling');
+    dangling.colors = { ...dangling.colors, roles: { ...dangling.colors.roles, link: 'nope' } };
+    const oldBad = { ...structuredClone(badHex), id: 'old-bad', schemaVersion: 3 };
+    const file = fileOf(
+      JSON.stringify({
+        format: 'specimen',
+        version: 1,
+        scans: [scanOf('fine'), badHex, dangling, oldBad],
+      }),
+    );
+    expect(await importFile(file)).toEqual({ imported: 2, skipped: 2 });
+    expect(await db.scans.get('bad-hex')).toBeUndefined();
+    expect(await db.scans.get('dangling')).toBeUndefined();
+
+    // The v3 row was repaired on import: the unreadable color and its roles are gone, Generate works.
+    const repaired = (await listScans()).find((s) => s.id === 'old-bad');
+    expect(repaired?.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(repaired?.colors.palette.some((t) => t.hex === 'zzz')).toBe(false);
+    expect(repaired?.meta.warnings.filter((w) => w.startsWith('Repaired on upgrade'))).toHaveLength(
+      1,
+    );
+    if (!repaired) return;
+    expect(() => generatePrompt(repaired)).not.toThrow();
+    expect(() => generateDesignMd(repaired)).not.toThrow();
   });
 
   it('T4.03 rejects oversized files before reading them', async () => {
