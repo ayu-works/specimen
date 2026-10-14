@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
-import type { Redirect } from './netlify';
+import { type Redirect, shortLink } from './netlify';
 
 declare global {
   interface Window {
@@ -17,14 +17,23 @@ const FONTS: [family: string, file: string][] = [
   ['Press Start 2P', 'pressstart2p-latin.woff2'],
   ['VT323', 'vt323-latin.woff2'],
 ];
-const FONT_CSS = FONTS.map(
-  ([family, file]) =>
-    `@font-face{font-family:'${family}';font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/specimen-test/${file}) format('woff2')}`,
+const FONT_CSS = FONTS.map(([family, file]) => [
+  family,
+  `@font-face{font-family:'${family}';font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/specimen-test/${file}) format('woff2')}`,
+]);
+
+/**
+ * With fonts blocked, the families are declared with a source that never loads. A declared
+ * @font-face hides an installed font of the same name, so a machine with VT323 installed still
+ * measures the fallback.
+ */
+const BLOCKED_CSS = FONTS.map(
+  ([family]) => `@font-face{font-family:'${family}';src:local('__specimen_no_such_font__')}`,
 ).join('\n');
 
 /**
  * Keeps every request on the machine. Google Fonts get the vendored copies (or, with
- * `fonts: 'blocked'`, an empty stylesheet: what users see while fonts load or when they're blocked);
+ * `fonts: 'blocked'`, faces that never load: what users see while fonts load or when they're blocked);
  * anything else not on `origin` gets an empty 200. CSP still applies first, so a host the policy
  * forbids is reported, not fulfilled.
  */
@@ -38,7 +47,13 @@ export async function isolate(
     async (route) => {
       const url = new URL(route.request().url());
       if (fonts === 'vendored' && url.hostname === 'fonts.googleapis.com') {
-        return route.fulfill({ status: 200, contentType: 'text/css', body: FONT_CSS });
+        // Only the faces the site actually asks for, so a typo in its `family=` fails the font check.
+        const asked = url.searchParams.getAll('family').map((f) => f.split(':')[0]);
+        const css = FONT_CSS.filter(([family]) => asked.includes(family)).map(([, face]) => face);
+        return route.fulfill({ status: 200, contentType: 'text/css', body: css.join('\n') });
+      }
+      if (fonts === 'blocked' && url.hostname === 'fonts.googleapis.com') {
+        return route.fulfill({ status: 200, contentType: 'text/css', body: BLOCKED_CSS });
       }
       const font = FONTS.find(([, file]) => url.pathname === `/specimen-test/${file}`);
       if (fonts === 'vendored' && url.hostname === 'fonts.gstatic.com' && font) {
@@ -64,6 +79,8 @@ export async function isolate(
 export async function fontProblems(page: Page): Promise<string[]> {
   const families = FONTS.map(([family]) => family);
   return page.evaluate(async (families) => {
+    // Start the loads explicitly, in case `ready` resolved before the page queued them.
+    for (const fam of families) await document.fonts.load(`16px "${fam}"`).catch(() => []);
     await document.fonts.ready;
     const loaded = [...document.fonts].filter((f) => f.status === 'loaded');
     return families
@@ -108,6 +125,8 @@ const LINK_SELECTORS: [string, string][] = [
   ['img[src]', 'src'],
   ['source[src]', 'src'],
   ['iframe[src]', 'src'],
+  ['video[poster]', 'poster'],
+  ['use[href]', 'href'],
 ];
 
 /** Every same-origin link and asset on the page resolves; every `#fragment` has a target id. */
@@ -147,7 +166,7 @@ export async function linkProblems(
   for (const href of new Set(raw)) {
     const url = new URL(href, here);
     if (url.origin !== origin) continue; // external: asserted on as hrefs elsewhere, never fetched
-    if (redirects.some((r) => r.from === url.pathname)) continue; // a Netlify short link
+    if (shortLink(redirects, url.pathname)) continue; // a Netlify short link
     const fragment = decodeURIComponent(url.hash.slice(1));
     url.hash = '';
     const samePage = url.pathname === here.pathname && url.search === here.search;
@@ -161,7 +180,14 @@ export async function linkProblems(
       problems.push(`${href}: HTTP ${status}`);
       continue;
     }
-    if (fragment && !body.includes(`id="${fragment}"`)) {
+    const hasId =
+      !fragment ||
+      (await page.evaluate(
+        ([html, id]) =>
+          new DOMParser().parseFromString(html, 'text/html').getElementById(id) !== null,
+        [body, fragment] as const,
+      ));
+    if (!hasId) {
       problems.push(`${href}: no element with id "${fragment}" on ${url.pathname}`);
     }
   }
@@ -181,7 +207,7 @@ export async function ctaProblems(
   const targets = new Set(
     hrefs.map((h) => {
       const u = new URL(h);
-      const short = u.origin === origin && redirects.find((r) => r.from === u.pathname);
+      const short = u.origin === origin && shortLink(redirects, u.pathname);
       return short ? short.to : h;
     }),
   );
@@ -193,9 +219,9 @@ export async function ctaProblems(
 
 /**
  * The page can't scroll sideways and nothing sticks out of the viewport. The per-element check
- * looks through `overflow-x:hidden` on html/body, which would hide a too-wide element from the
- * scroll checks while still cutting it off; an element inside any other clipping ancestor (an
- * inner scroller) is that ancestor's business and is skipped.
+ * looks through `overflow:hidden`/`clip` anywhere (body, `.scene`): those hide a too-wide element
+ * from the scroll checks while still cutting it off. Only an element inside a scroll container
+ * (`overflow-x:auto|scroll`, e.g. the nav) is skipped, since the user can scroll to it.
  */
 export async function overflowProblems(page: Page, width: number): Promise<string[]> {
   await page.evaluate(async () => {
@@ -224,20 +250,37 @@ export async function overflowProblems(page: Page, width: number): Promise<strin
           : '';
       return `${el.tagName.toLowerCase()}${id}${cls}`;
     };
-    const clipped = (el: Element) => {
-      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
-        if (getComputedStyle(a).overflowX !== 'visible') return true;
+    const inScroller = (start: Element | null) => {
+      for (let a = start; a && a !== document.body; a = a.parentElement) {
+        if (/auto|scroll/.test(getComputedStyle(a).overflowX)) return true;
       }
       return false;
     };
+    // Deliberately off-screen or cut off: visually hidden text for screen readers.
+    const EXEMPT = '.sr';
+    const outside = (r: DOMRect) =>
+      r.width > 0 && r.height > 0 && (r.right > vw + 1 || r.left < -1);
+    const span = (r: DOMRect) =>
+      `spans x ${Math.round(r.left)}..${Math.round(r.right)} (viewport ${vw})`;
     for (const el of document.querySelectorAll('body *')) {
       if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;
+      if (el.closest(EXEMPT)) continue;
       const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      if (r.right <= vw + 1 && r.left >= -1) continue; // inside, or cut off on neither side
-      if (clipped(el)) continue;
+      if (!outside(r) || inScroller(el.parentElement)) continue;
+      problems.push(`${describe(el)} ${span(r)}`);
+    }
+    // Text can run past its own box (a long unbreakable token in a <p> that fits): measure the text.
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const parent = n.parentElement;
+      if (!parent || !n.textContent?.trim()) continue;
+      if (parent.closest(`svg, script, style, ${EXEMPT}`)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const r = range.getBoundingClientRect();
+      if (!outside(r) || inScroller(parent)) continue;
       problems.push(
-        `${describe(el)} spans x ${Math.round(r.left)}..${Math.round(r.right)} (viewport ${vw})`,
+        `text "${n.textContent.trim().slice(0, 30)}" in ${describe(parent)} ${span(r)}`,
       );
     }
     return problems;

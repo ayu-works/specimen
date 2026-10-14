@@ -63,3 +63,9 @@ export function canonicalUrls(config: NetlifyConfig): { install: string; github:
   };
   return { install: to('/install'), github: to('/github') };
 }
+
+/** The redirect for `pathname`, if any. Netlify ignores a trailing slash when it matches one. */
+export function shortLink(redirects: Redirect[], pathname: string): Redirect | undefined {
+  const bare = (p: string) => p.replace(/\/+$/, '') || '/';
+  return redirects.find((r) => bare(r.from) === bare(pathname));
+}

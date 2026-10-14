@@ -79,8 +79,37 @@ passing with no fixme.
 - `pnpm gate` green on 2026-10-14: exit 0; e2e 41/41 including the 15 site tests; check-ids 87 IDs for phases 0-5.
   T7.01/T7.03 aren't enforced by check-ids until SPC-14.
 
+- PR #19 opened. Round 1 reviews: lens A `SPC-8-a-r1.md` (0C/1H/3L), lens B `SPC-8-b-r1.md` (0C/1H/1M/5L).
+  All fixed in one commit after r1:
+  - **A-H1 = B-H1** (`.scene{overflow:hidden}` made T7.03 on `/` vacuous): only `overflow-x:auto|scroll` ancestors
+    excuse an element now. A new text-node check (Range rects) catches text that runs past its own box. Exempt list:
+    `.sr` (visually hidden), explicit and commented. New negative on `/`: a 500px div and a long token inside the
+    first `.scene .inner`, both reported. **Red proof:** under the old rule that negative fails (run 2026-10-14). On
+    the real `/`, the text check went red with fallback fonts: `.source pre` (`apps/extension/.output/chrome-mv3`)
+    ran to 442px. Fixed with `overflow-wrap:anywhere`, the same class as SPC-15 (the orchestrator authorized this
+    fix in `site/index.html`).
+  - **B-M1 = A-L1** (cross-page anchor was a substring match): the fetched HTML is parsed with DOMParser and checked
+    with getElementById. New negative: `data-id="decoy"` and `id="decoy"` in the text don't count.
+  - **A-L2** (the font stub ignored the site's `family=`): it serves only the requested families. New negative:
+    `family=VT32` gives `font not loaded: VT323`.
+  - **A-L3** (`/privacy` 200 vs Netlify's 301): the server 301s a directory path with no trailing slash, and the
+    test asserts it lands on `/privacy/`.
+  - **B-L1** (short link with a trailing slash 404s): `shortLink()` normalizes the trailing slash in the server,
+    linkProblems and ctaProblems. The short-link test uses `/install/`.
+  - **B-L2** (context leaked on a failed expect): contexts come from a `newContext` fixture that closes them all in
+    teardown.
+  - **B-L3** (fallback depends on the OS, and an installed face defeats it): blocked mode declares both families
+    with `src:local('__specimen_no_such_font__')`, so a locally installed VT323 or Press Start 2P is hidden. The
+    OS-specific `monospace` fallback is **accepted**: CI (Linux) runs it too, and fallback widths are close.
+  - **B-L4** (`fonts.ready` could resolve too early): fontProblems calls `document.fonts.load()` for each family
+    before checking.
+  - **B-L5** (links from CSS and SVG aren't collected): added `video[poster]` and `use[href]`. CSS `url()` is
+    **justified as not collected**: the site has none, and a broken one still shows up through the same-origin
+    ≥400 response listener.
+  - `pnpm gate` green on 2026-10-14 after the fixes: exit 0, e2e 43/43 (17 site), check-ids 87.
+
 ## Next
-- PR open → PE lens A + lens B review → fold in findings.
+- PE round 2 (H1 and the new negatives). Fold in anything else that comes back.
 
 ## How to resume
 - Worktree `Specimen-wt/spc-8`, branch `exec/spc-8`. Read this file; PE is `pe-5e`, orchestrator `specimen-b0`.
