@@ -43,7 +43,7 @@ interface RigOpts {
   /** The scanned tab's current url (default: the scanned page). */
   scannedTabUrl?: string;
   /** What `windows.create` hands back: a real popup (default), a full-screen window, or the panel's own window. */
-  created?: 'popup' | 'fullscreen' | 'panel-window' | 'panel-window-ambiguous';
+  created?: 'popup' | 'fullscreen' | 'panel-window' | 'panel-window-ambiguous' | 'other-window';
   currentThrows?: boolean;
   attachThrows?: boolean;
   scanRejects?: boolean;
@@ -61,10 +61,14 @@ function rig(opts: RigOpts): Rig {
     { id: 3, url: 'https://other.test/' },
     { id: 5, url: PAGE },
   ];
+  // Another of the user's windows: their tab on the same page, and ours with no url yet.
+  const otherTabs = [{ id: 20, url: PAGE }, { id: 21 }];
   const created = opts.created ?? 'popup';
   const windows = {
     create: vi.fn(async () => {
       if (created === 'popup') return { id: 7, type: 'popup', state: 'normal', tabs: [{ id: 42 }] };
+      if (created === 'other-window')
+        return { id: 2, type: 'normal', state: 'normal', tabs: otherTabs };
       if (created === 'fullscreen')
         return { id: 7, type: 'normal', state: 'fullscreen', tabs: [{ id: 42 }] };
       panelTabs = [
@@ -109,7 +113,9 @@ function rig(opts: RigOpts): Rig {
       ? { id: 5, windowId: scannedWin.id, url: opts.scannedTabUrl ?? PAGE, status: 'complete' }
       : { id, windowId: 7, status: 'complete' },
   );
-  tabs.query = vi.fn(async (q: { windowId?: number }) => (q.windowId === 1 ? [...panelTabs] : []));
+  tabs.query = vi.fn(async (q: { windowId?: number }) =>
+    q.windowId === 1 ? [...panelTabs] : q.windowId === 2 ? [...otherTabs] : [],
+  );
   tabs.remove = state.tabsRemove;
   chrome.permissions.contains = vi.fn(async () => opts.debuggerGranted) as never;
   chrome.runtime.sendMessage = vi.fn(async () => {
@@ -343,6 +349,15 @@ describe('captureMobile in full screen', () => {
     expect(r.windows.remove).not.toHaveBeenCalled();
     expect(r.tabsRemove).not.toHaveBeenCalled();
   });
+
+  it("T5.11 Chrome puts the page in another of the user's windows: nothing is closed", async () => {
+    const r = rig({ widths: [390], debuggerGranted: false, created: 'other-window' });
+    const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
+    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(r.scanCalls).toBe(0);
+    expect(r.windows.remove).not.toHaveBeenCalled();
+    expect(r.tabsRemove).not.toHaveBeenCalled();
+  });
 });
 
 describe('runMobileCapture in full screen', () => {
@@ -368,6 +383,26 @@ describe('runMobileCapture in full screen', () => {
     await run(runMobileCapture(desktop));
     expect(r.windows.create).not.toHaveBeenCalled();
     expect(useStore.getState().extras.mobile).toBe('running');
+  });
+});
+
+describe('runMobileCapture after a newer scan', () => {
+  it("T5.11 a stale capture's failure never lands on the next scan's card", async () => {
+    rig({ widths: [390], debuggerGranted: false, scanRejects: true });
+    useStore.setState({
+      scan: desktop,
+      status: 'done',
+      extras: { ...NO_EXTRAS, scanId: desktop.id, tabId: 5 },
+    });
+    const pending = run(runMobileCapture(desktop));
+    const next = { ...desktop, id: 'scan-b' };
+    useStore.setState({
+      scan: next,
+      extras: { ...NO_EXTRAS, scanId: next.id, tabId: 5, mobile: 'running' },
+    });
+    await pending;
+    expect(useStore.getState().extras.mobile).toBe('running');
+    expect(useStore.getState().extras.note).toBeNull();
   });
 });
 

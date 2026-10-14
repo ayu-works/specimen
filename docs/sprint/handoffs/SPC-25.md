@@ -103,8 +103,12 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
   `docs/TESTING.md` T5.11 row.
 - `pnpm gate` green (extension 99 tests, e2e 51, check-ids 106 IDs).
 
+- Lens A r1 (pe-99, `docs/sprint/reviews/SPC-25-a-r1.md`): M1 fixed (`createdTab` only for the home window; any
+  other existing window → close nothing), L1 fixed (`runMobileCapture` catch returns when the scan isn't live). Two
+  new T5.11 tests; both fail without the fix. PE re-reviews M1 only.
+
 ## Next
-- Reviews (PE lens A + fresh lens B) → fold findings. Owner manual check per the ticket's "How to check" (macOS full
+- Lens B review; PE re-review of M1. Reviews (PE lens A + fresh lens B) → fold findings. Owner manual check per the ticket's "How to check" (macOS full
   screen can't run in CI).
 
 ## How to resume

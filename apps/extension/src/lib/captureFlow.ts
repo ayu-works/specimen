@@ -189,7 +189,10 @@ export async function captureMobile(
   let strayTab: number | undefined;
   try {
     if (intoExisting) {
-      if (win.id !== undefined && before) strayTab = await createdTab(win.id, before, url);
+      // Only the home window has a snapshot to diff against; in any other window close nothing.
+      if (win.id === homeId && homeId !== undefined && before) {
+        strayTab = await createdTab(homeId, before, url);
+      }
       throw new MobileFullscreenError();
     }
     if (isFullscreen(win) || (win.type !== undefined && win.type !== 'popup')) {

@@ -139,6 +139,8 @@ export async function runMobileCapture(scan: DesignScan, withPermission = false)
     await attach(current(scan.id) ?? scan, { mobile });
     patchExtras({ mobile: 'done' });
   } catch (e) {
+    // A newer scan owns the card now: never paint this capture's failure on it.
+    if (!live(scan.id)) return;
     if (e instanceof MobileFullscreenError) {
       patchExtras({ mobile: 'fullscreen' });
       return;
