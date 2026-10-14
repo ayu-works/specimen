@@ -123,7 +123,9 @@ herdr pane read <pane> --source recent-unwrapped --lines 20   # confirm it start
 Watching: `herdr agent list`; `herdr agent read <name> --lines 120`. A `blocked` state can be a false reading: read
 the pane before acting. Permission prompts go to the owner; never choose "always allow".
 
-Messaging: Claude Code cross-session messaging (ListAgents / SendMessage). `herdr agent prompt` only to start or
+Messaging: Claude Code cross-session messaging (ListAgents / SendMessage). **Session names come from the worktree
+folder plus a random suffix (`pe-5e`, `spc-6-1b`), not the herdr pane label.** Read them from ListAgents after start
+and send each agent its peers' exact names. `herdr agent prompt` only to start or
 nudge an agent that isn't reachable otherwise.
 
 **Alert hooks:** `docs/sprint/hooks/settings.local.json` (`Notification` and `Stop` → macOS `osascript` desktop
