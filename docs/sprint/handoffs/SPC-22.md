@@ -225,8 +225,9 @@ spike). `pnpm gate` (incl. check-ids --all) green.
 ## Review round 2
 - Lens A r2 (`SPC-22-a-r2.md`): **APPROVED**, 2 LOW notes (TPM is per model, not per provider; one call's estimate
   can exceed the TPM). No change for the spike; watch both in T3.27.
-- Waiting on: the owner's decision on lens-B H2 (runtime flag vs build-time gate / no merge before go/no-go), via the
-  orchestrator.
+- **H2: owner chose A; merge only after go** (2026-10-15, via specimen-53). No build-time gate. PR #25 is not merged
+  until the owner's go/no-go. The owner tests from this branch's build. Nothing to implement.
+- Status: stopped, waiting for the owner's decision (T3.27). The worktree stays until then.
 
 ## Next
 - Reviews: PE lens A + lens B + privacy. Fold findings as new commits.
