@@ -6,7 +6,12 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-15 ~22:20 (CURRENT STATE: read this block first)
+## UPDATE 2026-10-15 ~23:00 (CURRENT STATE: PAUSED by the owner)
+
+- **Sprint 3 paused after SPC-26** (owner). #30 merged 77ac925; SPC-26 Done. spc-26 pane, worktree and branch removed. pe-99 standing by (pe.md copied here).
+- Next on resume: SPC-32 (lane A, ahead of SPC-18), then SPC-18 → SPC-21; lane B SPC-19 (incl. sec M2/L1–L3; M2 bounds = contract, owner OK) → SPC-20 → SPC-28 → SPC-27.
+
+## UPDATE 2026-10-15 ~22:20
 
 - **Orchestrator session is now `specimen-c8`** (pane w1:p3); all live agents told.
 - **Owner (22:35): stop after SPC-26 is done.** Do NOT start SPC-32 or anything else. #30 at ef29d3e (folds + T3.33 flake fix), CI running; pe-99 doing a final lens-A check (db.ts, M1 fold, ef29d3e) that also covers the M1 re-check. Then the owner's "merge 30" → close out SPC-26, then pause: agents save handoffs, panes stay open or get closed per the owner.
