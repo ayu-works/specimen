@@ -168,13 +168,29 @@ describe('anthropic', () => {
     });
   });
 
-  it('T3.03 surfaces a stream error event as a ProviderError', async () => {
-    stubFetch(() => sseResponse(['data: {"type":"error","error":{"message":"overloaded"}}\n\n']));
+  it('T3.03 surfaces a stream error event as a ProviderError with fixed text', async () => {
+    stubFetch(() =>
+      sseResponse(['data: {"type":"error","error":{"type":"api_error","message":"boom"}}\n\n']),
+    );
     await expect(drain(createAnthropic(cfg).chat(REQ))).rejects.toMatchObject({
       name: 'ProviderError',
       kind: 'other',
-      message: 'overloaded',
+      message: 'The provider reported an error mid-response.',
     });
+  });
+
+  it('T3.03 a stream that ends without message_stop rejects as cut off, after the partial text', async () => {
+    stubFetch(() =>
+      sseResponse([
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hal"}}\n\n',
+      ]),
+    );
+    const seen: string[] = [];
+    const run = (async () => {
+      for await (const d of createAnthropic(cfg).chat(REQ)) seen.push(d);
+    })();
+    await expect(run).rejects.toMatchObject({ kind: 'other', message: /cut off/ });
+    expect(seen).toEqual(['Hal']);
   });
 });
 
@@ -207,6 +223,41 @@ describe('gemini', () => {
     expect(body.systemInstruction.parts[0].text).toBe('sys');
     expect(body.generationConfig.responseMimeType).toBe('application/json');
     expect(body.contents[0]).toEqual({ role: 'user', parts: [{ text: 'hi' }] });
+  });
+});
+
+describe('empty and missing bodies (M1)', () => {
+  const adapters: [string, string, () => LLMProvider][] = [
+    [
+      'openai',
+      'T3.02',
+      () => createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: 'k' }),
+    ],
+    ['anthropic', 'T3.03', () => createAnthropic({ baseUrl: '', model: 'm', apiKey: 'k' })],
+    ['gemini', 'T3.04', () => createGemini({ baseUrl: '', model: 'm', apiKey: 'k' })],
+  ];
+  for (const [name, id, make] of adapters) {
+    it(`${id} an empty 200 stream rejects instead of succeeding (${name})`, async () => {
+      stubFetch(() => sseResponse([]));
+      await expect(drain(make().chat(REQ))).rejects.toMatchObject({ name: 'ProviderError' });
+    });
+
+    it(`${id} a 200 with no body rejects as an empty response (${name})`, async () => {
+      stubFetch(() => new Response(null, { status: 200 }));
+      await expect(drain(make().chat(REQ))).rejects.toMatchObject({
+        kind: 'other',
+        message: 'The provider returned an empty response',
+      });
+    });
+  }
+
+  it('T3.02 events with no text (and no [DONE]) still end quietly, as an empty answer', async () => {
+    stubFetch(() => sseResponse(['data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n']));
+    expect(
+      await drain(
+        createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: 'k' }).chat(REQ),
+      ),
+    ).toBe('');
   });
 });
 

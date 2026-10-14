@@ -1,3 +1,4 @@
+import { streamError } from '../errors';
 import { PRESETS, type Preset } from '../presets';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { postSse, trimSlash } from './http';
@@ -50,12 +51,13 @@ export function createOpenAICompat(
       const { url, headers, body } = buildOpenAIRequest(cfg, req);
       for await (const ev of postSse(url, headers, body, signal)) {
         if (ev.data === '[DONE]') return;
-        let json: { choices?: { delta?: { content?: unknown } }[] };
+        let json: { choices?: { delta?: { content?: unknown } }[]; error?: unknown };
         try {
           json = JSON.parse(ev.data);
         } catch {
           continue;
         }
+        if (json.error) throw streamError(json.error);
         const text = json.choices?.[0]?.delta?.content;
         if (typeof text === 'string' && text) yield text;
       }

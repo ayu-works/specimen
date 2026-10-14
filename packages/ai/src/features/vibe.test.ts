@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { httpError } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan } from '../testing/testUtils';
 import { ProviderError } from '../types';
@@ -45,9 +46,11 @@ describe('vibe', () => {
       async *chat(req: Parameters<typeof base.chat>[0], signal?: AbortSignal) {
         n++;
         if (hasImage(req.messages[0]?.content)) {
-          throw new ProviderError(
-            'other',
-            'Request failed with HTTP 400 (messages.0.content must be a string)',
+          throw await httpError(
+            new Response(
+              JSON.stringify({ error: { message: 'messages.0.content must be a string' } }),
+              { status: 400 },
+            ),
           );
         }
         yield* base.chat(req, signal);
@@ -57,6 +60,25 @@ describe('vibe', () => {
     expect(n).toBe(2);
     expect(v.usedImage).toBe(false);
     expect(v.summary).toBe('Calm and airy.');
+  });
+
+  it('does not retry for another 400 whose text merely mentions an image', async () => {
+    let n = 0;
+    const base = createMockProvider({ vision: true, text: JSON_OUT });
+    const p = {
+      ...base,
+      // biome-ignore lint/correctness/useYield: throws before yielding on purpose
+      async *chat(): AsyncGenerator<string> {
+        n++;
+        throw await httpError(
+          new Response(JSON.stringify({ error: { message: 'Image too large: max 20MB' } }), {
+            status: 400,
+          }),
+        );
+      },
+    };
+    await expect(vibe(p, scan, SHOT)).rejects.toMatchObject({ kind: 'other' });
+    expect(n).toBe(1);
   });
 
   it('does not retry unrelated errors', async () => {

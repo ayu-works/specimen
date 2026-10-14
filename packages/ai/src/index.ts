@@ -1,4 +1,12 @@
-export { httpError, mapThrown } from './errors';
+export {
+  HTTP_FAILED_TEXT,
+  httpError,
+  IMAGE_REJECTED_TEXT,
+  MID_STREAM_TEXT,
+  mapThrown,
+  scrubLegacyProviderText,
+  streamError,
+} from './errors';
 export { type AskTurn, ask, askSystemPrompt } from './features/ask';
 export {
   CRITIQUE_ERRORS,

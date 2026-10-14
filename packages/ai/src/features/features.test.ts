@@ -82,6 +82,44 @@ describe('polishPrompt', () => {
     ).rejects.toMatchObject({ kind: 'aborted' });
   });
 
+  it('T3.07 empty model output falls back with a "nothing" reason', async () => {
+    const r = await polishPrompt(createMockProvider({ text: '' }), scan, ORIGINAL);
+    expect(r).toMatchObject({ polished: false, text: ORIGINAL, reason: /nothing/ });
+  });
+
+  it('T3.07 a non-ProviderError throw falls back to the original', async () => {
+    const base = createMockProvider({ text: ORIGINAL });
+    const p = {
+      ...base,
+      // biome-ignore lint/correctness/useYield: throws before yielding on purpose
+      async *chat(): AsyncGenerator<string> {
+        throw new Error('boom');
+      },
+    };
+    const r = await polishPrompt(p, scan, ORIGINAL);
+    expect(r).toMatchObject({ polished: false, text: ORIGINAL });
+    expect(r.reason).toBeTruthy();
+  });
+
+  it('T3.07 a value removed by the brand filter is not reported as "AI changed values"', async () => {
+    // The font name is also a brand token (it's in the page title), so sanitize strips it from a
+    // faithful rewrite. The AI didn't change anything; the reason must say the output was filtered.
+    const [first, ...rest] = scan.typography.families;
+    if (!first) throw new Error('fixture has no font family');
+    const branded = {
+      ...scan,
+      title: 'Geist Studio',
+      typography: { ...scan.typography, families: [{ ...first, name: 'Geist' }, ...rest] },
+    };
+    const original = ORIGINAL.replace(font, 'Geist');
+    const rewrite = original.replace('Use the font', 'Please use the font');
+    const r = await polishPrompt(createMockProvider({ text: rewrite }), branded, original);
+    expect(r.polished).toBe(false);
+    expect(r.text).toBe(original);
+    expect(r.reason).not.toMatch(/changed measured values/);
+    expect(r.reason).toMatch(/filtered/);
+  });
+
   it('T3.07 refuses a prompt that does not fit the model context', async () => {
     const long = `${ORIGINAL}\n${'x'.repeat(20_000)}`;
     const p = createMockProvider({ text: long });

@@ -86,6 +86,16 @@ export async function polishPrompt(
     const text = safe(stripFence(out), scan);
     if (!text) return { text: prompt, polished: false, reason: 'The model returned nothing.' };
     const missing = missingValues(prompt, text, scan);
+    // Values the brand filter removes from the original itself (a font named like the site, say):
+    // losing only those is the filter's doing, not the AI changing values.
+    const filtered = new Set(missingValues(prompt, safe(prompt, scan), scan));
+    if (missing.length > 0 && missing.every((v) => filtered.has(v))) {
+      return {
+        text: prompt,
+        polished: false,
+        reason: 'The AI output was filtered (brand names are removed), so the original is kept.',
+      };
+    }
     if (missing.length > 0) {
       return {
         text: prompt,

@@ -1,5 +1,6 @@
 import type { DesignScan } from '@specimen/core/schema';
 import { z } from 'zod';
+import { IMAGE_REJECTED_TEXT } from '../errors';
 import { type LLMProvider, ProviderError } from '../types';
 import { collect, safe } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
@@ -23,10 +24,6 @@ const SYSTEM_TEXT = [
   '"summary" is one or two sentences on mood, density and style (no brand names). "keywords" is 3 to 6 short adjectives.',
   PAGE_DATA_RULE,
 ].join('\n');
-
-/** Providers phrase "this model can't take images" differently; treat these 400s as that. */
-const IMAGE_REJECTED =
-  /content must be a string|image|vision|multimodal|multi-modal|image_url|unsupported content/i;
 
 function extractJson(text: string): unknown {
   const start = text.indexOf('{');
@@ -87,7 +84,7 @@ export async function vibe(
       usedImage &&
       e instanceof ProviderError &&
       e.kind === 'other' &&
-      IMAGE_REJECTED.test(e.message);
+      e.message === IMAGE_REJECTED_TEXT;
     if (!rejected) throw e;
     usedImage = false;
     raw = await run(false);

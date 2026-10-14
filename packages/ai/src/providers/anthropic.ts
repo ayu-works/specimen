@@ -1,4 +1,5 @@
 import { parseDataUrl } from '../dataUrl';
+import { streamError } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { ProviderError } from '../types';
 import { postSse, trimSlash } from './http';
@@ -60,25 +61,22 @@ export function createAnthropic(cfg: ProviderConfig): LLMProvider {
         let json: {
           type?: string;
           delta?: { type?: string; text?: unknown };
-          error?: { message?: unknown };
+          error?: unknown;
         };
         try {
           json = JSON.parse(ev.data);
         } catch {
           continue;
         }
-        if (json.type === 'error') {
-          throw new ProviderError(
-            'other',
-            String(json.error?.message ?? 'The provider reported an error'),
-          );
-        }
+        if (json.type === 'error') throw streamError(json.error);
         if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
           const t = json.delta.text;
           if (typeof t === 'string' && t) yield t;
         }
         if (json.type === 'message_stop') return;
       }
+      // Anthropic always ends with message_stop; without it the answer was cut off.
+      throw new ProviderError('other', 'The response was cut off. Try again.');
     },
   };
 }

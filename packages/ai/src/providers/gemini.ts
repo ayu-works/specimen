@@ -1,4 +1,5 @@
 import { parseDataUrl } from '../dataUrl';
+import { streamError } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { postSse, trimSlash } from './http';
 
@@ -51,12 +52,16 @@ export function createGemini(cfg: ProviderConfig): LLMProvider {
     async *chat(req, signal) {
       const { url, headers, body } = buildGeminiRequest(cfg, req);
       for await (const ev of postSse(url, headers, body, signal)) {
-        let json: { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
+        let json: {
+          candidates?: { content?: { parts?: { text?: unknown }[] } }[];
+          error?: unknown;
+        };
         try {
           json = JSON.parse(ev.data);
         } catch {
           continue;
         }
+        if (json.error) throw streamError(json.error);
         for (const part of json.candidates?.[0]?.content?.parts ?? []) {
           if (typeof part.text === 'string' && part.text) yield part.text;
         }
