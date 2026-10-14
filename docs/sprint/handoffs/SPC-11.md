@@ -128,8 +128,10 @@ recorded below and shows in the CI job summary.
   netlify.toml headers from a local server, not Netlify's CDN (compression, `Cache-Control`). A `/fonts/*`
   `Cache-Control` header would be a separate live change; suggested as a follow-up for the orchestrator.
 
+- PE OK on 2cb856a (lens A, 2026-10-14): non-doc changes confirmed. CI on 2cb856a green; Lighthouse 8×100, Pass.
+
 ## Next
-- Wait for lens B (and any lens A r2); fold findings in new commits.
+- Nothing open. The orchestrator merges #22 into `exec/spc-8` (owner's call); #19 ships it to `main` in one deploy.
 
 ## How to resume
 - Read this file and `git log`, then continue from "Next". Local run: `pnpm -F @specimen/extension lighthouse [--out dir]`.
