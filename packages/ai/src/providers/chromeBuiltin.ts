@@ -68,6 +68,7 @@ export function createChromeBuiltin(): LLMProvider {
       try {
         const last = req.messages[req.messages.length - 1];
         if (last?.role !== 'user') throw new ProviderError('other', 'Nothing to send');
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         const initialPrompts = [
           ...(req.system ? [{ role: 'system', content: req.system }] : []),
           ...req.messages.slice(0, -1).map((m) => ({ role: m.role, content: text(m.content) })),

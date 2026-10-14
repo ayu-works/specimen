@@ -189,7 +189,7 @@ describe('anthropic', () => {
     const run = (async () => {
       for await (const d of createAnthropic(cfg).chat(REQ)) seen.push(d);
     })();
-    await expect(run).rejects.toMatchObject({ kind: 'network', message: /cut off/ });
+    await expect(run).rejects.toMatchObject({ kind: 'other', message: /cut off/ });
     expect(seen).toEqual(['Hal']);
   });
 });

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { httpError, IMAGE_REJECTED_TEXT, mapThrown, scrubLegacyProviderText } from './errors';
+import {
+  httpError,
+  IMAGE_REJECTED_TEXT,
+  mapThrown,
+  scrubLegacyProviderText,
+  TOO_LONG_TEXT,
+} from './errors';
 import { listModels } from './models';
 import { getPreset } from './presets';
 import { createAnthropic } from './providers/anthropic';
@@ -185,11 +191,48 @@ describe('T3.05 httpError keeps classifying with fixed text', () => {
     expect(e.message).not.toBe(IMAGE_REJECTED_TEXT);
   });
 
+  it('a 400 naming a decommissioned "-vision" model is model-gone, not an image rejection', async () => {
+    const e = await httpError(
+      res(
+        400,
+        'The model `llama-3.2-90b-vision-preview` has been decommissioned and is no longer supported',
+      ),
+    );
+    expect(e.message).toMatch(/Fetch models/);
+  });
+
+  it('a 400 that only mentions an image (e.g. too large) is not an image rejection', async () => {
+    const e = await httpError(res(400, 'Image too large: max 20MB'));
+    expect(e.message).not.toBe(IMAGE_REJECTED_TEXT);
+    expect(e.message).toMatch(/rejected the request \(HTTP 400\)/);
+  });
+
+  it('a context-length or max_tokens 400 gets the fixed "too long" text', async () => {
+    for (const [status, m] of [
+      [400, "This model's maximum context length is 8192 tokens"],
+      [400, 'max_tokens is too large: 9000'],
+      [413, 'Request too large for model'],
+      [400, 'prompt is too long: 210000 tokens > 200000 maximum'],
+    ] as const) {
+      const e = await httpError(res(status, m));
+      expect(e).toMatchObject({ kind: 'other', message: TOO_LONG_TEXT });
+    }
+    const code = new Response(
+      JSON.stringify({ error: { message: 'x', code: 'context_length_exceeded' } }),
+      {
+        status: 400,
+      },
+    );
+    // Only the message is classified; a bare code still gets the fixed 400 text, never the body.
+    expect((await httpError(code)).message).toMatch(/HTTP 400/);
+  });
+
   it('a 400 that rejects the image gets the fixed image text', async () => {
     for (const m of [
       'messages.0.content must be a string',
       'image_url is only supported by certain models',
       'This model does not support multimodal input',
+      'Image input is not supported for this model',
     ]) {
       const e = await httpError(res(400, m));
       expect(e.kind).toBe('other');
@@ -249,6 +292,32 @@ describe('T3.05 scrubLegacyProviderText', () => {
       expect(leaks(out, k), out).toBe(false);
       expect(out).toContain('Something broke:');
     }
+  });
+
+  it('only strips the suffix when the whole string is an old message', () => {
+    const t = 'Return Invalid API key (401) from your handler, then retry';
+    expect(scrubLegacyProviderText(t)).toBe(t);
+    // Not an old message from the start, so the suffix stays, but a key in it is still redacted.
+    expect(scrubLegacyProviderText(`Kept: Invalid API key (${KEY})`)).toBe(
+      'Kept: Invalid API key ([redacted])',
+    );
+  });
+
+  it('redacts a key glued to a URL-encoded "=" and the stored keys verbatim and URL-encoded', () => {
+    const gem = ['AIza', 'SyFakeFakeFake012345'].join('');
+    expect(leaks(scrubLegacyProviderText(`url?key%3D${gem}&x=1`), gem)).toBe(false);
+    const custom = ['my+custom', 'key=value', '1234'].join('/');
+    for (const form of [custom, encodeURIComponent(custom)]) {
+      const out = scrubLegacyProviderText(`Something broke: ${form} oops`, [custom]);
+      expect(leaks(out, custom), out).toBe(false);
+      expect(leaks(out, encodeURIComponent(custom)), out).toBe(false);
+    }
+    expect(scrubLegacyProviderText('short k in text', ['k'])).toBe('short k in text');
+  });
+
+  it('is idempotent', () => {
+    const once = scrubLegacyProviderText(`Invalid API key (${KEY})`);
+    expect(scrubLegacyProviderText(once)).toBe(once);
   });
 
   it('leaves ordinary text alone', () => {

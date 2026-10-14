@@ -76,7 +76,7 @@ export function createAnthropic(cfg: ProviderConfig): LLMProvider {
         if (json.type === 'message_stop') return;
       }
       // Anthropic always ends with message_stop; without it the answer was cut off.
-      throw new ProviderError('network', 'The response was cut off. Try again.');
+      throw new ProviderError('other', 'The response was cut off. Try again.');
     },
   };
 }

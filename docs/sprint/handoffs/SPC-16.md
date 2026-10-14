@@ -140,6 +140,24 @@ Status: **Built, `pnpm gate` green, PR open (link on SPC-16).** Plan approved by
 - **Lens A r1 (pe-99): APPROVED, 0C/0H/0M/2L.** Folded in a new commit: L1 `KEY_SHAPES` adds `xai-…` and any run of 32+
   alphanumerics (Together, Mistral), with test rows; L2 the model-gone check runs before the image check (a test: a deprecated
   `gpt-4-vision-preview` 400 → "model unavailable").
+- **Lens B + security r1 (0C/0H/3M/4L), folded in a new commit:**
+  - M1: the image regex is tightened (no bare `image` / `vision`; it needs `image_url`, `content must be a string`,
+    "does not support images/vision/multimodal", "… is not supported", "not a multimodal model"), and model-gone runs
+    first. Tests: a decommissioned `-vision-preview` model → model-gone; "Image too large" → not an image rejection.
+  - M2: a new fixed class for 400/413/422 context length / `max_tokens` / "prompt is too long" → `TOO_LONG_TEXT` (`other`),
+    and a bare 400 → "The provider rejected the request (HTTP 400). Check the model in Settings." With tests.
+  - M3: `scrubLegacyProviderText` anchors the suffix at `^` (only whole old messages), its JSDoc says it's for the stored
+    `error` field only, key shapes also match after `%3D`, and it takes an optional `knownKeys` (redacted verbatim and
+    URL-encoded; keys under 8 characters are ignored). It's idempotent. **For SPC-26:** pass the user's stored keys.
+  - L1: chromeBuiltin checks `signal.aborted` before `create`; the test asserts `create` is never called and that
+    `create` / `promptStreaming` get the caller's signal.
+  - L2: a cut-off Anthropic stream is now kind `other` (Council: "The provider returned an error…" instead of blaming the
+    connection). Ask still shows "The response was cut off. Try again."
+  - L3 (no code change, flagged for SPC-24): a 200 with **zero SSE events** now rejects, so a Council turn shows the generic
+    `other` error instead of `empty`. A stream with events but no text still ends as `empty`. This is intended: a body
+    with no events is a provider failure, not a model that spent its budget thinking.
+  - L4: vibe's no-retry test now goes through a real `httpError` 400 ("Image too large"), which is reachable.
+- Not done (pre-existing, out of scope): OpenAI `429 insufficient_quota` is treated as `rate`. Suggested as a later ticket.
 
 ## Next
 - Reviews (PE lens A, a lens-B reviewer, and a security review: keys). Fold findings in new commits.

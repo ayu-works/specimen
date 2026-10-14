@@ -70,7 +70,11 @@ describe('vibe', () => {
       // biome-ignore lint/correctness/useYield: throws before yielding on purpose
       async *chat(): AsyncGenerator<string> {
         n++;
-        throw new ProviderError('other', 'Request failed: image too large');
+        throw await httpError(
+          new Response(JSON.stringify({ error: { message: 'Image too large: max 20MB' } }), {
+            status: 400,
+          }),
+        );
       },
     };
     await expect(vibe(p, scan, SHOT)).rejects.toMatchObject({ kind: 'other' });

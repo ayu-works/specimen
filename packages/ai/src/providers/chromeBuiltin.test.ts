@@ -98,7 +98,10 @@ describe('chromeBuiltin chat', () => {
 
   it('T3.06 streams chunks, passes system + history as initialPrompts, destroys the session once', async () => {
     const lm = stubLM();
-    expect(await drain(createChromeBuiltin().chat(REQ))).toBe('Hello');
+    const ac = new AbortController();
+    expect(await drain(createChromeBuiltin().chat(REQ, ac.signal))).toBe('Hello');
+    expect(lm.create.mock.calls[0]?.[0]).toMatchObject({ signal: ac.signal });
+    expect(lm.promptStreaming.mock.calls[0]?.[1]).toEqual({ signal: ac.signal });
     expect(lm.create).toHaveBeenCalledWith(
       expect.objectContaining({
         initialPrompts: [
@@ -122,14 +125,12 @@ describe('chromeBuiltin chat', () => {
   it('T3.06 an already-aborted signal rejects as "aborted" and never streams', async () => {
     const ac = new AbortController();
     ac.abort();
-    const lm = stubLM({
-      create: async () => {
-        throw new DOMException('Aborted', 'AbortError');
-      },
-    });
+    const lm = stubLM();
     await expect(drain(createChromeBuiltin().chat(REQ, ac.signal))).rejects.toMatchObject({
       kind: 'aborted',
     });
+    // The adapter checks the signal itself; it doesn't rely on Chrome honouring it.
+    expect(lm.create).not.toHaveBeenCalled();
     expect(lm.promptStreaming).not.toHaveBeenCalled();
     expect(lm.destroy).not.toHaveBeenCalled();
   });

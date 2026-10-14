@@ -11,10 +11,12 @@ import { ProviderError } from './types';
 export const IMAGE_REJECTED_TEXT = "This model can't read images.";
 export const MID_STREAM_TEXT = 'The provider reported an error mid-response.';
 export const HTTP_FAILED_TEXT = 'The provider request failed.';
+export const TOO_LONG_TEXT =
+  'The request is too long for this model. Ask a shorter question, or pick a model with a larger context.';
 
 /** Providers phrase "this model can't take images" differently; treat these 400s as that. */
 const IMAGE_REJECTED =
-  /content must be a string|image|vision|multimodal|multi-modal|image_url|unsupported content/i;
+  /content must be a string|image_url|unsupported content|(?:does not|doesn't|cannot|can't|unable to) (?:support|accept|process|read|handle) (?:images?|image (?:input|content)|vision|multi-?modal)|(?:images?|image (?:input|content)|vision|multi-?modal)(?: input| content)? (?:is|are) not supported|not (?:a )?(?:vision|multi-?modal)(?: model)?/i;
 
 const RATE_TEXT =
   'The provider is rate-limiting requests. Wait a minute and try again, or pick a smaller model.';
@@ -50,12 +52,26 @@ export async function httpError(res: Response): Promise<ProviderError> {
       `This model isn't available for your key. In Settings, click "Fetch models" and pick one.`,
     );
   }
+  if (
+    [400, 413, 422].includes(res.status) &&
+    /context[_ ]length|maximum context|too many tokens|prompt is too long|request too large|max_(?:completion_)?tokens/i.test(
+      detail,
+    )
+  ) {
+    return new ProviderError('other', TOO_LONG_TEXT);
+  }
   // After the model-gone check: "gpt-4-vision-preview has been deprecated" is not an image rejection.
   if ((res.status === 400 || res.status === 422) && IMAGE_REJECTED.test(detail)) {
     return new ProviderError('other', IMAGE_REJECTED_TEXT);
   }
   if (res.status >= 500) {
     return new ProviderError('other', 'The provider had a server error. Try again in a minute.');
+  }
+  if (res.status === 400) {
+    return new ProviderError(
+      'other',
+      'The provider rejected the request (HTTP 400). Check the model in Settings.',
+    );
   }
   return new ProviderError('other', `Request failed with HTTP ${res.status}.`);
 }
@@ -94,7 +110,7 @@ export function mapThrown(e: unknown, opts: { fixedText?: boolean } = {}): Provi
 
 /** The ` (<provider detail>)` suffix that messages carried before SPC-16. */
 const LEGACY_SUFFIX = new RegExp(
-  `(${[
+  `^(${[
     "Invalid API key, or the key can't use this model",
     'Invalid API key',
     `This model isn't available for your key\\. In Settings, click "Fetch models" and pick one`,
@@ -102,14 +118,26 @@ const LEGACY_SUFFIX = new RegExp(
     'Request failed with HTTP \\d+',
   ].join('|')}) \\([\\s\\S]*\\)$`,
 );
-/** Known key prefixes, plus any run of 32+ alphanumerics (Together, Mistral): error text never needs one. */
+/**
+ * Known key prefixes, plus any run of 32+ alphanumerics (Together, Mistral): error text never
+ * needs one. A key may follow a non-alphanumeric or a URL-encoded `=` (`key%3DAIza…`).
+ */
 const KEY_SHAPES =
-  /(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,}|xai-[A-Za-z0-9_-]{8,}|[A-Za-z0-9]{32,})/g;
+  /(?:(?<![A-Za-z0-9])|(?<=%3[Dd]))(?:sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,}|xai-[A-Za-z0-9_-]{8,}|[A-Za-z0-9]{32,})/g;
 
 /**
- * Clean error text stored before SPC-16 (it may hold provider detail that echoed the key): drop
- * the old ` (<detail>)` suffix and redact anything shaped like an API key. Pure; safe to run twice.
+ * Clean a stored provider **error** string from before SPC-16 (the chat `error` field, not answer
+ * text): it may hold provider detail that echoed the key. Drops the old ` (<detail>)` suffix when
+ * the whole string is an old message, redacts key shapes, and redacts `knownKeys` (the user's
+ * stored keys) verbatim and URL-encoded, which catches key formats no shape covers. Pure;
+ * idempotent.
  */
-export function scrubLegacyProviderText(text: string): string {
-  return text.replace(LEGACY_SUFFIX, '$1').replace(KEY_SHAPES, '[redacted]');
+export function scrubLegacyProviderText(text: string, knownKeys: readonly string[] = []): string {
+  let out = text.replace(LEGACY_SUFFIX, '$1');
+  for (const k of knownKeys) {
+    if (k.length < 8) continue;
+    for (const form of new Set([k, encodeURIComponent(k)]))
+      out = out.split(form).join('[redacted]');
+  }
+  return out.replace(KEY_SHAPES, '[redacted]');
 }
