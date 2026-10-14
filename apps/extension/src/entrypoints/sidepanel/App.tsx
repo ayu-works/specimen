@@ -5,14 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiProvider, openSettings, useAiContext } from '@/lib/aiContext';
 import { unlockKeys } from '@/lib/aiSettings';
+import { initCouncil, moodFor, useCouncil } from '@/lib/council';
 import { useFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import { sampleScan } from './dev/sampleScan';
 import { type TabId, useStore } from './store';
 import { useShortcut } from './useShortcut';
 import { Ask } from './views/Ask';
-import { Critique } from './views/Critique';
-import { guardProvider, useCritique } from './views/critiqueStore';
+import { Council } from './views/Council';
 import { Generate } from './views/Generate';
 import { Inspect } from './views/Inspect';
 import { Library } from './views/Library';
@@ -23,7 +23,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'inspect', label: 'Inspect' },
   { id: 'generate', label: 'Generate' },
   { id: 'ask', label: 'Ask' },
-  { id: 'critique', label: 'Critique' },
   { id: 'library', label: 'Library' },
 ];
 
@@ -101,21 +100,24 @@ export default function App() {
 function Panel() {
   const { activeTab, setTab, scan, succeed, status } = useStore();
   const flag = useFlag('critique');
-  const critique = flag === true;
-  const tabs = TABS.filter((t) => t.id !== 'critique' || critique);
+  const council = flag === true;
+  const { record, seen } = useCouncil();
   useShortcut();
 
-  const ai = useAiContext();
-  // Switching the flag off stops any run (no hidden calls to the provider).
+  // The council runs in the offscreen document; the service worker stops it when the flag, the
+  // provider or a key changes. The panel only reads the newest run and reattaches to it.
   useEffect(() => {
-    if (flag === false) useCritique.getState().reset(null);
-  }, [flag]);
-  // So does switching the provider or key: data goes only to the one the user has chosen.
-  useEffect(() => guardProvider(ai.provider), [ai.provider]);
-  // ...and leaves its tab.
-  useEffect(() => {
-    if (flag === false && activeTab === 'critique') setTab('ask');
-  }, [flag, activeTab, setTab]);
+    if (council) void initCouncil();
+  }, [council]);
+  const mood = council
+    ? moodFor(record, seen, status === 'scanning')
+    : status === 'scanning'
+      ? 'scanning'
+      : 'idle';
+  const openCouncil = () => {
+    useStore.getState().setAskMode('council');
+    setTab('ask');
+  };
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('demo') === '1') {
@@ -129,7 +131,23 @@ function Panel() {
     <div className="mx-auto flex min-h-screen max-w-[420px] flex-col text-[13px]">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
-          <Mascot size={32} mood={status === 'scanning' ? 'scanning' : 'idle'} />
+          {council && (mood === 'thinking' || mood === 'happy' || mood === 'sad') ? (
+            <button
+              type="button"
+              onClick={openCouncil}
+              data-testid="mascot-council"
+              aria-label={
+                mood === 'thinking'
+                  ? 'The council is thinking. Open it'
+                  : 'The council has finished. Open the verdict'
+              }
+              className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Mascot size={32} mood={mood} bounce={mood === 'thinking'} />
+            </button>
+          ) : (
+            <Mascot size={32} mood={mood} />
+          )}
           <h1 className="text-base font-semibold tracking-tight">Specimen</h1>
         </div>
         <div className="flex min-w-0 items-center gap-2 pl-3">
@@ -142,7 +160,7 @@ function Panel() {
       <UnlockBanner />
       <Tabs value={activeTab} onValueChange={(v) => setTab(v as TabId)}>
         <TabsList>
-          {tabs.map((t) => (
+          {TABS.map((t) => (
             <TabsTrigger key={t.id} value={t.id}>
               {t.label}
             </TabsTrigger>
@@ -159,19 +177,51 @@ function Panel() {
             <Generate />
           </TabsContent>
           <TabsContent value="ask">
-            <Ask />
+            <AskPane council={council} />
           </TabsContent>
-          {critique && (
-            <TabsContent value="critique">
-              <Critique />
-            </TabsContent>
-          )}
           <TabsContent value="library">
             <Library />
           </TabsContent>
         </main>
       </Tabs>
       <Toaster />
+    </div>
+  );
+}
+
+/** Ask has two modes with the Labs flag on: a quick answer, or the council. */
+function AskPane({ council }: { council: boolean }) {
+  const { askMode, setAskMode } = useStore();
+  if (!council) return <Ask />;
+  const modes = [
+    { id: 'quick', label: 'Quick answer' },
+    { id: 'council', label: 'Ask the council' },
+  ] as const;
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        role="radiogroup"
+        aria-label="Ask mode"
+        className="flex self-start rounded-md border border-border p-0.5 text-xs"
+      >
+        {modes.map((m) => (
+          // biome-ignore lint/a11y/useSemanticElements: a two-option segmented switch
+          <button
+            key={m.id}
+            type="button"
+            role="radio"
+            aria-checked={askMode === m.id}
+            onClick={() => setAskMode(m.id)}
+            className={cn(
+              'rounded px-2.5 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              askMode === m.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted',
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      {askMode === 'council' ? <Council /> : <Ask />}
     </div>
   );
 }

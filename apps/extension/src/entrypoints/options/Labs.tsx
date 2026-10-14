@@ -21,7 +21,7 @@ export function Labs() {
           checked={critique}
           onChange={(e) => void setFlag('critique', e.target.checked)}
         />
-        Critique panel: AI reviewers discuss a scan (adds a Critique tab to the side panel)
+        The council: AI reviewers discuss a scan and give a verdict (adds "Ask the council" to Ask)
       </label>
     </Card>
   );

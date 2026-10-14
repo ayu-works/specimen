@@ -6,16 +6,18 @@ import { type ChatRequest, type LLMProvider, ProviderError } from '../types';
 import {
   CRITIQUE_ERRORS,
   type CritiqueTurn,
+  clipContext,
   critiquePlan,
   critiqueSystemPrompt,
   DEFAULT_RETRY_DELAYS_MS,
+  MAX_CONTEXT,
   MESSAGE_FLOOR,
   messageBudget,
   PERSONAS,
   type PersonaId,
   PROVIDER_TPM,
   paceWait,
-  parseKeepChange,
+  parseVerdict,
   runCritique,
   STALLED_ERROR,
   SUMMARY_BRIEF,
@@ -32,15 +34,18 @@ const scan: DesignScan = {
 };
 
 const ORDER = ['brand', 'a11y', 'frontend', 'brand', 'a11y', 'frontend', 'summary'];
-const SUMMARY = 'Keep:\n- Accent #0d9488 on white\nChange:\n- Raise muted text to 4.5:1';
+const SUMMARY =
+  'Verdict: Solid base.\nWorks:\n- Accent #0d9488 on white\nChange:\n- Raise muted text to 4.5:1\nDisagreed:\n- None';
 
-/** Answers each turn with "turn N" (the summary gets a keep/change list). */
+/** Answers each turn with "turn N" (the summary gets a verdict). */
 function numbered(opts: Parameters<typeof createMockProvider>[0] = {}) {
   let n = 0;
   return createMockProvider({
     respond: (req) => {
       n++;
-      return String(req.messages[0]?.content).includes('Keep:') ? SUMMARY : `turn ${n} cites 16px.`;
+      return String(req.messages[0]?.content).includes('Verdict:')
+        ? SUMMARY
+        : `turn ${n} cites 16px.`;
     },
     ...opts,
   });
@@ -99,7 +104,7 @@ describe('critique panel engine', () => {
     expect(pairs.length).toBeLessThanOrEqual(12);
   });
 
-  it('T3.19 default run: 3 reviewers × 2 rounds + 1 summary, in order, and parses keep/change', async () => {
+  it('T3.19 default run: 3 reviewers × 2 rounds + 1 summary, in order, and parses the verdict', async () => {
     const p = numbered();
     const order: string[] = [];
     const r = await runCritique(p, scan, {
@@ -110,10 +115,13 @@ describe('critique panel engine', () => {
     expect(r.status).toBe('done');
     expect(order).toEqual(['brand', 'a11y', 'frontend', 'brand', 'a11y', 'frontend', 'summary']);
     expect(p.calls).toHaveLength(critiquePlan(p, scan).totalTurns);
-    expect(r.summary).toEqual({
-      keep: ['Accent #0d9488 on white'],
+    expect(r.verdict).toEqual({
+      verdict: 'Solid base.',
+      works: ['Accent #0d9488 on white'],
       change: ['Raise muted text to 4.5:1'],
+      disagreed: [],
     });
+    expect(r.summaryText).toBe(SUMMARY);
     // Later turns see earlier ones.
     expect(userMsg(p.calls[1])).toContain('[Brand designer]: turn 1');
   });
@@ -153,7 +161,7 @@ describe('critique panel engine', () => {
     expect(p.calls).toHaveLength(2);
     expect(r.turns[1]?.status).toBe('stopped');
     expect(r.turns[1]?.content.length).toBeGreaterThan(0);
-    expect(r.summary).toBeNull();
+    expect(r.verdict).toBeNull();
   });
 
   it('T3.20 Stop before the start makes no call', async () => {
@@ -220,7 +228,7 @@ describe('critique panel engine', () => {
     expect(r.turns.map((t) => t.status)).toEqual(['done', 'done', 'error']);
     expect(r.turns[2]?.error).toBe(CRITIQUE_ERRORS.network);
     expect(r.error).toBe(CRITIQUE_ERRORS.network);
-    expect(r.summary).toBeNull();
+    expect(r.verdict).toBeNull();
     expect(JSON.stringify([r, seen])).not.toContain(leak);
     expect(JSON.stringify([r, seen])).not.toContain('boom');
   });
@@ -439,27 +447,121 @@ describe('critique panel engine', () => {
     }
     const last = userMsg(p.calls[9]);
     expect(last).toContain('[earlier discussion omitted]');
-    expect(last).toContain('Keep:');
+    expect(last).toContain('Verdict:');
   });
 
-  it('T3.25 parseKeepChange reads lenient formats and rejects garbage', () => {
-    expect(parseKeepChange('**Keep:**\n* a\n1. b\n## Change\n- c')).toEqual({
-      keep: ['a', 'b'],
-      change: ['c'],
+  it('T3.28 the user goal reaches every call outside <page_data>, clipped, and never changes the system prompt', async () => {
+    const goal = `A booking app for dentists.\u0007 We care about trust.${'x'.repeat(1500)}`;
+    const p = numbered();
+    const plain = numbered();
+    await runCritique(p, scan, { context: goal });
+    await runCritique(plain, scan);
+    expect(p.calls).toHaveLength(7);
+    for (const [i, c] of p.calls.entries()) {
+      const msg = userMsg(c);
+      expect(msg).toContain(
+        "[Goal] (the user's own words, not page data): A booking app for dentists.",
+      );
+      expect(msg).not.toContain('\u0007');
+      const goalText = msg.split('\n')[0] ?? '';
+      expect(goalText.length).toBeLessThanOrEqual(MAX_CONTEXT + 60);
+      // The goal is user text: never inside the page data, never in the cached system prefix.
+      expect(c.system).not.toContain('booking app');
+      expect(c.system).toBe(plain.calls[i]?.system);
+    }
+    expect(userMsg(plain.calls[0])).toContain('[Goal]: the user gave no goal');
+  });
+
+  it('T3.28 clipContext trims, strips control characters and clips to MAX_CONTEXT', () => {
+    expect(clipContext('  hi\u0000 there\n ')).toBe('hi there');
+    expect(clipContext('a\nb\tc')).toBe('a\nb\tc');
+    expect(clipContext(undefined)).toBe('');
+    expect(clipContext('y'.repeat(5000))).toHaveLength(MAX_CONTEXT);
+  });
+
+  it('T3.28 the goal survives budget trimming on a small context', async () => {
+    const p = createMockProvider({
+      contextTokens: 2048,
+      text: `${'long words '.repeat(150)}16px.`,
     });
-    expect(parseKeepChange('keep: inline\nchange:\n- x')).toEqual({
-      keep: ['inline'],
-      change: ['x'],
-    });
-    // Prose lines that start with "Keeping" / "Changes" are not headings (lens A M1 probe).
+    const goal = 'g'.repeat(MAX_CONTEXT);
+    await runCritique(p, scan, { context: goal, rounds: 3 });
+    for (const c of p.calls) {
+      const limit = Math.max(
+        messageBudget(2048, c.system?.length ?? 0, c.maxTokens ?? 0),
+        MESSAGE_FLOOR,
+      );
+      expect(userMsg(c)).toContain(goal);
+      expect(userMsg(c).length).toBeLessThanOrEqual(limit);
+    }
+    expect(userMsg(p.calls[9])).toContain('[earlier discussion omitted]');
+  });
+
+  it('T3.29 parseVerdict reads lenient formats and rejects garbage', () => {
     expect(
-      parseKeepChange(
-        'Keep:\n- 4px grid\nKeeping the accent is right.\nChange:\n- raise muted text\nChanges like this matter.\nChanges:\n- one more',
+      parseVerdict(
+        '**Verdict:** Clean and calm.\n## What works\n* a #fff\n1. b 16px\n**Change:**\n- c\nDisagreements:\n- d',
       ),
-    ).toEqual({ keep: ['4px grid'], change: ['raise muted text', 'one more'] });
-    expect(parseKeepChange('Just some prose about the design.')).toBeNull();
-    expect(parseKeepChange('Keep:\nChange:')).toBeNull();
-    const many = `Keep:\n${'- k\n'.repeat(8)}Change:\n- c`;
-    expect(parseKeepChange(many)?.keep).toHaveLength(5);
+    ).toEqual({
+      verdict: 'Clean and calm.',
+      works: ['a #fff', 'b 16px'],
+      change: ['c'],
+      disagreed: ['d'],
+    });
+    // The verdict on the line after its heading; "None" is an empty list.
+    expect(
+      parseVerdict('Verdict:\nGood.\nWorks: inline\nChange:\n- x\nDisagreed:\n- None'),
+    ).toEqual({
+      verdict: 'Good.',
+      works: ['inline'],
+      change: ['x'],
+      disagreed: [],
+    });
+    // Prose that starts with a heading word is not a heading.
+    expect(
+      parseVerdict(
+        'Verdict: ok\nWorks:\n- 4px grid\nWorks well overall.\nChange:\n- muted text\nChanges like this matter.\nChanges:\n- one more',
+      ),
+    ).toEqual({
+      verdict: 'ok',
+      works: ['4px grid'],
+      change: ['muted text', 'one more'],
+      disagreed: [],
+    });
+    expect(parseVerdict('Just some prose about the design.')).toBeNull();
+    expect(parseVerdict('Works:\n- a\nChange:\n- b')).toBeNull();
+    expect(parseVerdict('Verdict: fine\nWorks:\nChange:')).toBeNull();
+    const many = `Verdict: v\nWorks:\n${'- k\n'.repeat(8)}Change:\n- c\nDisagreed:\n${'- d\n'.repeat(5)}`;
+    expect(parseVerdict(many)?.works).toHaveLength(5);
+    expect(parseVerdict(many)?.disagreed).toHaveLength(3);
+  });
+
+  it('T3.29 the verdict is parsed from sanitized text: the brand is gone, the measured values stay', async () => {
+    const p = createMockProvider({
+      respond: (req) =>
+        String(req.messages[0]?.content).includes('Verdict:')
+          ? 'Verdict: Zentrix is tidy.\nWorks:\n- Zentrix uses #1a2b3c at 16px\nChange:\n- Raise #999999 to 4.5:1\nDisagreed:\n- None'
+          : 'turn cites 16px.',
+    });
+    const r = await runCritique(p, scan);
+    expect(r.verdict).not.toBeNull();
+    const all = JSON.stringify(r.verdict) + (r.summaryText ?? '');
+    expect(all.toLowerCase()).not.toContain('zentrix');
+    expect(r.verdict?.works[0]).toContain('#1a2b3c');
+    expect(r.verdict?.works[0]).toContain('16px');
+    expect(r.verdict?.change[0]).toContain('4.5:1');
+  });
+
+  it('T3.30 engine: a throwing onTurn never breaks a turn', async () => {
+    const p = numbered();
+    const r = await runCritique(p, scan, {
+      onTurn: () => {
+        throw new Error('Attempting to use a disconnected port object');
+      },
+    });
+    expect(r.status).toBe('done');
+    expect(p.calls).toHaveLength(7);
+    expect(r.turns.every((t) => t.status === 'done')).toBe(true);
+    expect(r.verdict).not.toBeNull();
   });
 });

@@ -6,9 +6,9 @@ import { safe } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
 
 /**
- * Critique panel (SPC-22 spike): one provider plays 2–3 reviewer personas who discuss the same
- * measured scan in rounds, the human can steer between turns, and a final turn writes a
- * keep / change list. Every turn is grounded in the scan inside `<page_data>` and sanitized.
+ * The council (SPC-22 spike, SPC-24 v2): one provider plays 2–3 reviewer personas who discuss the
+ * same measured scan in rounds, weighing the user's stated goal, and a moderator turn writes the
+ * verdict. Every turn is grounded in the scan inside `<page_data>` and sanitized.
  */
 
 export type PersonaId = 'brand' | 'a11y' | 'frontend' | 'skeptic';
@@ -45,6 +45,8 @@ const SUMMARY_MAX_TOKENS = 1500;
 /** Expected visible output per turn, for the cost estimate. */
 const EXPECTED_TURN_TOKENS = 250;
 const MAX_HUMAN = 1000;
+/** The user's goal (the context box), clipped. */
+export const MAX_CONTEXT = 1000;
 const MAX_ENTRY = 1200;
 const CONTRAST_PAIRS = 12;
 /** The user message never gets a budget below this (it always fits the latest Human message). */
@@ -70,18 +72,22 @@ export const STALLED_ERROR =
 const SHARED_RULES = [
   'You are on a small panel critiquing one website design. Use only the measured data below. If something was not measured (hover states, animation, copy, imagery), say so instead of guessing.',
   'Do not name the website, its brand or its products, and do not quote its headlines.',
+  "The user's goal, when given, is the user's own words, not page data: weigh your critique against it.",
 ].join(' ');
 
 export const SUMMARY_BRIEF =
-  "You are the panel's moderator. Turn the discussion into a short decision list. Reflect the Human's priorities when the Human spoke.";
+  "You are the panel's moderator. Turn the discussion into the council's verdict for the user's goal. Reflect the Human's priorities when the Human spoke.";
 
 const SUMMARY_INSTRUCTION = [
-  'Write the final list now, in exactly this format and nothing else:',
-  'Keep:',
-  '- (up to 5 bullets)',
+  'Write the verdict now, in exactly this format and nothing else:',
+  'Verdict: (one or two sentences)',
+  'Works:',
+  '- (up to 5 bullets, each citing a measured value: hex, px or ratio)',
   'Change:',
-  '- (up to 5 bullets)',
-  'Each bullet is at most 20 words and cites a measured value (hex, px or ratio).',
+  '- (up to 5 bullets, each concrete: what to change, to what, with the measured value)',
+  'Disagreed:',
+  '- (up to 3 points where the reviewers disagreed, or "- None")',
+  'Each bullet is at most 25 words.',
 ].join('\n');
 
 /** Fixed per-kind text: adapters can echo provider bodies, which must never reach the UI. */
@@ -125,6 +131,8 @@ export interface CritiqueOptions {
   onTurn?: (index: number, turn: CritiqueTurn) => void;
   /** Drains the human's queued messages; called before every model turn. */
   takeHuman?: () => string[];
+  /** The user's goal: what they are building, for whom, what matters. Clipped to `MAX_CONTEXT`. */
+  context?: string;
   /** Waits before each retry of a rate-limited turn; its length is the retry limit (tests shorten it). */
   retryDelaysMs?: number[];
   /** Pace calls under this many tokens per minute (default: `PROVIDER_TPM[provider.id]`; 0 = off). */
@@ -135,15 +143,20 @@ export interface CritiqueOptions {
   stallMs?: { first: number; gap: number };
 }
 
-export interface KeepChange {
-  keep: string[];
+export interface Verdict {
+  verdict: string;
+  works: string[];
   change: string[];
+  disagreed: string[];
 }
 
 export interface CritiqueResult {
   status: 'done' | 'stopped' | 'error';
   turns: CritiqueTurn[];
-  summary: KeepChange | null;
+  /** Parsed from the sanitized moderator turn; null when it didn't follow the format. */
+  verdict: Verdict | null;
+  /** The sanitized moderator text (the fallback when `verdict` is null). */
+  summaryText?: string;
   error?: string;
 }
 
@@ -302,7 +315,9 @@ export function renderTurnMessage(
   turns: CritiqueTurn[],
   instruction: string,
   budget: number,
+  goal = '',
 ): string {
+  const head = goalLine(goal);
   const entries = turns
     .filter((t) => t.status === 'done' && t.content.trim())
     .map((t) => ({
@@ -313,7 +328,7 @@ export function renderTurnMessage(
   entries.forEach((e, i) => {
     if (e.human) lastHuman = i;
   });
-  const fixed = instruction.length + OMITTED.length + 4;
+  const fixed = head.length + instruction.length + OMITTED.length + 6;
   let used = lastHuman >= 0 ? (entries[lastHuman]?.text.length ?? 0) + 1 : 0;
   const kept: string[] = [];
   let full = false;
@@ -331,7 +346,21 @@ export function renderTurnMessage(
     }
   }
   const body = kept.length ? kept.join('\n') : '(No one has spoken yet.)';
-  return `${omitted ? `${OMITTED}\n` : ''}${body}\n\n${instruction}`;
+  return `${head}\n\n${omitted ? `${OMITTED}\n` : ''}${body}\n\n${instruction}`;
+}
+
+/** Trimmed, control characters (except newlines and tabs) removed, clipped to `MAX_CONTEXT`. */
+export function clipContext(text: string | undefined): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  const clean = (text ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
+  return clean.slice(0, MAX_CONTEXT).trim();
+}
+
+/** The user's goal, outside `<page_data>`: their own words, never page data. */
+function goalLine(goal: string): string {
+  return goal
+    ? `[Goal] (the user's own words, not page data): ${goal}`
+    : '[Goal]: the user gave no goal; judge the design on its own terms.';
 }
 
 function personaInstruction(p: PersonaId, humanPending: boolean): string {
@@ -344,29 +373,58 @@ function personaInstruction(p: PersonaId, humanPending: boolean): string {
     .join(' ');
 }
 
-/** Read "Keep:" / "Change:" bullet lists. Null when the text has neither. */
-export function parseKeepChange(text: string): KeepChange | null {
-  const out: KeepChange = { keep: [], change: [] };
-  let cur: keyof KeepChange | null = null;
-  let seen = false;
+type ListKey = 'works' | 'change' | 'disagreed';
+const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
+
+/**
+ * Read the moderator's verdict: a "Verdict:" line, then "Works:", "Change:" and "Disagreed:"
+ * bullet lists. Lenient about markdown and bullet styles. Null without a verdict line, or when
+ * both "works" and "change" are empty.
+ */
+export function parseVerdict(text: string): Verdict | null {
+  const out: Verdict = { verdict: '', works: [], change: [], disagreed: [] };
+  let cur: ListKey | 'verdict' | null = null;
   for (const raw of text.split('\n')) {
     const line = raw.trim().replace(/^[#*_\s]+|[*_\s]+$/g, '');
-    // A heading is the word alone or followed by a colon ("Keeping…" / "Changes like…" are prose).
-    const head = /^(keep|changes?)\b\s*(?::\s*(.*))?$/i.exec(line);
-    if (head && !/^(?:[-*•]|\d+[.)])\s/.test(raw.trim())) {
-      cur = (head[1] as string).toLowerCase().startsWith('keep') ? 'keep' : 'change';
-      seen = true;
-      const rest = (head[2] ?? '').trim();
-      if (rest) out[cur].push(rest);
+    const isBullet = BULLET.test(raw);
+    // A heading is the word alone or followed by a colon ("Works well…" / "Changes like…" are prose).
+    const head = isBullet
+      ? null
+      : /^(verdict|works?|what works|changes?|what to change|disagreed|disagreements?|where they disagreed)\b\s*(?::\s*(.*))?$/i.exec(
+          line,
+        );
+    if (head) {
+      const word = (head[1] as string).toLowerCase();
+      cur = word.startsWith('verdict')
+        ? 'verdict'
+        : word.includes('work')
+          ? 'works'
+          : word.includes('chang')
+            ? 'change'
+            : 'disagreed';
+      const rest = (head[2] ?? '').replace(/^[*_\s]+|[*_\s]+$/g, '');
+      if (rest) push(out, cur, rest);
       continue;
     }
-    const bullet = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/.exec(raw);
-    if (cur && bullet?.[1]) out[cur].push(bullet[1].trim());
+    const bullet = BULLET.exec(raw);
+    if (cur && cur !== 'verdict' && bullet?.[1]) push(out, cur, bullet[1].trim());
+    else if (cur === 'verdict' && line) out.verdict = out.verdict ? `${out.verdict} ${line}` : line;
   }
-  if (!seen || out.keep.length + out.change.length === 0) return null;
-  out.keep = out.keep.slice(0, 5);
+  if (!out.verdict || out.works.length + out.change.length === 0) return null;
+  out.works = out.works.slice(0, 5);
   out.change = out.change.slice(0, 5);
+  out.disagreed = out.disagreed.slice(0, 3);
   return out;
+}
+
+function push(out: Verdict, key: ListKey | 'verdict', text: string): void {
+  if (key === 'verdict') {
+    out.verdict = text;
+    return;
+  }
+  // "None" means an empty list, not an item.
+  if (/^none\.?$/i.test(text)) return;
+  out[key].push(text);
 }
 
 /** Resolves true after `ms`, or false as soon as `signal` aborts. */
@@ -398,17 +456,22 @@ export async function runCritique(
 ): Promise<CritiqueResult> {
   const { personas, rounds, tokensPerMinute: tpm } = critiquePlan(provider, scan, opts);
   const { signal } = opts;
+  const goal = clipContext(opts.context);
   const windowMs = opts.paceWindowMs ?? PACE_WINDOW_MS;
   const paceLog: { at: number; tokens: number }[] = [];
   const turns: CritiqueTurn[] = [];
   const emit = (i: number) => {
     const t = turns[i];
-    if (t) opts.onTurn?.(i, { ...t });
+    if (!t) return;
+    // A listener that throws (a closed Port, say) must never break a turn.
+    try {
+      opts.onTurn?.(i, { ...t });
+    } catch {}
   };
   const done = (status: CritiqueResult['status'], error?: string): CritiqueResult => ({
     status,
     turns: turns.map((t) => ({ ...t })),
-    summary: null,
+    verdict: null,
     ...(error ? { error } : {}),
   });
 
@@ -444,6 +507,7 @@ export async function runCritique(
             turns,
             instruction,
             messageBudget(provider.capabilities.contextTokens, system.length, maxTokens),
+            goal,
           ),
         },
       ],
@@ -486,10 +550,12 @@ export async function runCritique(
   }
 
   const last = turns[turns.length - 1];
+  const summaryText = last?.kind === 'summary' && last.status === 'done' ? last.content : '';
   return {
     status: 'done',
     turns: turns.map((t) => ({ ...t })),
-    summary: last?.status === 'done' ? parseKeepChange(last.content) : null,
+    verdict: summaryText ? parseVerdict(summaryText) : null,
+    ...(summaryText ? { summaryText } : {}),
   };
 }
 

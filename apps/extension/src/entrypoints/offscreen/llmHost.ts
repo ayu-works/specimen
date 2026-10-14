@@ -206,11 +206,16 @@ export function llmBusy(): boolean {
   return loadedId !== undefined || loadPromise !== null || ports.size > 0;
 }
 
+/** Serve one `llm` Port: a real one from `onConnect`, or an in-page one (the council host). */
+export function attachLlmPort(port: chrome.runtime.Port): void {
+  ports.add(port);
+  port.onMessage.addListener((m: LlmRequest) => void handle(port, m));
+  port.onDisconnect.addListener(() => ports.delete(port));
+}
+
 export function startLlmHost(): void {
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== LLM_PORT) return;
-    ports.add(port);
-    port.onMessage.addListener((m: LlmRequest) => void handle(port, m));
-    port.onDisconnect.addListener(() => ports.delete(port));
+    attachLlmPort(port);
   });
 }

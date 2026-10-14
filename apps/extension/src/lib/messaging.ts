@@ -1,4 +1,5 @@
 import type { RawPage } from '@specimen/core/schema';
+import type { RunStatus } from './councilProtocol';
 
 /** Request/response shapes keyed by message type (ARCHITECTURE §8). */
 export interface ScanOpts {
@@ -32,6 +33,9 @@ export interface MessageMap {
     res: { ok: true };
   };
   'offscreen.ensure': { req: Record<string, never>; res: { ok: boolean } };
+  /** Offscreen council host → SW (SPC-24): clears or sets the toolbar badge. Never carries a key. */
+  'council.started': { req: { runId: string }; res: { ok: true } };
+  'council.finished': { req: { runId: string; status: RunStatus }; res: { ok: true } };
   /** E2E build only: do what Alt+Shift+C does minus opening the panel (no user gesture in tests). */
   'test.shortcut': { req: Record<string, never>; res: { ok: true } };
 }

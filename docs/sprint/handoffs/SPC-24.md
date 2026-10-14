@@ -274,13 +274,33 @@ Frozen contract v1, final:
 - Sanitizer camelCase gap (SPC-17); WebLLM interrupt limits (SPC-18); TPM keyed by provider, not model (A-r2 L1).
 - The flag ships in any release built from `main` with this code, so the owner's rule stands: no merge before go.
 
-## Done
-- Read the brief, setup, plan, SPC-24 + SPC-22 (all comments), the SPC-22 handoff and reviews. `pnpm i` done.
+## Done (2026-10-15)
+- Plan approved by pe-1b with changes 1–7 (folded in above). PE handed over to pe-99.
+- Engine (`packages/ai/src/features/critique.ts`): `context` → `[Goal]` in every user message (clipped to 1000,
+  control chars removed, never in the system prompt); verdict brief + `parseVerdict` (`Verdict`); `CritiqueResult`
+  has `verdict` + `summaryText`; `emit` guards a throwing `onTurn`. `parseKeepChange` removed. Tests T3.28–T3.29 and
+  the T3.30 engine case; T3.18–T3.24 unchanged and green.
+- Extension:
+  - `lib/councilProtocol.ts` (v1 contract, `parsePanelMsg`, fixed rejection texts), `lib/councilDb.ts`
+    (`specimen-council` DB, put + prune to 5, conditional `markInterrupted`, `interruptAllRunning`),
+    `lib/localPort.ts` (in-memory Port pair), `lib/councilGuard.ts` (SW guard + badge), `lib/council.ts` (panel
+    store: reattach, probe, start/stop, seen, `moodFor`), `resolveProviderSpec()` in `lib/aiRuntime.ts`.
+  - `offscreen/councilHost.ts` + `main.ts`; `llmHost.ts` gets `attachLlmPort` (pure refactor, T3.11 unchanged).
+  - `background.ts`: guard on `storage.onChanged`, `council.started/finished` → badge, `onStartup`/`onInstalled` →
+    interrupted. `messaging.ts`: the two runtime messages.
+  - Side panel: Ask's "Quick answer | Ask the council" switch (flag on only), `views/Council.tsx`, header mascot
+    mood + click-to-open, `askMode` in the store. `Critique.tsx`, `critiqueStore.ts` and `test/critique.test.tsx`
+    removed.
+- Found while testing, fixed: a panel reopened right after Start could read the store before the host's first write.
+  The host now awaits its first write before the first call, and the panel also asks a live host for its run when
+  the store shows none (covers failing writes too; tested).
+- Tests: `test/councilHost.test.ts` (T3.30–T3.32), `test/councilGuard.test.ts` (T3.31–T3.32),
+  `test/council.test.tsx` (T3.32–T3.33). `docs/TESTING.md`: T3.25/T3.26 ⊘, T3.28–T3.34 added.
 
 ## Next
-- Approved. Build: engine tests first (T3.28–T3.29), host + guard (T3.30–T3.32),
-  UI (T3.33).
+- `pnpm gate` green → push, PR (base main, owner steps = T3.34), comment the link on SPC-24, message specimen-53 and
+  pe-99. Not to be merged before the owner's go.
 
 ## How to resume
-Branch `exec/spc-24` in `worktrees/spc-24`. Read this file, then the PE's reply (it arrives as a message, or as a
-comment on SPC-24).
+Branch `exec/spc-24` in `worktrees/spc-24`. Read this file, then `docs/sprint/reviews/SPC-24-*` for findings; fix in
+new commits, rerun `pnpm gate`, tell the reviewer what changed.

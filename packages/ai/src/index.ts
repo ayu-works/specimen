@@ -7,14 +7,16 @@ export {
   type CritiquePlan,
   type CritiqueResult,
   type CritiqueTurn,
+  clipContext,
   critiquePlan,
   DEFAULT_PERSONAS,
-  type KeepChange,
+  MAX_CONTEXT,
   PERSONAS,
   type PersonaId,
-  parseKeepChange,
+  parseVerdict,
   runCritique,
   type TurnStatus,
+  type Verdict,
 } from './features/critique';
 export { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './features/pageData';
 export {

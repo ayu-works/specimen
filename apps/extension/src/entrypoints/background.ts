@@ -1,3 +1,4 @@
+import { chromeCouncilGuard } from '@/lib/councilGuard';
 import { listen, type Message, type ScanOpts, type ScanResult } from '@/lib/messaging';
 
 declare const __SPECIMEN_E2E__: boolean;
@@ -155,7 +156,23 @@ export default defineBackground(() => {
       chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
   });
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  // The council (SPC-24) runs in the offscreen document; the SW stops it when the flag, the
+  // provider or a key changes (no panel needed), and owns the badge.
+  const council = chromeCouncilGuard();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    void council.onStorageChanged(changes, area);
+  });
+  chrome.runtime.onStartup.addListener(() => void council.onStartup());
+  chrome.runtime.onInstalled.addListener(() => void council.onStartup());
   listen({
+    'council.started': async (msg) => {
+      await council.onRuntime({ type: 'council.started', runId: msg.runId });
+      return { ok: true };
+    },
+    'council.finished': async (msg) => {
+      await council.onRuntime({ type: 'council.finished', runId: msg.runId, status: msg.status });
+      return { ok: true };
+    },
     'scan.run': (msg) => scanRun(msg.tabId, msg.opts),
     'overlay.set': overlaySet,
     'offscreen.ensure': async () => {
