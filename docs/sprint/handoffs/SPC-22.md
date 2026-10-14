@@ -222,6 +222,12 @@ spike). `pnpm gate` (incl. check-ids --all) green.
   bubble already says "Queued for the next reviewer". Known limitation.
 - **B-L6** WebLLM keeps generating after the panel closes: known limitation (audit H2, SPC-18).
 
+## Review round 2
+- Lens A r2 (`SPC-22-a-r2.md`): **APPROVED**, 2 LOW notes (TPM is per model, not per provider; one call's estimate
+  can exceed the TPM). No change for the spike; watch both in T3.27.
+- Waiting on: the owner's decision on lens-B H2 (runtime flag vs build-time gate / no merge before go/no-go), via the
+  orchestrator.
+
 ## Next
 - Reviews: PE lens A + lens B + privacy. Fold findings as new commits.
 - Owner: T3.27 (Groq on 2–3 real sites, go/no-go on SPC-22). Steps are in the PR body.
