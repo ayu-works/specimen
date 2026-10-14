@@ -54,20 +54,70 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
   return [...set].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
+/** Case is kept: a camelCase hump (`zentrixBlue`) is a boundary, so lower-casing would hide it. */
 export function containsBrand(text: string, tokens: string[]): boolean {
-  const t = text.toLowerCase();
-  return tokens.some((b) => wordRegex(b).test(t));
+  return tokens.some((b) => wordRegex(b).test(text));
 }
 
-const WORD_L = '(?<![\\p{L}\\p{N}])';
-const WORD_R = '(?![\\p{L}\\p{N}])(?!-gradient)';
+/**
+ * True when a CSS variable name carries a brand token: at a word, case or digit boundary, or (for
+ * tokens of 4+ characters) anywhere, since `--zentrixblue` has no boundary at all. Short tokens
+ * (`hp`) need a boundary, or `--php-version` would match.
+ */
+export function nameHasBrand(name: string, tokens: string[]): boolean {
+  const lower = name.toLowerCase();
+  return tokens.some((b) => (b.length >= 4 && lower.includes(b)) || wordRegex(b).test(name));
+}
+
+// Boundaries are case-sensitive (a hump is lower→upper), so the regex can't use the `i` flag:
+// under /iu, \p{Lu} also matches lowercase letters. The token itself is spelled per character.
+const BOUND_L = [
+  '(?<![\\p{L}\\p{N}])', // start of a word
+  '(?<=\\p{Ll})(?=\\p{Lu})', // camel hump: myZentrix
+  '(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})', // after an acronym: UIZentrix
+];
+const BOUND_R = [
+  '(?![\\p{L}\\p{N}])', // end of a word
+  '(?<=[\\p{Ll}\\p{N}])(?=\\p{Lu})', // camel hump: zentrixBlue
+  '(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})', // before a capitalised word: ZENTRIXBlue
+];
+// Digit humps (zentrix500, 2zentrix) only for tokens of 4+ characters: a short token would eat
+// CSS units (100vw, 150ms).
+const DIGIT_L = '(?<=\\p{N})(?=\\p{L})';
+const DIGIT_R = '(?<=\\p{L})(?=\\p{N})';
 
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** `zentrix` → `[zZ][eE]…`, matching any case without the `i` flag. */
+function anyCase(w: string): string {
+  return [...w]
+    .map((c) => {
+      const lo = c.toLowerCase();
+      const up = c.toUpperCase();
+      return lo !== up && [...lo].length === 1 && [...up].length === 1
+        ? `[${esc(lo)}${esc(up)}]`
+        : esc(c);
+    })
+    .join('');
+}
+
 function wordRegex(w: string): RegExp {
-  return new RegExp(`${WORD_L}${esc(w)}${WORD_R}`, 'giu');
+  const long = w.length >= 4;
+  const left = [...BOUND_L, ...(long ? [DIGIT_L] : [])];
+  const right = [
+    ...BOUND_R,
+    // An all-caps brand before a lowercase run: ZENTRIXapi.
+    `(?<=\\p{Lu}{${[...w].length}})(?=\\p{Ll})`,
+    ...(long ? [DIGIT_R] : []),
+  ];
+  // A token spelled only with hex digits (abc, cafe) must never match inside a color literal.
+  const notInHex = /^[0-9a-f]+$/i.test(w) ? '(?<!#[0-9a-fA-F]*)' : '';
+  return new RegExp(
+    `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!-gradient)`,
+    'gu',
+  );
 }
 
 function devMode(): boolean {

@@ -1,6 +1,6 @@
 import type { DesignScan } from '../schema';
 import { type Family, familyByRole } from './common';
-import { brandTokens, containsBrand } from './sanitize';
+import { brandTokens, nameHasBrand } from './sanitize';
 
 export type FontKind = 'serif' | 'sans' | 'mono';
 
@@ -58,8 +58,8 @@ function alternativeFor(name: string, kind: FontKind): string {
 export function fontInfo(scan: DesignScan, family: Family): FontInfo {
   const tokens = brandTokens(scan);
   const kind = classifyFamily(family);
-  const branded = containsBrand(family.name, tokens);
-  const parts = stackParts(family.stack).filter((p) => !containsBrand(p, tokens));
+  const branded = nameHasBrand(family.name, tokens);
+  const parts = stackParts(family.stack).filter((p) => !nameHasBrand(p, tokens));
   const isGeneric = (p: string) => GENERIC.includes(p.replace(/["']/g, '').toLowerCase());
   const head = parts.slice(0, 5);
   const tail = [...parts].reverse().find(isGeneric);

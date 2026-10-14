@@ -1,5 +1,11 @@
 import { contrast, ensureContrast, toOklch } from '../color';
-import { type ColorRole, type ColorToken, type DesignScan, DesignScanSchema } from '../schema';
+import {
+  type ColorRole,
+  type ColorToken,
+  type DesignScan,
+  DesignScanSchema,
+  SCHEMA_VERSION,
+} from '../schema';
 
 export const FACETS = ['colors', 'typography', 'spacing', 'shape', 'layout'] as const;
 /** `shape` = radii + shadows + borders. */
@@ -96,7 +102,7 @@ export function compose(
   ];
 
   const out: DesignScan = {
-    schemaVersion: 3,
+    schemaVersion: SCHEMA_VERSION,
     id: opts.id ?? `composed-${globalThis.crypto.randomUUID()}`,
     url: base.url,
     host: 'composed',

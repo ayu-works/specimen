@@ -19,7 +19,7 @@ import { COMPONENT_LABELS, describeBase, describeProps } from './components';
 import { visualDirection } from './direction';
 import { type FontInfo, fontPhrase, fontSet } from './fonts';
 import { mobileSection } from './mobile';
-import { brandTokens, containsBrand, sanitize } from './sanitize';
+import { brandTokens, containsBrand, nameHasBrand, sanitize } from './sanitize';
 
 const pct = (w: number) => `${fmt(w * 100, 1)}%`;
 
@@ -295,7 +295,13 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
   // CSS variables
   const tokens = brandTokens(scan);
   const vars = Object.entries(scan.cssVariables)
-    .filter(([k, v]) => !containsBrand(k, tokens) && !containsBrand(v, tokens))
+    .filter(
+      ([k, v]) =>
+        !nameHasBrand(k, tokens) &&
+        !containsBrand(v, tokens) &&
+        // An alias (`var(--zentrixblue)`) carries the brand in a variable name.
+        !(v.match(/--[\w-]+/g) ?? []).some((ref) => nameHasBrand(ref, tokens)),
+    )
     .slice(0, 40);
   if (vars.length > 0) {
     out.push(
