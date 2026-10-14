@@ -138,6 +138,8 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
     new tab page or a redirected page is left alone.
   - Tests: 3 new T5.11 tests; 2 fail on b624dd5 (the about:blank one passes there too).
 
+- Lens A r4: APPROVED on 87914c8, 0 findings (condition: CI gate green).
+
 ## Owner check (macOS)
 1. Full screen, "Also capture mobile" on, Scan → no new tab or window; the card says "skipped in full screen".
    "Capture in this tab" → the page shows at phone width briefly, then Mobile: captured.
@@ -147,8 +149,8 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
 5. Optional: Stage Manager on; a second display.
 
 ## Next
-- PE confirms the post-review diff; CI green. Reviews (PE lens A + fresh lens B) → fold findings. Owner manual check per the ticket's "How to check" (macOS full
-  screen can't run in CI).
+- CI gate green on the PR head → orchestrator moves on (owner decides the merge after the macOS checks above).
+- Follow-up (orchestrator to file): the `waitForTabLoad` race (see above).
 
 ## How to resume
 Worktree `specimen-herdr/worktrees/spc-25`, branch `exec/spc-25`. Read this file, then `git log origin/main..` and the
