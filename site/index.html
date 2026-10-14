@@ -7,11 +7,14 @@
 <meta name="description" content="Specimen is an open-source Chrome extension that measures a website's design system and turns it into a prompt or DESIGN.md your AI agent can follow. No backend, no account, no telemetry.">
 <meta name="theme-color" content="#0e0e16">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cg shape-rendering='crispEdges' fill='%237C6CF5'%3E%3Crect x='40' y='16' width='48' height='8'/%3E%3Crect x='24' y='24' width='80' height='8'/%3E%3Crect x='16' y='32' width='96' height='48'/%3E%3Crect x='24' y='80' width='80' height='16'/%3E%3Crect x='32' y='96' width='16' height='8'/%3E%3Crect x='80' y='96' width='16' height='8'/%3E%3C/g%3E%3Crect x='48' y='8' width='8' height='8' fill='%23FF6B6B'/%3E%3Crect x='56' y='8' width='8' height='8' fill='%23FFD166'/%3E%3Crect x='64' y='8' width='8' height='8' fill='%2306D6A0'/%3E%3Crect x='72' y='8' width='8' height='8' fill='%234D96FF'/%3E%3Crect x='32' y='48' width='8' height='16' fill='%231b1b2f'/%3E%3Crect x='88' y='48' width='8' height='16' fill='%231b1b2f'/%3E%3Crect x='56' y='68' width='16' height='8' fill='%231b1b2f'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://chromewebstore.google.com">
 <link rel="dns-prefetch" href="https://github.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/pressstart2p-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:'Press Start 2P';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/pressstart2p-regular.woff2) format('woff2')}
+@font-face{font-family:'VT323';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/vt323-latin.woff2) format('woff2')}
+</style>
 <style>
 :root{
   --night:#0e0e16; --ink:#1b1b2f; --ink2:#2a2747; --paper:#f4f1ff; --mute:#b7b1dd;
@@ -210,7 +213,7 @@ main::-webkit-scrollbar{display:none}
 #start h2{font-size:clamp(22px,5vw,48px)}
 #start .ctas{justify-content:center;margin:34px 0 26px}
 .source{max-width:620px;margin:0 auto;text-align:left}
-.source pre{margin:10px 0 0;font-family:var(--body);font-size:22px;color:var(--g);white-space:pre-wrap}
+.source pre{margin:10px 0 0;font-family:var(--body);font-size:22px;color:var(--g);white-space:pre-wrap;overflow-wrap:anywhere}
 .credits{margin-top:70px;display:flex;flex-direction:column;gap:12px;align-items:center;font-family:var(--display);font-size:9px;color:var(--mute);line-height:1.8}
 .credits nav{display:flex;gap:22px;flex-wrap:wrap;justify-content:center}
 .credits a{color:var(--pl)}
