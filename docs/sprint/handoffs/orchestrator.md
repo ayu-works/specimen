@@ -6,6 +6,14 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (Sprint 3 in progress)
+
+- Merged today in Sprint 3: #26 Council v2 (986317e), #28 SPC-16 key-safe errors (8db2562), #27 SPC-25 fullscreen (d279592); all have main CI green and are Done in Linear.
+- The owner OK'd the DesignScan **v4** contract for SPC-17 (strict hex plus role refs; v1–v3 repaired on read; a broken v4 is rejected/skipped).
+- Live: pe-99 (w1:pS), spc-17-13 (w1:pZ, lane A, building Part 2 v4), spc-26-81 (w1:p0, lane B, planning; includes the one-time history scrub with knownKeys). Both executors are in the `build` tab (w1:tG).
+- Queue: lane A → SPC-18 → SPC-21; lane B → SPC-19 → SPC-20 → SPC-28 → SPC-27. Backlog: SPC-29 (T3.33 flake), SPC-30 (insufficient_quota), SPC-23 (site, held for the deploy budget), SPC-9/10 (owner).
+- No CWS release (owner). Netlify: 1 deploy this month.
+
 ## UPDATE 2026-10-15 (SPC-24 approved, waiting for the owner's test)
 
 - PR #26 (Council v2): pe-99 r2 APPROVED 0/0/0/0 on 3c3faaa (covers the lens-B folds); CI gate green on 3c3faaa; bf143c9 is docs only. The owner OK'd the v1 amendments (resolvedAt, summaryText, snapshot last-finished-run). **Do not merge before the owner's go.** On go: merge #26 (behind Labs; no CWS release), close #25 as superseded, then SPC-26 (state restore) and SPC-27 unblock.
