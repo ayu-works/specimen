@@ -6,6 +6,14 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (SPC-24 approved, waiting for the owner's test)
+
+- PR #26 (Council v2): pe-99 r2 APPROVED 0/0/0/0 on 3c3faaa (covers the lens-B folds); CI gate green on 3c3faaa; bf143c9 is docs only. The owner OK'd the v1 amendments (resolvedAt, summaryText, snapshot last-finished-run). **Do not merge before the owner's go.** On go: merge #26 (behind Labs; no CWS release), close #25 as superseded, then SPC-26 (state restore) and SPC-27 unblock.
+- Owner test copy: ~/Desktop/specimen-critique-test rebuilt from 3c3faaa (build worktree: worktrees/test-build, detached; remove it after the decision).
+- New tickets: SPC-25 (fullscreen scan opens a new tab: mobile-capture popup; in the published extension too; can run in parallel), SPC-26 (restore panel state on reopen; blocked by SPC-24), SPC-27 (Inspect onConnect hardening, low).
+- Live: pe-99 (w1:pS), spc-24-3e (w1:pR, idle, done). The second executor slot is free; the owner hasn't answered "start 25".
+- Process lesson: when the PE and executor both message about a contract, they crossed twice. Rule: the PE sends ONE final contract ruling to both the orchestrator and the executor.
+
 ## UPDATE 2026-10-15 (owner tested SPC-22: GO with a redesign → SPC-24)
 
 - Owner feedback: the live chat was hard to read. Wants: Ask + Council merged; a context box; a background run even with the panel closed; mascot status, click to reopen; a verdict-only report, no prompt; "show discussion" collapsed by default.
