@@ -4,6 +4,10 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here writes to the repo; keep the token read-only.
+permissions:
+  contents: read
+
 # A new push to the same branch cancels the run it replaces.
 concurrency:
   group: ci-${{ github.ref }}
@@ -16,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # T6.07 scans the whole history; a shallow clone fails the scan
+          persist-credentials: false # dependencies and tests run below; they don't need the token
       # Pinned gitleaks for `pnpm secrets` (T6.07), checked against its release sha256.
       - name: Install gitleaks
         env:
@@ -23,7 +28,7 @@ jobs:
           GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
           tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSLo "$RUNNER_TEMP/$tarball" \
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/$tarball" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$tarball"
           echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/gitleaks"
@@ -55,6 +60,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Skip unless apps/video changed
         id: changed
         run: |

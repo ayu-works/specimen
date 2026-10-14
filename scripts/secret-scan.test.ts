@@ -2,7 +2,7 @@
 // locally without it but are required in CI, so they can't skip silently there.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -40,6 +40,28 @@ describe('secret scan decisions', () => {
     const ok = onScan(0, undefined, SCANNED);
     assert.equal(ok.ok, true);
     assert.match(ok.message, /12 commits/);
+  });
+
+  test('T6.07 a clean exit with a gitleaks ERR or FTL line fails as a scan error', () => {
+    for (const out of [
+      `6:41PM ERR [git] fatal: unable to read abc\n6:41PM ERR error="stderr is not empty"\n${SCANNED}`,
+      `FTL something broke\n${SCANNED}`,
+    ]) {
+      const r = onScan(0, undefined, out);
+      assert.equal(r.ok, false);
+      assert.match(r.message, /scan error/);
+    }
+  });
+
+  test('T6.07 output too large to read fails with its own message', () => {
+    const err = Object.assign(new Error('spawnSync gitleaks ENOBUFS'), { code: 'ENOBUFS' });
+    assert.match(onScan(null, err).message, /too large/);
+  });
+
+  test('T6.07 .gitleaks.toml has no allowlist (false positives go in .gitleaksignore by fingerprint)', () => {
+    const toml = readFileSync(join(import.meta.dirname, '..', '.gitleaks.toml'), 'utf8');
+    assert.doesNotMatch(toml, /^\s*\[{1,2}\s*(?:rules\.)?allowlists?\b/im);
+    assert.match(toml, /useDefault\s*=\s*true/);
   });
 
   test('T6.07 a clean exit that scanned no commits fails', () => {
@@ -140,6 +162,29 @@ describe('secret scan against a real git history', { skip }, () => {
       assert.match(r.output, /leaks found: [1-9]/);
       assert.ok(!r.output.includes(FAKE), 'the secret must be redacted');
       assert.ok(!r.message.includes(FAKE));
+    });
+  });
+
+  test('T6.07 a git failure inside gitleaks (a missing object) fails, never reads as clean', () => {
+    withRepo((dir) => {
+      writeFileSync(join(dir, 'settings.py'), `api_key = "${FAKE}"\n`);
+      git(dir, 'add', '.');
+      git(dir, 'commit', '-q', '-m', 'add settings');
+      const blob = spawnSync('git', ['rev-parse', 'HEAD:settings.py'], {
+        cwd: dir,
+        env: gitEnv,
+        encoding: 'utf8',
+      }).stdout.trim();
+      unlinkSync(join(dir, 'settings.py'));
+      writeFileSync(join(dir, 'README.md'), 'nothing here\n');
+      git(dir, 'add', '-A');
+      git(dir, 'commit', '-q', '-m', 'remove settings');
+      unlinkSync(join(dir, '.git', 'objects', blob.slice(0, 2), blob.slice(2)));
+
+      const r = scan({ repo: dir, env: gitEnv });
+      assert.equal(r.ok, false, r.output + r.message);
+      assert.match(r.message, /scan error/);
+      assert.doesNotMatch(r.message, /clean/);
     });
   });
 

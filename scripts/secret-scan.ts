@@ -65,11 +65,18 @@ export function commitsScanned(output: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** A gitleaks ERR/FTL log line, e.g. "6:41PM ERR [git] fatal: unable to read <sha>". */
+const LOG_ERROR = /^(?:\S+ )?(?:ERR|FTL) /m;
+
 /**
- * Maps the gitleaks result. Clean needs exit 0 and at least one commit scanned;
+ * Maps the gitleaks result. Clean needs exit 0, no ERR/FTL line and at least one commit scanned
+ * (a git failure inside gitleaks logs ERR, scans 0 commits and still exits 0).
  * FINDINGS_EXIT is findings; anything else is an error.
  */
 export function onScan(status: number | null, error?: Error, output = ''): Outcome {
+  if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOBUFS') {
+    return { ok: false, message: 'secrets: FAILED, gitleaks output was too large to read' };
+  }
   if (error || status === null) {
     return {
       ok: false,
@@ -77,7 +84,18 @@ export function onScan(status: number | null, error?: Error, output = ''): Outco
     };
   }
   if (status === FINDINGS_EXIT) {
-    return { ok: false, message: 'secrets: FAILED, gitleaks found secrets (above)' };
+    return {
+      ok: false,
+      message:
+        'secrets: FAILED, gitleaks found secrets (above). Every local ref is scanned, so the ' +
+        'commit may be on another branch: git branch -a --contains <commit>',
+    };
+  }
+  if (status === 0 && LOG_ERROR.test(output)) {
+    return {
+      ok: false,
+      message: 'secrets: FAILED, gitleaks scan error (it logged an error above)',
+    };
   }
   if (status !== 0) {
     return { ok: false, message: `secrets: FAILED, gitleaks scan error (exit ${status})` };

@@ -101,13 +101,31 @@ secret-scanning or push-protection noise.
 - Known limit: gitleaks reads `git log -p`, which shows no diff for merge commits, so a secret introduced only in a
   merge conflict resolution isn't seen. Accepted (default gitleaks behaviour); not in scope.
 
-- Lens A r1 (0/0/1/3) folded in locally: M1 findings exit is now 3 (gitleaks exits 1 on its own fatal errors), with a
-  real broken-config test; L1 a clean exit with 0 or no "commits scanned" fails, and the count is printed; L2 a real
-  stash-only-key test (verified it fails when `--exclude=refs/stash` is removed); L3 was already in the PR body.
-  12/12 T6.07 tests pass with CI=true. Committed, **not pushed** (orchestrator: wait for lens B too).
+## Review round 1 (2026-10-14): how each finding was resolved
+Lens A (`SPC-6-a-r1.md`, 0C/0H/1M/3L):
+- **M1 fixed:** findings use `--exit-code 3`; exit 1 (a gitleaks fatal error) is a scan error. Real broken-config test.
+- **L1 fixed:** a clean exit needs a `N commits scanned` line with N ≥ 1; the count is printed in the clean message.
+- **L2 fixed:** a real stash-only-key test (it fails when `--exclude=refs/stash` is removed; checked by mutation).
+- **L3 already done:** the merge-resolution limit was in the PR body from the start.
+Lens B (`SPC-6-b-r1.md`, 0C/1H/2M/4L):
+- **H1 fixed:** reproduced (missing blob → `ERR [git] fatal`, `0 commits scanned`, exit 0). Now any `ERR`/`FTL` line
+  on exit 0 is a scan error, and 0/no commits scanned fails (L1 above). Integration test deletes the leaking blob's
+  object and asserts a scan error, not clean. The exact `rev-list` count match was **not** done: gitleaks skips
+  commits with no patch (empty commits, merges), so counts differ legitimately (here: 44 non-merge vs 43 scanned).
+  The ERR check and N ≥ 1 cover the failure modes the review reproduced.
+- **M1 fixed:** same as lens A M1 (code 3 rather than 99; either works, 3 is gitleaks' own docs example).
+- **M2 fixed:** ci.yml has top-level `permissions: contents: read`, and both checkouts set `persist-credentials: false`.
+- **L1 fixed (hint):** the findings message says every local ref is scanned and gives `git branch -a --contains <commit>`.
+- **L2 fixed:** a T6.07 test asserts `.gitleaks.toml` has no allowlist section and still extends the default rules.
+- **L3 not fixed here, raised with the orchestrator:** CODEOWNERS for `.gitleaks.toml`/`.gitleaksignore` is outside
+  lane A (`.github/CODEOWNERS`, not `.github/workflows/`). The owner already reviews every merge.
+- **L4 fixed:** `curl --retry 3 --retry-all-errors` (sha256 still checked); ENOBUFS has its own message.
+- New ignore entry: committing the lens-A review (02e2e88) added its quote of the same dummy key to history; ignored by
+  fingerprint rather than editing the reviewer's file.
+- 16/16 T6.07 tests pass with `CI=true`; full `pnpm gate` green before the push.
 
 ## Next
-- Wait for lens B + security (`docs/sprint/reviews/SPC-6-b-r1.md`), fold it in, then push once and tell both reviewers what changed.
+- PE round 2 (lens A + a check of the lens-B HIGH).
 
 ## How to resume
 Read this file, then the ticket SPC-6 (and its comments). Branch `exec/spc-6` in this worktree.
