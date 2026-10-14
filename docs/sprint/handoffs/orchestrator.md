@@ -6,6 +6,11 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
+## UPDATE 2026-10-15 (Sprint 1 complete; wrap-up)
+
+- All sprint tickets are Done; summary in `docs/sprint/standups/2026-10-15-sprint-1-summary.md`. The PE (pe-5e) and all executors are closed; pe.md has been copied here.
+- Wrap-up in progress: (1) PR sprint/log → main (docs only; CLAUDE.md pointer updated); (2) move the folders into `specimen-herdr/`; (3) SPC-22 spike with a fresh PE + executor on Claude Code 2.1.300.
+
 ## UPDATE 2026-10-15 (resumed after the Claude Code update)
 
 - The owner updated Claude Code (2.1.300) and resumed. **The orchestrator's session name is now `specimen-af`** (it was specimen-b0); agents were told. Session names change on restart: re-read ListAgents and re-send names.
