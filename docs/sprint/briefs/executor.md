@@ -1,7 +1,7 @@
 # Executor brief
 
 You build one Linear ticket in your own git worktree, then you're done. The sprint docs live on branch `sprint/log`
-at `/Users/ayushmayank/Claude coding/Projects/specimen-herdr/worktrees/sprint-log/docs/sprint/` (call it SPRINT/; the same files are in `docs/sprint/` on `main`). They're read-only for you.
+at `specimen-herdr/worktrees/sprint-log/docs/sprint/` (call it SPRINT/; `main` has the copy from the last sprint merge; the sprint-log copy wins). They're read-only for you.
 
 **Read first:** SPRINT/setup.md · SPRINT/plan.md (your lane's row and "Owns") · your Linear ticket **including its
 comments** (a "Sprint plan overrides" comment wins over the description) · `CLAUDE.md` and the docs it links to
@@ -11,7 +11,7 @@ for your area.
 1. Write your plan at the top of `docs/sprint/handoffs/<ticket>.md` in your worktree: approach, files, tests,
    and failure modes (atomicity, idempotency, partial failure, errors during cleanup, concurrency, drift between
    two copies of a fact). For a measurement, write the pass bar before running anything.
-2. Message the PE (`pe`) with the file path. **Write no code until the PE approves.**
+2. Message the PE (its session name is in your kickoff; check ListAgents) with the file path. **Write no code until the PE approves.**
 3. Tests ship in the same PR. Logic in `packages/core` and `packages/ai`: tests first. UI/e2e: tests may follow.
    Tests must drive the failure path the work claims to handle, not just the happy path.
 4. `pnpm gate` green (or the ticket's narrower check, if the plan agreed one), then commit, push and open the PR with

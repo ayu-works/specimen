@@ -1,6 +1,6 @@
 # PE handoff (session pe-5e → fresh PE, 2026-10-15)
 
-Read your brief (`sprint-log/docs/sprint/briefs/principal-engineer.md`), then this file. Orchestrator: `specimen-af`
+Read your brief (`sprint-log/docs/sprint/briefs/principal-engineer.md`), then this file. Orchestrator: `the orchestrator (read ListAgents for its current name)`
 (restarted 2026-10-15; it was `specimen-b0`). Find executors with ListAgents. Their names look like `spc-14-6b`.
 
 ## State: Sprint 1 is finished (all tickets merged)
@@ -24,8 +24,7 @@ Read your brief (`sprint-log/docs/sprint/briefs/principal-engineer.md`), then th
   - a partial import duplicates scans on retry;
   - provider error bodies are echoed into errors.
   Expect plans for these next. Each must drive the failure (see the audit's "Fix test" column).
-- The local branch `pe/spc-13-audit` has an uncommitted copy of the audit and this file. The orchestrator removes it
-  at wrap-up.
+- (Resolved 2026-10-15: the `pe/spc-13-audit` branch was removed; the audit is on sprint/log as a8211ee.)
 
 ## Contracts now in force
 - **TESTING.md ⊘ (owner OK, 2026-10-15).** A dropped row keeps its ID. The Type cell is exactly `⊘` (only in a Type

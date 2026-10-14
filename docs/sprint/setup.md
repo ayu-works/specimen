@@ -51,8 +51,8 @@ Add a role only when a lane has queued work and the owner approves.
    `docs/TESTING.md`.
 4. **PR:** the executor opens it with `gh` (body ends with the Claude Code line, commits with the Co-Authored-By line
    from CLAUDE.md) and comments the link on its Linear ticket. Orchestrator → In Review.
-5. **Reviews:** code PRs get two independent reviews: PE lens A plus a fresh lens-B reviewer. Doc-only and
-   config-only PRs (≤ ~30 lines, no logic) get the PE only. Findings ranked CRITICAL/HIGH/MEDIUM/LOW, each with a
+5. **Reviews:** code PRs get two independent reviews: PE lens A plus a fresh lens-B reviewer. Doc-only PRs (any
+   size) and config-only PRs (≤ ~30 lines, no logic) get the PE only. Findings ranked CRITICAL/HIGH/MEDIUM/LOW, each with a
    failure scenario and a fix, in `docs/sprint/reviews/<ticket>-<lens>-r<n>.md` in the executor's worktree.
    **Stop rule:** stop at 0 CRITICAL once the HIGHs are only wording; at most 4 rounds; doc-only fixes get no
    re-review. Extra reviews: **security** (keys, permissions, new message handlers, page data leaving the browser);
@@ -67,7 +67,9 @@ A reviewed script is never edited in place after review: new commit, and the dif
 ## Rules for every agent
 - **Folder rule:** write, edit, move or delete only inside your own worktree and your session scratchpad. Stop only
   processes you started, by exact pid. Never `pkill`, `killall`, a process group, `-1` or `0`. Everything else on the
-  machine is read-only. The sprint docs (`docs/sprint/`, and the live copy on branch `sprint/log` at `../worktrees/sprint-log/`) are read-only for everyone but the
+  machine is read-only. **Exception:** reviewers (the PE and lens B) create their findings file
+  `docs/sprint/reviews/<ticket>-<lens>-r<n>.md` in the executor's worktree, and nothing else there. For a PR with no
+  executor (e.g. the orchestrator's sprint-log PR), the reviewer writes it in its own worktree. The sprint docs (`docs/sprint/`, and the live copy on branch `sprint/log` at `specimen-herdr/worktrees/sprint-log/`) are read-only for everyone but the
   orchestrator.
 - **Secrets:** never print `.env*`, keys, tokens, or process argv/env near credentialed commands. Never copy env
   files between worktrees without the owner's OK. API keys only ever live in `chrome.storage.local` (CLAUDE.md).
@@ -106,7 +108,7 @@ A reviewed script is never edited in place after review: new commit, and the dif
 milestone event (ticket done, blocker, owner needed) plus a daily digest. Five lines is fine.
 
 ## Tooling
-**Folders (since 2026-10-15):** everything lives in `/Users/ayushmayank/Claude coding/Projects/specimen-herdr/`: the main
+**Folders (since 2026-10-15):** everything lives in `specimen-herdr/`: the main
 checkout is `specimen/` and agent worktrees are `worktrees/<ticket>`. Sprint docs are on `main` in `docs/sprint/`; during a sprint the
 orchestrator keeps the live log on branch `sprint/log` (worktree `worktrees/sprint-log`) and merges it at the end of the sprint.
 

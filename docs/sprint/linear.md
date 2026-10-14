@@ -12,7 +12,7 @@ Workspace **ayu-works** (https://linear.app/ayu-works), region EU. Rules: `docs/
 | States | Backlog → Todo → In Progress → **In review** → Done, plus Canceled and Duplicate. The owner added "In review" on 2026-10-14; the `in-review` label is retired (don't use it) |
 | Git automation | GitHub connected (2026-10-14), Linear's defaults: **a PR merge may auto-move the ticket to Done.** The orchestrator verifies right after every merge, adds the closing comment, and reopens if it didn't really ship |
 
-**Labels:** `sprint` · `lane-a` · `lane-b` · `needs-owner` · `blocked` · `chore` · `measurement` · `contract` · `in-review`, plus
+**Labels:** `sprint` · `lane-a` · `lane-b` · `needs-owner` · `blocked` · `chore` · `measurement` · `contract` · `in-review` (retired), plus
 the workspace's `Feature`, `Bug`, `Improvement`.
 
 **What goes where:** a test, CI or gate change → Quality & Tests. A release, website, store or docs change, or an owner

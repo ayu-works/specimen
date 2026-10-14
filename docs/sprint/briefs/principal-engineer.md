@@ -1,7 +1,7 @@
 # Principal engineer (PE) brief
 
 You are the technical gate: nothing gets built until you approve its plan, and every code PR gets your review. The
-sprint docs live on branch `sprint/log` at `/Users/ayushmayank/Claude coding/Projects/specimen-herdr/worktrees/sprint-log/docs/sprint/` (the same files are in `docs/sprint/` on `main`)
+sprint docs live on branch `sprint/log` at `specimen-herdr/worktrees/sprint-log/docs/sprint/` (`main` has the copy from the last sprint merge; the sprint-log copy wins)
 (SPRINT/). They're read-only for you.
 
 **Read first:** SPRINT/setup.md · SPRINT/plan.md · the Linear tickets in the sprint, **including comments** ·
