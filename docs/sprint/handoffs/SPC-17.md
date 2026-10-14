@@ -120,8 +120,13 @@ ticket's "migrate() rejects" check would become "migrate() repairs". I recommend
 ## Done
 - Plan written (2026-10-15). PE approved with 3 changes, folded in (2026-10-15).
 
+- Part 1 built (commit fd91661): `packages/core/test/guardrail.test.ts` (5 tests, 4 failed on main first); fix in
+  `sanitize.ts` (`wordRegex` case-sensitive humps, `containsBrand` keeps case, new `nameHasBrand`) and `designmd.ts`.
+  Core 62/62 with snapshots unchanged; `packages/ai` 158/158 (council tests green).
+
 ## Next
-- PE review of this plan → owner OK on Part 2 (relayed by the orchestrator) → tests first → code → gate → PR.
+- Waiting: the owner's OK on Part 2 (PE sent it to specimen-53). Then tests first (T1.01, T4.01, T4.03, real-data
+  proof) → schema code → TESTING.md and ARCHITECTURE.md rows → `pnpm gate` → PR.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-17`. Part 1 can be built once the PE approves; Part 2 waits for
