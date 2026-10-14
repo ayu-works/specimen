@@ -8,7 +8,7 @@ it('T1.09 accent role within ΔE<3 of ground truth', () => { … })
 
 **Phase gate** = `pnpm gate` green **and** every ID listed for the phase is present and passing (`scripts/check-test-ids.ts` greps the test files against this document). Manual checks (🖐) are run by Opus/you, and the results go in the PR description.
 
-Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Library, jsdom) · **E** = e2e (Playwright + Chromium with the built extension) · **🖐** = manual · **⊘** = dropped: the row and ID stay for the record (IDs are never reused), check-ids skips it and fails if a test still carries the ID. A ⊘ row's Test cell must start with `**Dropped YYYY-MM-DD**` and a reason. ⊘ (like 🖐) goes only in a Type cell; to drop a row in a table without a Type column, add the column first
+Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Library, jsdom) · **E** = e2e (Playwright + Chromium with the built extension) · **🖐** = manual · **⊘** = dropped: the row and ID stay for the record (IDs are never reused), check-ids skips it and fails if a test still carries the ID. A ⊘ row's Test cell must start with `**Dropped YYYY-MM-DD**` and a reason. ⊘ (like 🖐) goes only in a Type cell; to drop a row in a table without a Type column, add the column first. `check-ids --all` gates every `## Phase <n>` heading, so a new phase's table lands in the same PR as its first tests
 
 ---
 
@@ -161,7 +161,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T7.01 | E | Website builds; all internal links resolve; Add-to-Chrome + GitHub links present |
 | T7.02 | E | Lighthouse ≥ 95 (performance, a11y, best practices, SEO) via `@lhci/cli`: **a CI report, non-blocking** (`lighthouse.yml`). check-ids counts T7.02 present when the report-logic tests exist; that does **not** mean ≥ 95 passed |
 | T7.03 | E | Layout works at 375px with no horizontal scroll |
-| T7.04 | U | Remotion compositions render (frame count = fps × duration) |
+| T7.04 | U | Remotion compositions render (frame count = fps × duration): **runs only in the `video` CI job**, outside `pnpm gate` (which excludes `apps/video`); check-ids lists it as "outside pnpm gate" |
 | T7.05 | 🖐 | Video review (length per the user's decision) |
 
 ---

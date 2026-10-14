@@ -96,8 +96,24 @@ rows, T7.02 row), this handoff. All lane A.
   Folded both LOWs in a new commit: L1 the Dropped prefix must be followed by a `(reason)`; L2 an ID listed under
   another phase's heading throws. Fixtures added for both; test:scripts 21/21, check-ids --all unchanged (92).
 
+- PE r2 approved (0 findings), file committed (a707323).
+- Lens B r1 (`docs/sprint/reviews/SPC-14-b-r1.md`, 0C/2H/2M/3L) folded in one new commit, per orchestrator guidance:
+  - H1: a table line in a phase whose first cell mentions an ID but isn't exactly `| T<n>.<nn> | … |` throws
+    (bold, code, indented, no trailing pipe, suffixed, no leading pipe); fixtures for each.
+  - H2 (owner: T7.04 stays outside the gate): TESTING.md T7.04 row says it runs only in the `video` CI job; check-ids
+    lists IDs tested only under `apps/video/` as "outside pnpm gate", and rows whose Test cell says "non-blocking"
+    (T7.02) as "report-only".
+  - M1: only `it(`/`test(`/`<x>Test(` (+ `.only`/`.concurrent`) count; comments, Error strings and `describe` groups
+    don't; an ID with only `.skip`/`.todo`/`.fixme` tests fails; a dropped ID in a skipped test is still drift.
+  - M2: `parseArgs` accepts `--all`, `--phase N`, `--phase=N`, `SPECIMEN_PHASE`; unknown, missing value, both, or
+    nothing → exit 2 with usage (no phase-0 default).
+  - L1: success line is `check-ids: 92 required test IDs present across phases …` (ID list dropped).
+  - L2: files come from `git ls-files -co --exclude-standard` (skips .claude/, ignored outputs).
+  - L3: TESTING.md legend: a new phase's table lands in the same PR as its first tests.
+  - test:scripts 28/28 (+7); gate exit 0 (secrets skipped locally); red proof re-run (T7.01 rename → missing).
+
 ## Next
-- Lens B review; fold findings as new commits.
+- PE round 2 on the lens-B fixes.
 
 ## How to resume
 Worktree /Users/ayushmayank/Claude coding/Projects/Specimen-wt/spc-14, branch exec/spc-14. Read this file and any
