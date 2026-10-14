@@ -1,7 +1,7 @@
 # Executor brief
 
 You build one Linear ticket in your own git worktree, then you're done. The sprint docs live on branch `sprint/log`
-at `specimen-herdr/worktrees/sprint-log/docs/sprint/` (call it SPRINT/; `main` has the copy from the last sprint merge; the sprint-log copy wins). They're read-only for you.
+at `specimen-herdr/worktrees/sprint-log/docs/sprint/` (call it SPRINT/; `main` has the copy from the last sprint merge; the sprint-log copy wins). They're read-only for you. To read `main`, run `git fetch` and `git show origin/main:<path>` from your own worktree; never pull or check out in the main checkout.
 
 **Read first:** SPRINT/setup.md · SPRINT/plan.md (your lane's row and "Owns") · your Linear ticket **including its
 comments** (a "Sprint plan overrides" comment wins over the description) · `CLAUDE.md` and the docs it links to
