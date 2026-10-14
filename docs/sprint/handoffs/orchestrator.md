@@ -9,7 +9,8 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 ## UPDATE 2026-10-15 (Sprint 1 complete; wrap-up)
 
 - All sprint tickets are Done; summary in `docs/sprint/standups/2026-10-15-sprint-1-summary.md`. The PE (pe-5e) and all executors are closed; pe.md has been copied here.
-- Wrap-up in progress: (1) PR sprint/log → main (docs only; CLAUDE.md pointer updated); (2) move the folders into `specimen-herdr/`; (3) SPC-22 spike with a fresh PE + executor on Claude Code 2.1.300.
+- Folder move: the owner runs `~/move-specimen.sh` after `/exit` (moves to `specimen-herdr/specimen` + `specimen-herdr/worktrees`, runs `git worktree repair`, copies the Claude memory dir to the new project key), then `claude --continue` in `specimen-herdr/specimen`.
+- Wrap-up in progress: (1) PR #24 sprint/log → main (docs only; CLAUDE.md pointer updated); (2) move the folders into `specimen-herdr/`; (3) SPC-22 spike with a fresh PE + executor on Claude Code 2.1.300.
 
 ## UPDATE 2026-10-15 (resumed after the Claude Code update)
 
