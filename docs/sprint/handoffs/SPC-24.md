@@ -298,8 +298,9 @@ Frozen contract v1, final:
   `test/council.test.tsx` (T3.32–T3.33). `docs/TESTING.md`: T3.25/T3.26 ⊘, T3.28–T3.34 added.
 
 ## Next
-- `pnpm gate` green → push, PR (base main, owner steps = T3.34), comment the link on SPC-24, message specimen-53 and
-  pe-99. Not to be merged before the owner's go.
+- `pnpm gate` green (2026-10-15). PR #26 is open (base main, owner steps = T3.34 in the body). The link is on SPC-24,
+  and specimen-53 and pe-99 have been told. Waiting for reviews (PE lens A, lens B + privacy). Not to be merged
+  before the owner's go.
 
 ## How to resume
 Branch `exec/spc-24` in `worktrees/spc-24`. Read this file, then `docs/sprint/reviews/SPC-24-*` for findings; fix in
