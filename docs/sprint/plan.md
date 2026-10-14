@@ -29,7 +29,7 @@ behind the owning lane's open ticket ("blocked by" in Linear).
 | SPC-8 | T7.01 + T7.03 website e2e: links, CTAs, 375px no horizontal scroll | | PE + lens B |
 | SPC-11 | T7.02 Lighthouse report, a non-blocking CI job | SPC-6, SPC-8 | PE + lens B + measurement |
 | SPC-15 | Bug: `/privacy` scrolls sideways at 375px with fallback fonts (found by SPC-8). **Ships in SPC-8's PR.** `site/` is live on merge | | with SPC-8 |
-| SPC-12 | Docs drift (CLAUDE.md workflow → pointer to `docs/sprint/`; IMPLEMENTATION.md Phase 7; HANDOFF.md) | SPC-8 | PE only (doc-only) |
+| SPC-12 | (moved to the free lane-A slot 2026-10-14; files unchanged) Docs drift (CLAUDE.md workflow → pointer to `docs/sprint/`; IMPLEMENTATION.md Phase 7; HANDOFF.md) | SPC-8 | PE only (doc-only) |
 | SPC-14 | check-ids covers phases 0–7; mark T6.01–T6.05 dropped in TESTING.md | SPC-6, SPC-7, SPC-8, SPC-11 | PE + lens B + contract (owner OKs the TESTING.md format) |
 | SPC-13 | Failure-path audit of the existing suites (read-only findings) | | orchestrator reads; files tickets |
 
