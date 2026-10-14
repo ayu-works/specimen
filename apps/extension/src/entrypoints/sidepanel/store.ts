@@ -1,5 +1,6 @@
 import type { DesignScan, RawHints } from '@specimen/core/schema';
 import { create } from 'zustand';
+import type { MobileSkipReason } from '@/lib/captureFlow';
 import type { ChatMessage } from '@/lib/db';
 
 export type AskMessage = ChatMessage;
@@ -19,7 +20,9 @@ export interface Extras {
   tabId: number | null;
   hints: RawHints | null;
   /** `wide` = Chrome kept the popup wider than a phone and the debugger permission isn't held. */
-  mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide' | 'fullscreen';
+  mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide' | 'skipped';
+  /** Why the mobile capture was `skipped` (full screen, page changed, debugger busy, opened as a tab). */
+  mobileSkip: MobileSkipReason | null;
   /** `offer` = the page only reacts to the OS setting: needs the one-time debugger permission. */
   theme: 'idle' | 'running' | 'measured' | 'none' | 'offer' | 'failed';
   page: 'idle' | 'running';
@@ -32,6 +35,7 @@ export const NO_EXTRAS: Extras = {
   tabId: null,
   hints: null,
   mobile: 'idle',
+  mobileSkip: null,
   theme: 'idle',
   page: 'idle',
   note: null,

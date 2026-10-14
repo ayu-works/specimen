@@ -3,7 +3,8 @@ import type { DesignScan, RawHints } from '@specimen/core/schema';
 import {
   captureMobile,
   captureTheme,
-  MobileFullscreenError,
+  MobileSkippedError,
+  type MobileSkipReason,
   MobileTooWideError,
   requestDebugger,
 } from '@/lib/captureFlow';
@@ -117,15 +118,25 @@ export async function runMediaCapture(scan: DesignScan): Promise<void> {
   }
 }
 
+/** What the user can do about each skipped mobile capture. */
+export const SKIP_NOTES: Record<MobileSkipReason, string> = {
+  fullscreen:
+    'Mobile capture is skipped in full screen. Exit full screen and capture again, or capture in this tab (it shows at phone width for a moment).',
+  navigated: 'Switch back to the page you scanned, then try again.',
+  attach: 'Close DevTools on this tab (or any other debugger), then try again.',
+  tabbed: 'Chrome opened the mobile window as a tab, so nothing was captured. Try again.',
+};
+
 /**
  * Capture the mobile layout. `withPermission` runs inside a click handler: it requests the
- * optional `debugger` permission first so a too-wide popup (or, in full screen, the scanned tab)
- * can be emulated instead. A capture already running is never started twice.
+ * optional `debugger` permission first so a too-wide popup can be emulated, and only then (a
+ * click) may a full-screen capture emulate a phone in the scanned tab. The automatic capture never
+ * touches the user's tab. A capture already running is never started twice.
  */
 export async function runMobileCapture(scan: DesignScan, withPermission = false): Promise<void> {
   const { patchExtras, extras } = useStore.getState();
   if (extras.mobile === 'running') return;
-  const before = extras.mobile === 'fullscreen' ? 'fullscreen' : 'wide';
+  const before = extras.mobile === 'skipped' ? 'skipped' : 'wide';
   patchExtras({ mobile: 'running', note: null });
   try {
     if (withPermission && !(await requestDebugger())) {
@@ -134,15 +145,16 @@ export async function runMobileCapture(scan: DesignScan, withPermission = false)
     }
     const mobile = await captureMobile(scan.url, scan, {
       tabId: useStore.getState().extras.tabId ?? undefined,
+      emulate: withPermission,
     });
     if (!live(scan.id)) return;
     await attach(current(scan.id) ?? scan, { mobile });
-    patchExtras({ mobile: 'done' });
+    patchExtras({ mobile: 'done', mobileSkip: null });
   } catch (e) {
     // A newer scan owns the card now: never paint this capture's failure on it.
     if (!live(scan.id)) return;
-    if (e instanceof MobileFullscreenError) {
-      patchExtras({ mobile: 'fullscreen' });
+    if (e instanceof MobileSkippedError) {
+      patchExtras({ mobile: 'skipped', mobileSkip: e.reason, note: SKIP_NOTES[e.reason] });
       return;
     }
     if (e instanceof MobileTooWideError) {

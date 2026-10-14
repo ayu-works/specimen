@@ -94,7 +94,9 @@ function Captures({ scan }: { scan: DesignScan }) {
       </label>
       {mine && extras.mobile === 'running' && (
         <p role="status" className="text-[11px] text-muted-foreground">
-          Capturing mobile… a small window opens for a moment.
+          {extras.mobileSkip === 'fullscreen' || extras.mobileSkip === 'attach'
+            ? 'Capturing mobile… this page shows at phone width for a moment.'
+            : 'Capturing mobile… a small window opens for a moment.'}
         </p>
       )}
       {mobile && extras.mobile !== 'running' && (
@@ -119,29 +121,31 @@ function Captures({ scan }: { scan: DesignScan }) {
           </p>
         </>
       )}
-      {!mobile && mine && extras.mobile === 'fullscreen' && (
+      {!mobile && mine && extras.mobile === 'skipped' && (
         <>
           <Row label="Mobile">
-            <span data-testid="mobile-fullscreen">skipped in full screen</span>
+            <span data-testid="mobile-skipped">
+              {extras.mobileSkip === 'fullscreen' ? 'skipped in full screen' : 'not captured'}
+            </span>
           </Row>
-          <p data-testid="mobile-fullscreen-note" className="text-[11px] text-muted-foreground">
-            Mobile capture is skipped in full screen. Exit full screen and{' '}
-            <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
-              capture
-            </button>
-            , or capture with permission to emulate a phone in this tab (Chrome shows a "debugging
-            this browser" bar for a few seconds).
-          </p>
-          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
-            Capture with permission
-          </Button>
+          {extras.mobileSkip === 'tabbed' ? (
+            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan)}>
+              Try again
+            </Button>
+          ) : (
+            // Emulates in the scanned tab when still in full screen; asks for the one-time
+            // `debugger` permission only if it isn't held yet.
+            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
+              {extras.mobileSkip === 'fullscreen' ? 'Capture in this tab' : 'Try again'}
+            </Button>
+          )}
         </>
       )}
       {!mobile &&
         mine &&
         extras.mobile !== 'running' &&
         extras.mobile !== 'wide' &&
-        extras.mobile !== 'fullscreen' && (
+        extras.mobile !== 'skipped' && (
           <Row label="Mobile">
             <button type="button" className="underline" onClick={() => void runMobileCapture(scan)}>
               capture

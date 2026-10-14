@@ -8,6 +8,12 @@ import { counterpartKey, deltaE2000, detectScheme, extract, extractMobile } from
 import type { ColorRole, DesignScan } from '@specimen/core/schema';
 import { send } from './messaging';
 import { sameUrl, waitForTabLoad } from './scanFlow';
+import {
+  rememberEmulatedTab,
+  rememberMobileWindow,
+  tabEmulationIdle,
+  withTabEmulation,
+} from './tabEmulation';
 
 export type MobileVariant = NonNullable<NonNullable<DesignScan['variants']>['mobile']>;
 export type ThemeVariant = NonNullable<NonNullable<DesignScan['variants']>['dark']>;
@@ -27,13 +33,20 @@ export class MobileTooWideError extends Error {
 }
 
 /**
- * Chrome is in full screen, where it can't show a separate small popup (macOS opens it as a tab or
- * a full-size space). Nothing is captured; nothing is left open.
+ * Why a mobile capture was skipped without a popup:
+ * - `fullscreen`: Chrome is in full screen, where it can't show a separate small popup (macOS
+ *   opens it as a tab or a full-size space). Emulating in the scanned tab needs a click.
+ * - `navigated`: the scanned tab no longer shows the scanned page.
+ * - `attach`: the debugger could not attach (DevTools open, or another debugger).
+ * - `tabbed`: Chrome opened the popup as a tab or a full-size window anyway.
  */
-export class MobileFullscreenError extends Error {
-  constructor() {
-    super('Mobile capture is skipped in full screen');
-    this.name = 'MobileFullscreenError';
+export type MobileSkipReason = 'fullscreen' | 'navigated' | 'attach' | 'tabbed';
+
+/** Nothing was captured and nothing is left open; `reason` says what the user can do. */
+export class MobileSkippedError extends Error {
+  constructor(public readonly reason: MobileSkipReason) {
+    super(`Mobile capture skipped (${reason})`);
+    this.name = 'MobileSkippedError';
   }
 }
 
@@ -124,30 +137,39 @@ async function tabsIn(windowId: number) {
 }
 
 /**
- * The one tab `windows.create` added to an existing window: a new id loading `url`. Undefined
- * unless exactly one matches, so we never close a tab the user had open.
+ * The one tab `windows.create` added to an existing window. A single new id is ours whatever its
+ * url (the page may have redirected); with several, the url decides. Undefined unless exactly
+ * one is found, so we never close a tab the user had open.
  */
 async function createdTab(windowId: number, before: Set<number>, url: string) {
   const after = await tabsIn(windowId);
-  const added = (after ?? []).filter(
-    (t) =>
-      t.id !== undefined &&
-      !before.has(t.id) &&
-      (sameUrl(t.url, url) || sameUrl(t.pendingUrl, url)),
-  );
-  return added.length === 1 ? added[0]?.id : undefined;
+  const added = (after ?? []).filter((t) => t.id !== undefined && !before.has(t.id));
+  if (added.length === 1) return added[0]?.id;
+  const onUrl = added.filter((t) => sameUrl(t.url, url) || sameUrl(t.pendingUrl, url));
+  return onUrl.length === 1 ? onUrl[0]?.id : undefined;
 }
 
-/** Emulate a phone in the user's own (scanned) tab; needs the `debugger` permission. */
-async function emulateInTab(url: string, tabId: number) {
-  // The user may have navigated since the scan: never emulate (and re-sample) another page.
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (!sameUrl(tab?.url, url)) throw new MobileFullscreenError();
-  try {
-    return await phoneSample(tabId);
-  } catch (e) {
-    throw e instanceof AttachError ? new MobileFullscreenError() : e;
-  }
+/**
+ * Emulate a phone in the user's own (scanned) tab; needs the `debugger` permission. One at a time,
+ * and recorded so a panel closed mid-capture gets the tab back to normal on its next start.
+ */
+function emulateInTab(url: string, tabId: number) {
+  return withTabEmulation(async () => {
+    // The user may have navigated since the scan: never emulate (and re-sample) another page.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!sameUrl(tab?.url, url)) throw new MobileSkippedError('navigated');
+    await rememberEmulatedTab(tabId);
+    try {
+      return await phoneSample(tabId);
+    } catch (e) {
+      if (e instanceof AttachError) throw new MobileSkippedError('attach');
+      // No `chrome.debugger` in this context (e.g. right after a fresh grant).
+      if (e instanceof MobileTooWideError && e.width === 0) throw new MobileSkippedError('attach');
+      throw e;
+    } finally {
+      await rememberEmulatedTab(null);
+    }
+  });
 }
 
 /**
@@ -156,18 +178,21 @@ async function emulateInTab(url: string, tabId: number) {
  * page is re-sampled under device-metrics emulation when the optional `debugger` permission is
  * held. With neither, this throws `MobileTooWideError` and nothing is stored as "mobile".
  *
- * In full screen (checked on `tabId`'s window) no window is opened: with the `debugger` permission
- * the phone is emulated in the scanned tab `tabId`; otherwise this throws `MobileFullscreenError`.
+ * In full screen (checked on `tabId`'s window) no window is opened. Only with `emulate` (set from
+ * a click, never by the automatic capture) and the `debugger` permission is the phone emulated in
+ * the scanned tab `tabId`; otherwise this throws `MobileSkippedError('fullscreen')`.
  * Only what this call created is ever closed: never the user's window or their other tabs.
  */
 export async function captureMobile(
   url: string,
   desktop: DesignScan,
-  opts: { tabId?: number } = {},
+  opts: { tabId?: number; emulate?: boolean } = {},
 ): Promise<MobileVariant> {
   const home = await scanWindow(opts.tabId);
   if (isFullscreen(home)) {
-    if (opts.tabId === undefined || !(await hasDebugger())) throw new MobileFullscreenError();
+    if (!opts.emulate || opts.tabId === undefined || !(await hasDebugger())) {
+      throw new MobileSkippedError('fullscreen');
+    }
     const res = await emulateInTab(url, opts.tabId);
     return extractMobile(res.raw, desktop);
   }
@@ -184,6 +209,9 @@ export async function captureMobile(
     focused: false,
   });
   if (!win) throw new Error('Could not open the mobile window');
+  // Not awaited: any delay between create and waitForTabLoad can miss the popup's load in the
+  // E2E browser (T5.03); storage writes from one page apply in order, so the later clear wins.
+  if (win.id !== undefined && win.id !== homeId) void rememberMobileWindow(win.id);
   // Chrome put the page in an existing window (one of ours never has more than one tab).
   const intoExisting = (win.id !== undefined && win.id === homeId) || (win.tabs?.length ?? 0) > 1;
   let strayTab: number | undefined;
@@ -193,10 +221,10 @@ export async function captureMobile(
       if (win.id === homeId && homeId !== undefined && before) {
         strayTab = await createdTab(homeId, before, url);
       }
-      throw new MobileFullscreenError();
+      throw new MobileSkippedError('tabbed');
     }
     if (isFullscreen(win) || (win.type !== undefined && win.type !== 'popup')) {
-      throw new MobileFullscreenError();
+      throw new MobileSkippedError('tabbed');
     }
     const tabId = win.tabs?.[0]?.id;
     if (tabId === undefined) throw new Error('Could not open the mobile window');
@@ -212,6 +240,7 @@ export async function captureMobile(
     if (intoExisting) {
       if (strayTab !== undefined) await chrome.tabs.remove(strayTab).catch(() => {});
     } else if (win.id !== undefined) await chrome.windows.remove(win.id).catch(() => {});
+    if (win.id !== undefined && win.id !== homeId) await rememberMobileWindow(null);
   }
 }
 
@@ -261,6 +290,7 @@ export async function captureTheme(
   how: 'class' | 'media',
 ): Promise<{ key: 'dark' | 'light'; variant: ThemeVariant } | null> {
   const key = counterpartKey(scan);
+  await tabEmulationIdle();
   const res = await send('scan.run', {
     tabId,
     opts: {

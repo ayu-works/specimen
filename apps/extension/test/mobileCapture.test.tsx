@@ -5,15 +5,17 @@ import { extract } from '@specimen/core';
 import type { RawPage } from '@specimen/core/schema';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runMobileCapture } from '../src/entrypoints/sidepanel/extras';
+import { runExtras, runMobileCapture, SKIP_NOTES } from '../src/entrypoints/sidepanel/extras';
 import { NO_EXTRAS, useStore } from '../src/entrypoints/sidepanel/store';
 import { Scan } from '../src/entrypoints/sidepanel/views/Scan';
 import {
   captureMobile,
   MOBILE_MAX_WIDTH,
-  MobileFullscreenError,
+  MobileSkippedError,
   MobileTooWideError,
 } from '../src/lib/captureFlow';
+import { scanTab } from '../src/lib/scanFlow';
+import { recoverMobileCapture } from '../src/lib/tabEmulation';
 import { type FakeChrome, installChrome } from './helpers/chrome';
 
 const rawFile = path.resolve(process.cwd(), '../../fixtures/raw/stripe.json');
@@ -26,6 +28,8 @@ interface Rig {
   widths: number[];
   debuggerCalls: string[];
   scanCalls: number;
+  /** Debugger methods and scan.run calls, in order. */
+  log: string[];
   windows: { create: Mock; remove: Mock; get: Mock; getCurrent: Mock };
   tabsRemove: Mock;
 }
@@ -42,6 +46,10 @@ interface RigOpts {
   scannedTabWindow?: { id: number; state: WinState };
   /** The scanned tab's current url (default: the scanned page). */
   scannedTabUrl?: string;
+  /** The new tab Chrome put in the user's window has redirected away from the scanned url. */
+  redirected?: boolean;
+  /** `chrome.debugger` is not bound in this context although the permission is held. */
+  noDebuggerApi?: boolean;
   /** What `windows.create` hands back: a real popup (default), a full-screen window, or the panel's own window. */
   created?: 'popup' | 'fullscreen' | 'panel-window' | 'panel-window-ambiguous' | 'other-window';
   currentThrows?: boolean;
@@ -71,11 +79,10 @@ function rig(opts: RigOpts): Rig {
         return { id: 2, type: 'normal', state: 'normal', tabs: otherTabs };
       if (created === 'fullscreen')
         return { id: 7, type: 'normal', state: 'fullscreen', tabs: [{ id: 42 }] };
-      panelTabs = [
-        panelTabs[0],
-        { id: 9, pendingUrl: PAGE },
-        ...panelTabs.slice(1),
-      ] as typeof panelTabs;
+      const ours = opts.redirected
+        ? { id: 9, url: 'https://x.test/en/' }
+        : { id: 9, pendingUrl: PAGE };
+      panelTabs = [panelTabs[0], ours, ...panelTabs.slice(1)] as typeof panelTabs;
       if (created === 'panel-window-ambiguous') panelTabs.push({ id: 11, url: PAGE });
       return { ...panelWin, tabs: panelTabs };
     }),
@@ -91,21 +98,25 @@ function rig(opts: RigOpts): Rig {
     widths: [...opts.widths],
     debuggerCalls: [],
     scanCalls: 0,
+    log: [],
     windows,
     tabsRemove: vi.fn(async () => {}),
   };
   Object.assign(chrome, {
     windows,
-    debugger: {
-      attach: vi.fn(async () => {
-        if (opts.attachThrows) throw new Error('Another debugger is already attached');
-        state.debuggerCalls.push('attach');
-      }),
-      detach: vi.fn(async () => state.debuggerCalls.push('detach')),
-      sendCommand: vi.fn(async (_t: unknown, method: string) => {
-        state.debuggerCalls.push(method);
-      }),
-    },
+    debugger: opts.noDebuggerApi
+      ? undefined
+      : {
+          attach: vi.fn(async () => {
+            if (opts.attachThrows) throw new Error('Another debugger is already attached');
+            state.debuggerCalls.push('attach');
+          }),
+          detach: vi.fn(async () => state.debuggerCalls.push('detach')),
+          sendCommand: vi.fn(async (_t: unknown, method: string) => {
+            state.debuggerCalls.push(method);
+            state.log.push(method);
+          }),
+        },
   });
   const tabs = chrome.tabs as Record<string, unknown>;
   tabs.get = vi.fn(async (id: number) =>
@@ -119,6 +130,7 @@ function rig(opts: RigOpts): Rig {
   tabs.remove = state.tabsRemove;
   chrome.permissions.contains = vi.fn(async () => opts.debuggerGranted) as never;
   chrome.runtime.sendMessage = vi.fn(async () => {
+    state.log.push('scan.run');
     if (opts.scanRejects) throw new Error('scan failed');
     const w = state.widths[Math.min(state.scanCalls, state.widths.length - 1)] as number;
     state.scanCalls++;
@@ -223,7 +235,8 @@ describe('captureMobile in full screen', () => {
   it('T5.11 full screen without debugger: skipped, no window or tab created', async () => {
     const r = rig({ widths: [390], debuggerGranted: false, state: 'fullscreen' });
     const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('fullscreen');
     expect(r.windows.create).not.toHaveBeenCalled();
     expect(r.windows.remove).not.toHaveBeenCalled();
     expect(r.tabsRemove).not.toHaveBeenCalled();
@@ -232,7 +245,7 @@ describe('captureMobile in full screen', () => {
 
   it('T5.11 full screen with debugger: emulates a phone in the scanned tab, no window created', async () => {
     const r = rig({ widths: [390], debuggerGranted: true, state: 'fullscreen' });
-    const m = await run(captureMobile(PAGE, desktop, { tabId: 5 }));
+    const m = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true }));
     expect(m.viewportWidth).toBe(390);
     expect(r.windows.create).not.toHaveBeenCalled();
     const dbg = r.chrome.debugger as { attach: Mock };
@@ -252,12 +265,12 @@ describe('captureMobile in full screen', () => {
       state: 'fullscreen',
       scanRejects: true,
     });
-    const e1 = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
+    const e1 = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true })).catch((e) => e);
     expect((e1 as Error).message).toBe('scan failed');
     expect(r1.debuggerCalls.slice(-2)).toEqual(['Emulation.clearDeviceMetricsOverride', 'detach']);
 
     const r2 = rig({ widths: [1280], debuggerGranted: true, state: 'fullscreen' });
-    const e2 = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
+    const e2 = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true })).catch((e) => e);
     expect(e2).toBeInstanceOf(MobileTooWideError);
     expect(r2.debuggerCalls.slice(-2)).toEqual(['Emulation.clearDeviceMetricsOverride', 'detach']);
     expect(r2.windows.create).not.toHaveBeenCalled();
@@ -265,8 +278,9 @@ describe('captureMobile in full screen', () => {
 
   it('T5.11 full screen with debugger but no scanned tab: skipped, nothing attached or created', async () => {
     const r = rig({ widths: [390], debuggerGranted: true, state: 'fullscreen' });
-    const err = await run(captureMobile(PAGE, desktop)).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    const err = await run(captureMobile(PAGE, desktop, { emulate: true })).catch((e) => e);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('fullscreen');
     expect(r.windows.getCurrent).toHaveBeenCalled();
     expect(r.windows.create).not.toHaveBeenCalled();
     expect(r.debuggerCalls).toEqual([]);
@@ -279,8 +293,11 @@ describe('captureMobile in full screen', () => {
       state: 'fullscreen',
       scannedTabUrl: 'https://x.test/elsewhere',
     });
-    const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    const err = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true })).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('navigated');
     expect(r.debuggerCalls).toEqual([]);
     expect(r.windows.create).not.toHaveBeenCalled();
   });
@@ -292,8 +309,11 @@ describe('captureMobile in full screen', () => {
       state: 'fullscreen',
       attachThrows: true,
     });
-    const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    const err = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true })).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('attach');
     expect(r.debuggerCalls).not.toContain('Emulation.setDeviceMetricsOverride');
     expect(r.scanCalls).toBe(0);
   });
@@ -306,13 +326,15 @@ describe('captureMobile in full screen', () => {
       scannedTabWindow: { id: 2, state: 'fullscreen' },
     });
     const e1 = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(e1).toBeInstanceOf(MobileFullscreenError);
+    expect(e1).toBeInstanceOf(MobileSkippedError);
+    expect((e1 as MobileSkippedError).reason).toBe('fullscreen');
     expect(r1.windows.get).toHaveBeenCalledWith(2);
     expect(r1.windows.create).not.toHaveBeenCalled();
 
     const r2 = rig({ widths: [390], debuggerGranted: false, state: 'fullscreen' });
     const e2 = await run(captureMobile(PAGE, desktop)).catch((e) => e);
-    expect(e2).toBeInstanceOf(MobileFullscreenError);
+    expect(e2).toBeInstanceOf(MobileSkippedError);
+    expect((e2 as MobileSkippedError).reason).toBe('fullscreen');
     expect(r2.windows.getCurrent).toHaveBeenCalled();
   });
 
@@ -327,7 +349,8 @@ describe('captureMobile in full screen', () => {
   it('T5.11 Chrome hands back a full-screen window (toggled mid-capture): skipped, that window closed', async () => {
     const r = rig({ widths: [390], debuggerGranted: false, created: 'fullscreen' });
     const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('tabbed');
     expect(r.scanCalls).toBe(0);
     expect(r.windows.remove).toHaveBeenCalledWith(7);
   });
@@ -335,7 +358,8 @@ describe('captureMobile in full screen', () => {
   it("T5.11 Chrome puts the page in the user's own window: only the new tab is closed", async () => {
     const r = rig({ widths: [390], debuggerGranted: false, created: 'panel-window' });
     const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('tabbed');
     expect(r.scanCalls).toBe(0);
     expect(r.windows.remove).not.toHaveBeenCalled();
     expect(r.tabsRemove).toHaveBeenCalledTimes(1);
@@ -345,7 +369,8 @@ describe('captureMobile in full screen', () => {
   it("T5.11 the user's window gains two matching tabs: nothing is closed", async () => {
     const r = rig({ widths: [390], debuggerGranted: false, created: 'panel-window-ambiguous' });
     const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('tabbed');
     expect(r.windows.remove).not.toHaveBeenCalled();
     expect(r.tabsRemove).not.toHaveBeenCalled();
   });
@@ -353,24 +378,169 @@ describe('captureMobile in full screen', () => {
   it("T5.11 Chrome puts the page in another of the user's windows: nothing is closed", async () => {
     const r = rig({ widths: [390], debuggerGranted: false, created: 'other-window' });
     const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
-    expect(err).toBeInstanceOf(MobileFullscreenError);
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('tabbed');
     expect(r.scanCalls).toBe(0);
     expect(r.windows.remove).not.toHaveBeenCalled();
     expect(r.tabsRemove).not.toHaveBeenCalled();
   });
 });
 
+describe('captureMobile in full screen: more failure paths', () => {
+  it("T5.11 a redirected new tab in the user's window is still the one closed (single new id)", async () => {
+    const r = rig({
+      widths: [390],
+      debuggerGranted: false,
+      created: 'panel-window',
+      redirected: true,
+    });
+    const err = await run(captureMobile(PAGE, desktop, { tabId: 5 })).catch((e) => e);
+    expect((err as MobileSkippedError).reason).toBe('tabbed');
+    expect(r.tabsRemove).toHaveBeenCalledTimes(1);
+    expect(r.tabsRemove).toHaveBeenCalledWith(9);
+    expect(r.windows.remove).not.toHaveBeenCalled();
+  });
+
+  it('T5.11 no chrome.debugger in this context: skipped as "attach", never "too wide"', async () => {
+    const r = rig({
+      widths: [390],
+      debuggerGranted: true,
+      state: 'fullscreen',
+      noDebuggerApi: true,
+    });
+    const err = await run(captureMobile(PAGE, desktop, { tabId: 5, emulate: true })).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(MobileSkippedError);
+    expect((err as MobileSkippedError).reason).toBe('attach');
+    expect(r.scanCalls).toBe(0);
+  });
+
+  it('T5.11 a desktop scan during the emulation waits until the override is cleared', async () => {
+    const r = rig({ widths: [390], debuggerGranted: true, state: 'fullscreen' });
+    const mobile = captureMobile(PAGE, desktop, { tabId: 5, emulate: true });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.log).toContain('Emulation.setDeviceMetricsOverride');
+    // The tab is recorded so a panel closed now gets it back on its next start.
+    expect(r.chrome.storage.session.data.get('mobile.emulatingTab')).toBe(5);
+    const desk = scanTab(5, { save: false, noScreenshot: true });
+    await run(Promise.all([mobile, desk]));
+    expect(r.log).toEqual([
+      'Emulation.setDeviceMetricsOverride',
+      'scan.run',
+      'Emulation.clearDeviceMetricsOverride',
+      'scan.run',
+    ]);
+    expect(r.chrome.storage.session.data.has('mobile.emulatingTab')).toBe(false);
+  });
+});
+
+describe('recoverMobileCapture (side panel start)', () => {
+  function leftovers(panels: number) {
+    const c = installChrome() as FakeChrome & Record<string, unknown>;
+    const dbg = { sendCommand: vi.fn(async () => {}), detach: vi.fn(async () => {}) };
+    const windows = { remove: vi.fn(async () => {}) };
+    Object.assign(c, { debugger: dbg, windows });
+    c.runtime.getContexts = vi.fn(async () => Array.from({ length: panels }, () => ({}))) as never;
+    c.storage.session.data.set('mobile.emulatingTab', 5);
+    c.storage.session.data.set('mobile.window', 7);
+    return { c, dbg, windows };
+  }
+
+  it('T5.11 clears a phone override and closes a popup a closed panel left behind', async () => {
+    const { c, dbg, windows } = leftovers(1);
+    await recoverMobileCapture();
+    expect(dbg.sendCommand).toHaveBeenCalledWith(
+      { tabId: 5 },
+      'Emulation.clearDeviceMetricsOverride',
+    );
+    expect(dbg.detach).toHaveBeenCalledWith({ tabId: 5 });
+    expect(windows.remove).toHaveBeenCalledWith(7);
+    expect(c.storage.session.data.size).toBe(0);
+  });
+
+  it('T5.11 leaves everything alone while another side panel may be capturing', async () => {
+    const { c, dbg, windows } = leftovers(2);
+    await recoverMobileCapture();
+    expect(dbg.sendCommand).not.toHaveBeenCalled();
+    expect(windows.remove).not.toHaveBeenCalled();
+    expect(c.storage.session.data.get('mobile.emulatingTab')).toBe(5);
+  });
+
+  it('T5.11 the popup is recorded while open and forgotten once closed', async () => {
+    const r = rig({ widths: [390], debuggerGranted: false });
+    await run(captureMobile(PAGE, desktop, { tabId: 5 }));
+    expect(r.chrome.storage.session.set).toHaveBeenCalledWith({ 'mobile.window': 7 });
+    expect(r.chrome.storage.session.data.has('mobile.window')).toBe(false);
+  });
+});
+
 describe('runMobileCapture in full screen', () => {
-  it('T5.11 marks the card "fullscreen" and stores no mobile variant', async () => {
-    rig({ widths: [390], debuggerGranted: false, state: 'fullscreen' });
+  const start = () =>
     useStore.setState({
       scan: desktop,
       status: 'done',
       extras: { ...NO_EXTRAS, scanId: desktop.id, tabId: 5 },
     });
-    await run(runMobileCapture(desktop));
-    expect(useStore.getState().extras.mobile).toBe('fullscreen');
+
+  it("T5.11 the automatic capture never emulates in the user's tab, even with the permission held", async () => {
+    const r = rig({
+      widths: [390],
+      debuggerGranted: true,
+      state: 'fullscreen',
+      scannedTabUrl: desktop.url,
+    });
+    start();
+    await run(runExtras(desktop, 5, undefined, true));
+    expect(r.debuggerCalls).toEqual([]);
+    expect(r.windows.create).not.toHaveBeenCalled();
+    expect(useStore.getState().extras.mobile).toBe('skipped');
+    expect(useStore.getState().extras.mobileSkip).toBe('fullscreen');
+    expect(useStore.getState().extras.note).toBe(SKIP_NOTES.fullscreen);
     expect(useStore.getState().scan?.variants?.mobile).toBeUndefined();
+
+    // Only the click emulates, in the scanned tab.
+    await run(runMobileCapture(desktop, true));
+    const dbg = r.chrome.debugger as { attach: Mock };
+    expect(dbg.attach).toHaveBeenCalledWith({ tabId: 5 }, '1.3');
+    expect(useStore.getState().extras.mobile).toBe('done');
+    expect(useStore.getState().scan?.variants?.mobile?.viewportWidth).toBe(390);
+  });
+
+  it('T5.11 each skip reason gets its own note', async () => {
+    const cases: [RigOpts, 'fullscreen' | 'navigated' | 'attach' | 'tabbed'][] = [
+      [{ widths: [390], debuggerGranted: false, state: 'fullscreen' }, 'fullscreen'],
+      [
+        {
+          widths: [390],
+          debuggerGranted: true,
+          state: 'fullscreen',
+          scannedTabUrl: 'https://x.test/other',
+        },
+        'navigated',
+      ],
+      [
+        {
+          widths: [390],
+          debuggerGranted: true,
+          state: 'fullscreen',
+          attachThrows: true,
+          scannedTabUrl: desktop.url,
+        },
+        'attach',
+      ],
+      [{ widths: [390], debuggerGranted: false, created: 'fullscreen' }, 'tabbed'],
+    ];
+    for (const [o, reason] of cases) {
+      rig(o);
+      start();
+      await run(runMobileCapture(desktop, reason === 'navigated' || reason === 'attach'));
+      expect(useStore.getState().extras.mobileSkip).toBe(reason);
+      expect(useStore.getState().extras.note).toBe(SKIP_NOTES[reason]);
+    }
+    expect(SKIP_NOTES.navigated).toMatch(/Switch back to the page you scanned/);
+    expect(SKIP_NOTES.attach).toMatch(/Close DevTools/);
+    expect(SKIP_NOTES.tabbed).not.toMatch(/full screen/);
   });
 
   it('T5.11 a capture already running is not started twice', async () => {
@@ -406,38 +576,60 @@ describe('runMobileCapture after a newer scan', () => {
   });
 });
 
-describe('Scan card: mobile in full screen', () => {
-  it('T5.11 shows the full-screen note and a permission button; no buttons while running', async () => {
-    vi.useRealTimers();
-    const c = installChrome();
+describe('Scan card: mobile skipped', () => {
+  const show = (mobileSkip: 'fullscreen' | 'navigated' | 'attach' | 'tabbed') =>
     useStore.setState({
       scan: desktop,
       status: 'done',
-      extras: { ...NO_EXTRAS, scanId: desktop.id, tabId: 5, mobile: 'fullscreen' },
+      extras: {
+        ...NO_EXTRAS,
+        scanId: desktop.id,
+        tabId: 5,
+        mobile: 'skipped',
+        mobileSkip,
+        note: SKIP_NOTES[mobileSkip],
+      },
     });
+
+  it('T5.11 full screen: note, "Capture in this tab", and no buttons while running', async () => {
+    vi.useRealTimers();
+    const c = installChrome();
+    show('fullscreen');
     const { rerender } = render(<Scan />);
 
-    expect((await screen.findByTestId('mobile-fullscreen')).textContent).toBe(
+    expect((await screen.findByTestId('mobile-skipped')).textContent).toBe(
       'skipped in full screen',
     );
-    expect(screen.getByTestId('mobile-fullscreen-note').textContent).toMatch(
-      /Mobile capture is skipped in full screen\. Exit full screen/,
-    );
+    expect(screen.getByText(SKIP_NOTES.fullscreen)).toBeTruthy();
     expect(useStore.getState().scan?.variants?.mobile).toBeUndefined();
 
     c.permissions.request.mockResolvedValue(false);
     c.permissions.contains.mockResolvedValue(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Capture with permission' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture in this tab' }));
     await waitFor(() =>
       expect(c.permissions.request).toHaveBeenCalledWith({ permissions: ['debugger'] }),
     );
+    await screen.findByText('Permission not granted. Nothing was captured.');
+    expect(useStore.getState().extras.mobile).toBe('skipped');
 
     useStore.setState({
-      extras: { ...NO_EXTRAS, scanId: desktop.id, tabId: 5, mobile: 'running' },
+      extras: { ...useStore.getState().extras, mobile: 'running' },
     });
     rerender(<Scan />);
-    expect(screen.queryByRole('button', { name: 'Capture with permission' })).toBeNull();
+    expect(screen.getByText(/this page shows at phone width/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Capture in this tab' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'capture' })).toBeNull();
+  });
+
+  it('T5.11 DevTools in the way: the note says so and the button reads "Try again"', async () => {
+    vi.useRealTimers();
+    installChrome();
+    show('attach');
+    render(<Scan />);
+    expect((await screen.findByTestId('mobile-skipped')).textContent).toBe('not captured');
+    expect(screen.getByText(SKIP_NOTES.attach)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Capture in this tab' })).toBeNull();
   });
 });
 

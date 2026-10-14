@@ -107,8 +107,40 @@ Check: `pnpm gate` green (the existing e2e T5.03 runs in a normal Chromium windo
   other existing window → close nothing), L1 fixed (`runMobileCapture` catch returns when the scan isn't live). Two
   new T5.11 tests; both fail without the fix. PE re-reviews M1 only.
 
+- Lens A r2: APPROVED on ceaaf2d (condition: CI green).
+- Lens B r1 (`docs/sprint/reviews/SPC-25-b-r1.md`), all folded:
+  - M1: emulation in the user's tab only from a click (`captureMobile` `emulate`, set by `runMobileCapture(…, true)`);
+    the automatic capture in full screen always skips.
+  - M2: new `lib/tabEmulation.ts`: emulations in the user's tab run one at a time; `scanTab` and `captureTheme` wait
+    for them, so a desktop scan never reads the phone override.
+  - M3: `MobileFullscreenError` → `MobileSkippedError(reason)` with `fullscreen | navigated | attach | tabbed`;
+    `extras.mobile` `'skipped'` + `extras.mobileSkip`; `SKIP_NOTES` per reason; button "Capture in this tab"
+    (full screen) or "Try again".
+  - M4: the emulated tab and the popup window id are recorded in `storage.session`; `recoverMobileCapture()` on
+    side-panel start (`main.tsx`) clears the override, detaches and closes the popup; it skips when another side panel
+    is open. Unit-tested only. **Owner check:** close the panel mid-capture.
+  - L1: the running line says "this page shows at phone width" on the emulation path.
+  - L2: a single new id in the home window is closed whatever its url (redirects); the url only breaks ties.
+  - L3: no `chrome.debugger` → `attach` reason, never "too wide".
+  - L4: owner checks added below. Not done: passing `left/top` for a second display. That's a popup-placement
+    change outside this bug. **The post-create guard's return shapes are unverified on real macOS.**
+
+- Found while folding: the popup-window record must not be awaited between `windows.create` and `waitForTabLoad`.
+  With the await, e2e T5.03 hung. Logging showed `tabs.get` said `loading`, and the `status: 'complete'`
+  `onUpdated` never arrived after the listener attached. That's a race already in `waitForTabLoad` (scanFlow.ts; also
+  used by `rescanUrl`), not new code. Now fire-and-forget (`void`). **Follow-up suggested:** make `waitForTabLoad`
+  also poll `tabs.get` (separate ticket; scanFlow is SPC-19/20's).
+
+## Owner check (macOS)
+1. Full screen, "Also capture mobile" on, Scan → no new tab or window; the card says "skipped in full screen".
+   "Capture in this tab" → the page shows at phone width briefly, then Mobile: captured.
+2. Normal window → the popup opens and closes as before.
+3. Press Scan, then toggle full screen right away → no stray tab or window; note which note shows.
+4. Close the side panel during "Capture in this tab", reopen → the tab is back at full width, no debugging bar.
+5. Optional: Stage Manager on; a second display.
+
 ## Next
-- Lens B review; PE re-review of M1. Reviews (PE lens A + fresh lens B) → fold findings. Owner manual check per the ticket's "How to check" (macOS full
+- PE confirms the post-review diff; CI green. Reviews (PE lens A + fresh lens B) → fold findings. Owner manual check per the ticket's "How to check" (macOS full
   screen can't run in CI).
 
 ## How to resume
