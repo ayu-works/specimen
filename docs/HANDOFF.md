@@ -34,7 +34,7 @@ Read `CLAUDE.md` first for the rules. The team workflow is `docs/sprint/setup.md
 Mascot `design/logo/final/specimen-critter.svg` (never alter it); mood variants in `apps/extension/src/components/Mascot.tsx`; wordmark and banners in `.github/assets/`; store visuals in `store/images/`. Colors: body `#7C6CF5`, shine `#A99BFF`, tuft `#FF6B6B #FFD166 #06D6A0 #4D96FF`, ink `#1b1b2f`, store background `#0e0e16`.
 
 ## Notes
-- CI is green on `main` (run 38573173204, 2026-10-14). The `gate` job skips installing `apps/video`; the `video` job typechecks it only when `apps/video` or the lockfile changes. Root `pnpm typecheck` skips the video; use `pnpm typecheck:video`.
+- CI is green on `main` (run 38573173204, 2026-10-14). The `gate` job skips installing `apps/video`; the `video` job runs `pnpm typecheck:video` and `pnpm test:video` only when `apps/video`, the lockfile, root `package.json`, `tsconfig.base.json` or `ci.yml` changes. Root `pnpm typecheck` skips the video; use `pnpm typecheck:video`.
 - Token exports (Tailwind, CSS vars, shadcn, DTCG, Figma) exist in `packages/core`, but the side panel only offers Prompt and DESIGN.md. Don't market tokens.
 - The first scan requests optional `<all_urls>` (the side panel opened from the toolbar doesn't get activeTab). The justification is in `store/privacy-practices.md`.
 - Delete merged branches after each merge (GitHub auto-delete is off).

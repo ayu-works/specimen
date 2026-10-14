@@ -53,8 +53,10 @@ returns only historical mentions; `pnpm lint` (Biome ignores md, but run it anyw
 - Verified at PR time: #9, #13–#18, #20 merged; #19 (SPC-8) open; CI on main green (run 38573173204, 2026-10-14).
 - Check: the rg command returns only the three Phase 3–5 "tests deferred …, which shipped in PR #9" history lines. `pnpm lint` clean.
 
+- Lens A r1 (0C/1H/2M/2L) folded in: H1 owner-merge rule, M1 Netlify batching rule, M2 Commands, L1 HANDOFF video job, L2 Phase 3.8 superseded.
+
 ## Next
-- PR #21 open, Linear comment posted, specimen-b0 told. pe-5e is reviewing the PR itself (doc-only skips lens B, not the PE review). Fold its findings from `docs/sprint/reviews/SPC-12-a-r1.md`; doc-only fixes get no re-review.
+- PR #21 open, Linear comment posted, specimen-b0 told. pe-5e is reviewing the PR itself (doc-only skips lens B, not the PE review). r1 folded; doc-only fixes get no re-review. Waiting for the owner's merge.
 
 ## How to resume
 - Branch `exec/spc-12`; read this file and the PR.
