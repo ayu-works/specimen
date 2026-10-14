@@ -8,6 +8,7 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 - SPC-5 is Done. The owner chose auto mode for agents and skipped the /login test; desktop alerts work.
 - Live: pe (pane w1:p9, worktree ../Specimen-wt/pe, branch pe/spc-13-audit), exec-spc-6 (w1:pA, ../Specimen-wt/spc-6), exec-spc-8 (w1:pB, ../Specimen-wt/spc-8). Tabs: control (w1:t3), build. Kickoffs are in the orchestrator scratchpad (kickoff-*.md).
 - SPC-6, SPC-8 and SPC-13 are In Progress.
+- The owner couldn't add the In Review status, so we use the `in-review` label instead (linear.md). The Git automation is left at Linear's defaults, and a merge may auto-Done a ticket: verify right after each merge.
 
 ## UPDATE 2026-10-14 (sprint 1 set up; starting the smoke test)
 
