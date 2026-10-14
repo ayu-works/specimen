@@ -74,6 +74,50 @@ describe('ethics guardrail: brand names in identifiers (audit H3, M15, M16)', ()
     expect(containsBrand('Calendar', ['cal'])).toBe(false);
   });
 
+  it('T2.03 short brands never eat hex colors or CSS units (lens B B1)', () => {
+    const keep: [string, string][] = [
+      ['abc.xyz', 'The accent #1abc9c'],
+      ['ea.com', 'link #1ea0ff'],
+      ['bbc.co.uk', 'border #2bbc4f'],
+      ['ab.com', 'fill #ab12ab'],
+      ['ab.com', 'stroke #abcdef on the tab bar, #ABCDEF too'],
+      ['cafe.com', 'ring #0cafe0 and #CAFE00'],
+      ['vw.com', 'max-width: 100vw'],
+      ['ms.com', 'transition 150ms ease'],
+    ];
+    for (const [host, text] of keep) expect(sanitize(text, on(host)), host).toBe(text);
+    for (const [host, hex] of [
+      ['abc.xyz', '#1abc9c'],
+      ['cafe.com', '#0cafe0'],
+    ] as const) {
+      const scan = on(host);
+      const accent = scan.colors.palette.find((t) => t.id === scan.colors.roles.accent);
+      if (!accent) throw new Error('fixture has no accent');
+      accent.hex = hex;
+      for (const [where, out] of outputs(scan)) expect(out, `${host} ${where}`).toContain(hex);
+    }
+    // A brand that is not a hex word is still stripped after a '#', and long tokens keep digit humps.
+    const z = on('zentrix.com');
+    expect(sanitize('see #zentrix-docs', z)).not.toMatch(/zentrix/i);
+    expect(sanitize('zentrix500 and 2zentrix', z)).toBe('500 and 2');
+  });
+
+  it('T2.03 DESIGN.md drops CSS variables whose value aliases a branded variable (lens B B2)', () => {
+    const md = generateDesignMd(
+      on('zentrix.com', 'Untitled', {
+        cssVariables: {
+          '--color-primary': 'var(--zentrixblue)',
+          '--accent': 'var(--UIZentrixBlue)',
+          '--x': 'var(--ZXZentrix-500)',
+          '--space-4': '16px',
+        },
+      }),
+    ).content;
+    expect(md.toLowerCase()).not.toContain('zentrix');
+    expect(md).toContain('`--space-4`');
+    expect(sanitize('XMLZentrix ZENTRIXapi', on('zentrix.com'))).not.toMatch(/zentrix/i);
+  });
+
   it('T2.03 host forms and a title-only brand never reach any prompt or DESIGN.md', () => {
     const cases: [string, string][] = [
       ['app.zentrix.io', 'Untitled'],
@@ -112,5 +156,12 @@ describe('ethics guardrail: brand names in identifiers (audit H3, M15, M16)', ()
     expect(info.label).toBe("the source's custom display face");
     expect(info.alternative).toBeTruthy();
     expect(info.stack.toLowerCase()).not.toContain('zentrix');
+
+    // Run together, with no hump or separator (lens B B4).
+    const joined = { ...family, name: 'zentrixsans', stack: 'zentrixsans, sans-serif' };
+    expect(fontInfo(scan, joined).branded).toBe(true);
+    scan.typography.families[0] = joined;
+    for (const [where, out] of outputs(scan))
+      expect(out.toLowerCase(), where).not.toContain('zentrix');
   });
 });

@@ -8,6 +8,7 @@ import {
   deleteScans,
   listScans,
   loadChat,
+  replaceStoredScan,
   saveChat,
   saveScan,
   thumbBlobs,
@@ -102,6 +103,29 @@ describe('Library db: stored rows from older builds', () => {
     // Reads don't write back: the stored row is untouched, and a second read gives the same result.
     expect((await db.scans.get('legacy'))?.schemaVersion).toBe(3);
     expect((await listScans()).find((s) => s.id === 'legacy')).toEqual(listed);
+  });
+});
+
+describe('Library db: writes are validated (lens B B3)', () => {
+  it('T4.01 a write that breaks the schema rejects and leaves the stored row as it was', async () => {
+    const badHex = scanOf('bad');
+    badHex.colors = {
+      ...badHex.colors,
+      palette: badHex.colors.palette.map((t, i) => (i === 0 ? { ...t, hex: 'zzz' } : t)),
+    };
+    await expect(saveScan(badHex, null)).rejects.toThrow();
+    expect(await db.scans.get('bad')).toBeUndefined();
+    await expect(replaceStoredScan(badHex)).rejects.toThrow();
+    expect(await db.scans.get('bad')).toBeUndefined();
+
+    await saveScan(scanOf('keep'), null);
+    const dark = { roles: { background: 'no-such-id' } };
+    await expect(updateScan('keep', { variants: { dark } })).rejects.toThrow();
+    const listed = (await listScans()).find((s) => s.id === 'keep');
+    expect(listed?.variants?.dark?.roles).toBeUndefined();
+    // A valid patch still goes through.
+    await updateScan('keep', { title: 'Renamed' });
+    expect((await listScans()).find((s) => s.id === 'keep')?.title).toBe('Renamed');
   });
 });
 

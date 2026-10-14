@@ -134,8 +134,18 @@ ticket's "migrate() rejects" check would become "migrate() repairs". I recommend
 - PR #29 opened 2026-10-15; CI `gate` green on 79ab376. Lens A + contract r1 (pe-99): APPROVED, 0 findings
   (`docs/sprint/reviews/SPC-17-a-r1.md`); its condition (CI green) is met.
 
+- Lens B r1 (`docs/sprint/reviews/SPC-17-b-r1.md`, 0C/2H/2M/3L) folded in, tests first (each failed before the fix):
+  - B1 (HIGH): digit humps only for tokens of 4+ chars; a hex-only token (abc, cafe) never matches after `#hex`. Tests: hex/unit table, `#abcdef`/`tab` with `ab`, and the accent hex survives in prompt + DESIGN.md.
+  - B2 (HIGH): DESIGN.md also drops a var whose value references a branded `--name`; added the acronym hump on the left (`UIZentrix`) and all-caps-before-lowercase on the right (`ZENTRIXapi`).
+  - B3 (MED): `db.ts` validates on write: `saveScan`, `replaceStoredScan`, `saveCompose`, and `updateScan` when `variants` is patched (the merged row; an older stored row is repaired first). Every caller already catches. The optional "N scans couldn't be read" Library note is not done: it's lane-B UI, so it's flagged to the orchestrator.
+  - B4 (MED): `fontInfo` uses `nameHasBrand` (`zentrixsans` → branded).
+  - B5 (LOW): repair drops alpha-0 values and keeps translucency (`alpha = min(token, parsed)`).
+  - B6 (LOW): not fixed. It existed before this PR (`/iu` didn't fold ß/İ or accents either), and multi-char case folding plus NFD needs its own tests; suggested as a follow-up.
+  - B7 (LOW): covered by the B1, B2 and B5 tests.
+  - `pnpm gate` green: core 69, ai 158, extension 86, e2e 51.
+
 ## Next
-- Still to come: lens B and security reviews. Remaining reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
+- PE re-review of the lens-B fixes. Still to come: lens B and security reviews. Remaining reviews: PE lens A, a fresh lens B, plus security (per plan.md). Fold the findings in as new commits.
 
 ## How to resume
 Read this file, then `git log origin/main..exec/spc-17`. Part 1 can be built once the PE approves; Part 2 waits for

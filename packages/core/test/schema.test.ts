@@ -143,6 +143,18 @@ describe('schema integrity (audit H4)', () => {
     expect(migrate({ ...out, schemaVersion: 3 })).toEqual(out);
   });
 
+  it('T1.01 repair keeps translucency and drops fully transparent tokens (lens B B5)', () => {
+    const old = { ...v4(), schemaVersion: 3 } as unknown as Scan;
+    old.colors.palette.push(tok('c3', 'transparent'), tok('c4', 'rgba(1, 2, 3, 0.5)'));
+    old.colors.roles = { ...old.colors.roles, surface: 'c3', border: 'c4' };
+    const out = migrate(old);
+    expect(out.colors.palette.find((t) => t.id === 'c3')).toBeUndefined();
+    expect(out.colors.roles.surface).toBeUndefined();
+    const half = out.colors.palette.find((t) => t.id === 'c4');
+    expect(half?.hex).toBe('#010203');
+    expect(half?.alpha).toBe(0.5);
+  });
+
   it('T1.01 clean v1–v3 rows upgrade unchanged, with no repair warning', () => {
     for (const v of [1, 2, 3]) {
       const out = migrate({ ...v4(), schemaVersion: v });

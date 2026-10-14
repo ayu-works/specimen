@@ -25,13 +25,15 @@ function repairColors(scan: Rec): Rec {
     return palette.flatMap((t: unknown) => {
       if (!isRec(t) || typeof t.hex !== 'string' || HEX.test(t.hex)) return [t];
       const rgba = parseColor(t.hex);
-      if (!rgba) {
+      // A fully transparent value (`transparent`) isn't a color a role can use.
+      if (!rgba || rgba.alpha === 0) {
         dropped++;
         return [];
       }
       const solid = { ...rgba, alpha: 1 };
+      const alpha = typeof t.alpha === 'number' ? Math.min(t.alpha, rgba.alpha) : rgba.alpha;
       fixed++;
-      return [{ ...t, hex: toHex(solid), oklch: toOklch(solid) }];
+      return [{ ...t, hex: toHex(solid), oklch: toOklch(solid), alpha }];
     });
   };
   const fixRoles = (r: unknown, palette: unknown): unknown => {

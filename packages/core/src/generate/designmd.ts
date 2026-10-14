@@ -295,7 +295,13 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
   // CSS variables
   const tokens = brandTokens(scan);
   const vars = Object.entries(scan.cssVariables)
-    .filter(([k, v]) => !nameHasBrand(k, tokens) && !containsBrand(v, tokens))
+    .filter(
+      ([k, v]) =>
+        !nameHasBrand(k, tokens) &&
+        !containsBrand(v, tokens) &&
+        // An alias (`var(--zentrixblue)`) carries the brand in a variable name.
+        !(v.match(/--[\w-]+/g) ?? []).some((ref) => nameHasBrand(ref, tokens)),
+    )
     .slice(0, 40);
   if (vars.length > 0) {
     out.push(

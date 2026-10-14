@@ -71,9 +71,20 @@ export function nameHasBrand(name: string, tokens: string[]): boolean {
 
 // Boundaries are case-sensitive (a hump is lower→upper), so the regex can't use the `i` flag:
 // under /iu, \p{Lu} also matches lowercase letters. The token itself is spelled per character.
-const WORD_L = '(?:(?<![\\p{L}\\p{N}])|(?<=\\p{Ll})(?=\\p{Lu})|(?<=\\p{N})(?=\\p{L}))';
-const WORD_R =
-  '(?:(?![\\p{L}\\p{N}])|(?<=[\\p{Ll}\\p{N}])(?=\\p{Lu})|(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})|(?<=\\p{L})(?=\\p{N}))(?!-gradient)';
+const BOUND_L = [
+  '(?<![\\p{L}\\p{N}])', // start of a word
+  '(?<=\\p{Ll})(?=\\p{Lu})', // camel hump: myZentrix
+  '(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})', // after an acronym: UIZentrix
+];
+const BOUND_R = [
+  '(?![\\p{L}\\p{N}])', // end of a word
+  '(?<=[\\p{Ll}\\p{N}])(?=\\p{Lu})', // camel hump: zentrixBlue
+  '(?<=\\p{Lu})(?=\\p{Lu}\\p{Ll})', // before a capitalised word: ZENTRIXBlue
+];
+// Digit humps (zentrix500, 2zentrix) only for tokens of 4+ characters: a short token would eat
+// CSS units (100vw, 150ms).
+const DIGIT_L = '(?<=\\p{N})(?=\\p{L})';
+const DIGIT_R = '(?<=\\p{L})(?=\\p{N})';
 
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -93,7 +104,20 @@ function anyCase(w: string): string {
 }
 
 function wordRegex(w: string): RegExp {
-  return new RegExp(`${WORD_L}${anyCase(w)}${WORD_R}`, 'gu');
+  const long = w.length >= 4;
+  const left = [...BOUND_L, ...(long ? [DIGIT_L] : [])];
+  const right = [
+    ...BOUND_R,
+    // An all-caps brand before a lowercase run: ZENTRIXapi.
+    `(?<=\\p{Lu}{${[...w].length}})(?=\\p{Ll})`,
+    ...(long ? [DIGIT_R] : []),
+  ];
+  // A token spelled only with hex digits (abc, cafe) must never match inside a color literal.
+  const notInHex = /^[0-9a-f]+$/i.test(w) ? '(?<!#[0-9a-fA-F]*)' : '';
+  return new RegExp(
+    `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!-gradient)`,
+    'gu',
+  );
 }
 
 function devMode(): boolean {

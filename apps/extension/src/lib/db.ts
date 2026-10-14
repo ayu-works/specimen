@@ -2,7 +2,7 @@
  * Local library (ARCHITECTURE §9): IndexedDB via Dexie, db `specimen`.
  * Everything stays on the device; scans are re-validated through `migrate()` on every read.
  */
-import { type DesignScan, migrate } from '@specimen/core/schema';
+import { type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
 
 export interface StoredScan extends DesignScan {
@@ -74,6 +74,7 @@ export async function saveScan(
   screenshot: string | null,
   extra: { tags?: string[] } = {},
 ): Promise<StoredScan> {
+  DesignScanSchema.parse(scan);
   const row: StoredScan = { ...scan, tags: extra.tags ?? [] };
   await db.scans.put(row);
   const blob = screenshot ? dataUrlToBlob(screenshot) : null;
@@ -110,11 +111,24 @@ export async function updateScan(
   id: string,
   patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe' | 'variants'>>,
 ): Promise<void> {
-  await db.scans.update(id, patch);
+  if (!patch.variants) {
+    await db.scans.update(id, patch);
+    return;
+  }
+  // Variants carry palettes and role ids: check the merged row, so a bad patch fails here and
+  // not later as a scan that no longer reads back.
+  await db.transaction('rw', db.scans, async () => {
+    const row = await db.scans.get(id);
+    if (!row) return;
+    // The stored row may be older (repaired on read); the patch itself must meet the current schema.
+    DesignScanSchema.parse({ ...migrate(row), ...patch });
+    await db.scans.put({ ...row, ...patch });
+  });
 }
 
 /** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
 export async function replaceStoredScan(scan: DesignScan): Promise<void> {
+  DesignScanSchema.parse(scan);
   const old = await db.scans.get(scan.id);
   await db.scans.put({ ...scan, tags: old?.tags ?? [], favorite: old?.favorite });
 }
@@ -163,6 +177,7 @@ export async function saveChat(scanId: string, messages: ChatMessage[]): Promise
 }
 
 export async function saveCompose(row: ComposeRow, composed: DesignScan): Promise<void> {
+  DesignScanSchema.parse(composed);
   await db.transaction('rw', db.scans, db.composes, async () => {
     await db.composes.put(row);
     await db.scans.put({ ...composed, tags: ['composed'] });
