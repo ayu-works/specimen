@@ -1,44 +1,36 @@
-# Sprint 1 plan: close the test gaps
+# Sprint 2 plan: critique-panel spike (SPC-22)
 
-Approved by the owner on 2026-10-14. **Done when:** `pnpm gate` is green with `pnpm check-ids --all` covering phases
-0–7 (the dropped MCP IDs marked as dropped), CI is green on `main`, and the failure-path audit's CRITICAL/HIGH findings
-are filed as tickets.
+Approved by the owner on 2026-10-14/15 ("right after this sprint"; tests it with their own **Groq** key). Sprint 1's plan
+and results are in git history and `standups/2026-10-15-sprint-1-summary.md`.
 
-Context: the deferred testing pass already shipped (PR #9: 87/87 IDs for phases 0–5). v1.0.0 is live on the Chrome
-Web Store (2026-10-13); the site and the video are done. This sprint only changes tests, CI and docs, so it needs
-**no CWS release**.
+**Done when:** the owner can open a dev build of the extension, scan a site, start a "critique panel" where 2–3 AI
+reviewers with different viewpoints discuss the scan in turns, type into the discussion to steer it, and get a short
+"keep / change" list at the end, using Groq through the existing BYOK preset. The owner then decides go / no-go (a
+comment on SPC-22).
+
+**Hard limits (from CLAUDE.md and the owner):**
+- **No CWS release.** The feature sits behind an off-by-default flag. The owner tests it in a dev build loaded unpacked
+  (`pnpm build`, then load `apps/extension/.output/chrome-mv3`). The published extension is unchanged.
+- **Grounded in the scan:** every reviewer sees the same `compactScan` in `<page_data>`, the same as `ask()`. No brand names in
+  output (the guardrail sanitizer applies to every turn).
+- **Cost cap:** a visible turn/round limit (default: 3 reviewers × 2 rounds + 1 summary), with a Stop button. Abort
+  stops all streaming.
+- **Provider-agnostic:** it uses `LLMProvider` only. Works with any configured provider; with no provider it shows the
+  same setup hint as Ask (degrades gracefully).
+- **Keys:** agents never handle the real key; tests use the mock provider. The owner enters the Groq key in Options.
+- **No `site/` change** (no Netlify deploy). No `DesignScan` schema change.
 
 ## Lanes
-| Lane | Owns (only this lane edits these) | Tickets, in order |
+| Lane | Owns | Ticket |
 |---|---|---|
-| **A** | `scripts/`, `.github/workflows/`, `docs/TESTING.md`, `apps/video/` (tests and config only, never renders or audio), root `package.json` scripts | SPC-6 → SPC-7 → SPC-14 |
-| **B** | website tests and their config (a new folder, e.g. `site-tests/` or `apps/extension/e2e/site/`, agreed in SPC-8's plan), `docs/IMPLEMENTATION.md`, `docs/PLAN.md`, `docs/HANDOFF.md`, `CLAUDE.md`; `site/` only for SPC-15's overflow fix | SPC-8 (+ SPC-15) → SPC-11 → SPC-12 |
-| **PE** | `docs/sprint/reviews/` (findings only) | SPC-13, between reviews |
-| **Orchestrator** | `docs/sprint/*` on `sprint/log`, Linear | SPC-5 first |
-| **Owner** | | SPC-9 (manual checks), SPC-10 (MCP decision, backlog) |
-
-A ticket that needs a file another lane owns (e.g. SPC-11 needs a CI job) asks the orchestrator, which sequences it
-behind the owning lane's open ticket ("blocked by" in Linear).
+| **C** | `packages/ai/src/features/critique*.ts` (+ tests), `apps/extension/src/entrypoints/sidepanel/views/Critique*.tsx` (+ tests), the minimal wiring in the side-panel nav/App, and the flag (Options or storage), as agreed in the plan | SPC-22 |
+| **PE** | reviews; `docs/sprint/reviews/` | |
 
 ## Tickets
-| Ticket | What | Blocked by | Reviews |
-|---|---|---|---|
-| SPC-5 | Team smoke test (2 test panes, alert hooks, account switch) | | none (orchestrator) |
-| SPC-6 | T6.07 gitleaks scan of the whole history in CI + locally | | PE + lens B + security |
-| SPC-7 | T7.04 Remotion compositions: frame count = fps × duration (video CI job) | | PE + lens B |
-| SPC-8 | T7.01 + T7.03 website e2e: links, CTAs, 375px no horizontal scroll | | PE + lens B |
-| SPC-11 | T7.02 Lighthouse report, a non-blocking CI job | SPC-6, SPC-8 | PE + lens B + measurement |
-| SPC-15 | Bug: `/privacy` scrolls sideways at 375px with fallback fonts (found by SPC-8). **Ships in SPC-8's PR.** `site/` is live on merge | | with SPC-8 |
-| SPC-12 | (moved to the free lane-A slot 2026-10-14; files unchanged) Docs drift (CLAUDE.md workflow → pointer to `docs/sprint/`; IMPLEMENTATION.md Phase 7; HANDOFF.md) | SPC-8 | PE only (doc-only) |
-| SPC-14 | check-ids covers phases 0–7; mark T6.01–T6.05 dropped in TESTING.md | SPC-6, SPC-7, SPC-8, SPC-11 | PE + lens B + contract (owner OKs the TESTING.md format) |
-| SPC-13 | Failure-path audit of the existing suites (read-only findings) | | orchestrator reads; files tickets |
+| Ticket | What | Reviews |
+|---|---|---|
+| SPC-22 | Critique-panel spike behind a flag | PE lens A + lens B + privacy (page data to a provider, cost) |
 
-**Runs in parallel:** after SPC-5, lane A starts SPC-6 and lane B starts SPC-8 at the same time. The PE reviews plans
-and PRs as they come, and works on SPC-13 when idle.
-
-## Backlog (not in this sprint; the owner picks)
-- **Audit fixes (Extension project, from SPC-13):** SPC-16 key echo in provider errors (H5, H12), SPC-17 brand leak and schema (H3, H4), SPC-18 llmHost abort (H1, H2), SPC-19 import atomicity (H6, H7), SPC-20 scan failure paths (H8, H9, H11), SPC-21 deny-capable stubs (H10, H13). These are real user-facing bugs, so they need a v1.0.1 CWS release.
-- Expose the existing token exports (Tailwind, CSS vars, shadcn, DTCG, Figma) in the side panel.
-- Re-capture the `fixtures/raw/*` real sites and measure extraction accuracy against them (a `measurement` ticket).
-- The MCP bridge's future (SPC-10).
-- A v1.0.1 CWS release, once something user-facing changes.
+## Backlog (owner picks next)
+SPC-16 to SPC-21 (audit bugs, need v1.0.1), SPC-23 (/fonts Cache-Control, batch with site work), SPC-9 (manual checks),
+SPC-10 (MCP), token exports in the side panel, extraction-accuracy measurement.
