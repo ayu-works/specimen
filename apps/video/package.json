@@ -9,7 +9,8 @@
     "studio": "pnpm music && remotion studio src/index.ts",
     "render": "pnpm music && tsx scripts/render.ts",
     "still": "remotion still src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.534",
@@ -24,6 +25,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }

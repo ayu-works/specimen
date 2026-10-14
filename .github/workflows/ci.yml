@@ -81,3 +81,5 @@ jobs:
         run: pnpm i --frozen-lockfile --filter @specimen/video
       - if: steps.changed.outputs.run == 'true'
         run: pnpm typecheck:video
+      - if: steps.changed.outputs.run == 'true'
+        run: pnpm test:video

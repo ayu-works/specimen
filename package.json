@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "pnpm -F @specimen/extension dev",
     "build": "pnpm -F @specimen/extension build",
-    "test": "pnpm -r --if-present test && pnpm test:scripts",
+    "test": "pnpm -r --filter '!@specimen/video' --if-present test && pnpm test:scripts",
     "test:scripts": "tsx --test scripts/*.test.ts",
     "zip": "pnpm -F @specimen/extension zip",
     "e2e": "pnpm -F @specimen/extension e2e",
@@ -21,7 +21,8 @@
     "capture": "tsx scripts/capture.ts",
     "fixtures:raw": "tsx scripts/fixtures-raw.ts",
     "fixtures:summary": "tsx scripts/fixtures-summary.ts",
-    "typecheck:video": "pnpm -F @specimen/video typecheck"
+    "typecheck:video": "pnpm -F @specimen/video typecheck",
+    "test:video": "pnpm -F @specimen/video test"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
