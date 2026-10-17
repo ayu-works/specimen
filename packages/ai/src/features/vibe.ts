@@ -1,4 +1,4 @@
-import type { DesignScan } from '@specimen/core/schema';
+import { BOUNDS, cutText, type DesignScan } from '@specimen/core/schema';
 import { z } from 'zod';
 import { IMAGE_REJECTED_TEXT } from '../errors';
 import { type LLMProvider, ProviderError } from '../types';
@@ -12,6 +12,22 @@ export const VibeSchema = z.object({
 export type Vibe = z.infer<typeof VibeSchema>;
 
 export const VIBE_FILTERED = 'The description was filtered (brand names are removed).';
+
+/** Keywords kept, and raw keywords looked at to find them (some may sanitize to nothing). */
+const MAX_KEYWORDS = Math.min(8, BOUNDS.keywords);
+const RAW_KEYWORDS = 4 * MAX_KEYWORDS;
+
+/**
+ * Sanitized `text` within `max` chars (the v5 bound), so `updateScan` accepts it. Only a bounded
+ * slice (2 × max) goes through the sanitizer; that cut may split a brand name, so its trailing
+ * partial word is dropped before the final cut. Fails closed like `safe`: `''`, never raw text.
+ */
+function clamp(text: string, max: number, scan: DesignScan): string {
+  const pre = cutText(text, 2 * max);
+  let out = safe(pre, scan);
+  if (pre.length < text.length) out = out.replace(/\S*$/, '');
+  return cutText(out.trim(), max).trim();
+}
 
 const SYSTEM_IMAGE = [
   'You describe the visual feel of a website screenshot for a designer.',
@@ -98,14 +114,15 @@ export async function vibe(
     : { summary: raw.replace(/[{}"]/g, '').trim().slice(0, 280), keywords: [] };
   if (!result.summary) throw new ProviderError('other', 'The model returned no description.');
   // Fail closed: a summary the brand filter empties (or can't process) is never shown raw.
-  const summary = safe(result.summary, scan).trim();
+  const summary = clamp(result.summary, BOUNDS.vibeSummary, scan);
   if (!summary) throw new ProviderError('other', VIBE_FILTERED);
   return {
     summary,
     keywords: result.keywords
-      .map((k) => safe(k, scan).trim())
+      .slice(0, RAW_KEYWORDS)
+      .map((k) => clamp(k, BOUNDS.keyword, scan))
       .filter(Boolean)
-      .slice(0, 8),
+      .slice(0, MAX_KEYWORDS),
     model: provider.id,
     usedImage,
   };

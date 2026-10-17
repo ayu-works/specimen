@@ -1,9 +1,10 @@
+import { BOUNDS, type DesignScan, DesignScanSchema } from '@specimen/core/schema';
 import { describe, expect, it } from 'vitest';
 import { httpError } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan } from '../testing/testUtils';
 import { ProviderError } from '../types';
-import { vibe } from './vibe';
+import { VIBE_FILTERED, vibe } from './vibe';
 
 const scan = loadFixtureScan('landing-basic');
 const SHOT = 'data:image/jpeg;base64,QUJD';
@@ -95,5 +96,85 @@ describe('vibe', () => {
     const v = await vibe(p, scan, null);
     expect(v.summary).toBe('Quiet, spacious and precise.');
     expect(v.keywords).toEqual([]);
+  });
+});
+
+// A looping model ignores maxTokens: its vibe must still fit the v5 bounds, or updateScan rejects it.
+describe('vibe output fits the DesignScan v5 bounds (SPC-33)', () => {
+  const branded: DesignScan = {
+    ...scan,
+    host: 'zentrix.io',
+    url: 'https://zentrix.io/',
+    title: 'Zentrix',
+  };
+  const reply = (summary: string, keywords: string[]) => JSON.stringify({ summary, keywords });
+  const fitsSchema = (v: { summary: string; keywords: string[]; model: string }) =>
+    DesignScanSchema.safeParse({ ...scan, vibe: { summary: v.summary, keywords: v.keywords, model: v.model } })
+      .success;
+
+  it('T3.35 a looping JSON reply is clamped: summary, keyword count and keyword length', async () => {
+    const summary = 'calm airy spacious '.repeat(3000);
+    const keywords = Array.from({ length: 10_000 }, (_, i) => `k${i} ${'wide '.repeat(100)}`);
+    const p = createMockProvider({ text: reply(summary, keywords) });
+    const v = await vibe(p, scan, null);
+    expect(v.summary.length).toBeGreaterThan(0);
+    expect(v.summary.length).toBeLessThanOrEqual(BOUNDS.vibeSummary);
+    expect(v.summary.startsWith('calm airy spacious')).toBe(true);
+    expect(v.keywords.length).toBeGreaterThan(0);
+    expect(v.keywords.length).toBeLessThanOrEqual(Math.min(8, BOUNDS.keywords));
+    for (const k of v.keywords) expect(k.length).toBeLessThanOrEqual(BOUNDS.keyword);
+    expect(fitsSchema(v)).toBe(true);
+  });
+
+  it('T3.35 an over-long one-word keyword is dropped, not cut (its tail may hold a brand)', async () => {
+    const p = createMockProvider({ text: reply('Calm.', ['x'.repeat(500), 'calm']) });
+    expect((await vibe(p, scan, null)).keywords).toEqual(['calm']);
+  });
+
+  it('T3.35 keywords the brand filter empties do not shrink the list', async () => {
+    const keywords = [...Array.from({ length: 6 }, () => 'zentrix'), ...'abcdefghij'.split('')];
+    const p = createMockProvider({ text: reply('Calm and airy.', keywords) });
+    const v = await vibe(p, branded, null);
+    expect(v.keywords).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+  });
+
+  it('T3.35 a cut never splits a surrogate pair', async () => {
+    const summary = `${'a '.repeat((BOUNDS.vibeSummary - 2) / 2)}a😀 calm`;
+    const p = createMockProvider({ text: reply(summary, []) });
+    const v = await vibe(p, scan, null);
+    expect(v.summary.length).toBeLessThanOrEqual(BOUNDS.vibeSummary);
+    expect(v.summary).not.toMatch(/[\ud800-\udbff]$/);
+    expect(fitsSchema(v)).toBe(true);
+  });
+
+  it('T3.35 a looping non-JSON reply stays within the bound', async () => {
+    const p = createMockProvider({ text: 'quiet spacious precise '.repeat(5000) });
+    const v = await vibe(p, scan, null);
+    expect(v.summary.length).toBeLessThanOrEqual(BOUNDS.vibeSummary);
+    expect(fitsSchema(v)).toBe(true);
+  });
+
+  it('T3.35 a brand split by the pre-sanitize cut never survives as a fragment', async () => {
+    // JSON-escaped, so the whole-reply pass in collect can't see it; only the summary's own pass
+    // does. "calm " then "Zentrix " repeated puts the 2 × bound pre-cut inside a brand ("Zen…").
+    const n = Math.ceil((2 * BOUNDS.vibeSummary) / 8) + 10;
+    const text = `{"summary":"calm ${'Zen\\u0074rix '.repeat(n)}","keywords":[]}`;
+    const p = createMockProvider({ text });
+    const v = await vibe(p, branded, null);
+    expect(v.summary.toLowerCase()).not.toContain('zen');
+    expect(v.summary.length).toBeLessThanOrEqual(BOUNDS.vibeSummary);
+  });
+
+  it('T3.35 a pre-capped reply that is one long word fails closed as filtered', async () => {
+    const p = createMockProvider({ text: reply('a'.repeat(3 * BOUNDS.vibeSummary), []) });
+    await expect(vibe(p, scan, null)).rejects.toMatchObject({
+      kind: 'other',
+      message: VIBE_FILTERED,
+    });
+  });
+
+  it('T3.35 a summary that is all brand still fails closed as filtered (SPC-32 kept)', async () => {
+    const p = createMockProvider({ text: String.raw`{"summary":"Zen\u0074rix","keywords":["calm"]}` });
+    await expect(vibe(p, branded, null)).rejects.toMatchObject({ message: VIBE_FILTERED });
   });
 });
