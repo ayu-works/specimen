@@ -6,9 +6,8 @@
 `packages/core/src/generate/common.ts:272`, used only by `table()` (every DESIGN.md table goes through it).
 It turns `|` into `\|` and leaves backslashes alone, so a value `a\|b` comes out as `a\\|b`.
 
-**Question:** in GFM, does `\\|` split the cell? Both micromark-extension-gfm-table and cmark-gfm's row scanner
-consume a backslash and the next character as a pair, so `\\` pairs up and the `|` after it is a real
-delimiter. My guess is that it splits, but this is the measurement.
+**Question:** in GFM, does `\\|` split the cell? (My guess at plan time, that cmark-gfm pairs backslashes like
+micromark, was **wrong**: see Lens B r1. Only micromark pairs and splits.)
 
 ### Measurement first
 - **Parser:** `mdast-util-from-markdown` + `micromark-extension-gfm-table` + `mdast-util-gfm-table` as
@@ -49,8 +48,8 @@ delimiter. My guess is that it splits, but this is the measurement.
 - **Idempotency:** `cell()` runs once per value in `table()`; nothing calls it twice. A test asserts
   `table()` output of an already escaped looking value (`a\\\|b`) still round-trips to itself.
 - **Partial output / atomicity / concurrency / cleanup:** n/a (pure string function, no I/O).
-- **Parser drift:** GitHub renders with cmark-gfm, which I can't run here without a native dep. Note in the
-  PR that the measurement is micromark's; its table scanner treats `\` + char as a pair like cmark-gfm's.
+- **Parser drift:** GitHub renders with cmark-gfm, which can't run here. Lens B measured it via GitHub's API: it
+  never splits on `\|` and strips one `\`. The tests now run under micromark and a model of those rules.
 - **Snapshots:** no fixture contains a backslash before a pipe, so existing snapshots shouldn't move. If one
   does, that's a visible change and I stop.
 
@@ -108,4 +107,8 @@ across `code()` and `cell()`); HTML `<code>` + `&#124;` (DESIGN.md is read raw b
   is from 2026-09-11, not 2023.
 
 ## Next / how to resume
-- PR #51 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-36-a-r1.md`). Lens B r1 in `docs/sprint/reviews/SPC-36-b-r1.md`. Waiting on pe-b2 to re-decide M1: keep option 1 (comment fixed) or option 1b (lossless plain-text fallback inside `cell()`).
+- PR #51 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-36-a-r1.md`). Lens B r1 in `docs/sprint/reviews/SPC-36-b-r1.md`. pe-b2 re-ruled M1: KEEP option 1 (the only form that's one cell in both families; plain text exact in both;
+  code cell doubled, accepted). Rejected the plain-text fallback (needs its own markdown escaping; rule splits).
+  Folded: `cell()` comment corrected; `githubTables()` helper (split on any `|` not after `\`, strip one `\`,
+  escapes in plain text, code literal) and every test runs under both parsers. Checked against the old `cell()`:
+  the helper reproduces lens B's GitHub "OLD plain" column exactly. LOWs: L1/L3 follow-ups (orchestrator), L2 no change.

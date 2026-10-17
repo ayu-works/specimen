@@ -269,12 +269,12 @@ export function jsonOut(data: unknown): string {
 const BREAKS = /\r\n|[\u0000-\u0008\u000A-\u001F\u007F\u2028\u2029]/g;
 
 /**
- * Escape a value for a Markdown table cell. GFM's row scanner pairs a backslash with the next
- * character, so `a\|b` escaped as `a\\|b` split the cell (SPC-36, measured with
- * micromark-extension-gfm-table: an odd backslash run before `|` gave an extra column). A run
- * right before a pipe is doubled, then the pipe escaped. Plain text reads back exactly; inside a
- * code span (no escapes there; the table strips only the `\` before `|`) the run shows doubled.
- * No form round-trips there, and a doubled backslash beats a split row.
+ * Escape a value for a Markdown table cell. Scanners disagree on a backslash before `|` (SPC-36):
+ * micromark (remark, MDX) pairs backslashes, so `a\|b` escaped as `a\\|b` split the cell;
+ * cmark-gfm (GitHub) and markdown-it never split on `\|` and strip one `\`. A run right before a
+ * pipe is doubled, then the pipe escaped: one cell everywhere, and plain text reads back exactly
+ * everywhere. Inside a code span (no escapes there) the run shows doubled; no form round-trips
+ * in both families, and a doubled backslash beats a shifted row.
  */
 export function cell(s: string | number): string {
   return String(s)
