@@ -135,6 +135,21 @@ describe('rescanUrl closes the tab it opened on failure (SPC-45)', () => {
     expect(b.remove).toHaveBeenCalledTimes(1);
   });
 
+  it('T5.14 a scan that never answers (DOMContentLoaded never reached) is bounded; a late answer is not saved', async () => {
+    const t = stubTabs(() => loading);
+    let answer: ((v: unknown) => void) | undefined;
+    send.mockImplementation(() => new Promise((r) => (answer = r)));
+    const p = rescanUrl(PAGE);
+    const r = await settle(p, 30000 + 800 + 19999);
+    expect(r.error).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.error?.message).toBe('The page took too long to load');
+    expect(t.remove).toHaveBeenCalledTimes(1);
+    answer?.({ raw: { hints: undefined }, screenshot: 'data:late' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(saveScan).not.toHaveBeenCalled();
+  });
+
   it('T5.14 success: returns the scan and favicon, and leaves the tab open', async () => {
     const t = stubTabs(() => complete);
     const r = await settle(rescanUrl(PAGE));

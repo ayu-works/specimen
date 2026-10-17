@@ -273,8 +273,8 @@ describe('waitForTabLoad (SPC-28)', () => {
 
   it('T5.12 scanIfCommitted: a committed page still loading at the limit resolves, then nothing is left', async () => {
     const t = stubTabs([loading]);
-    const s = track(waitForTabLoad(ID, { timeoutMs: 3000, recheckMs: 500, scanIfCommitted: true }));
-    await vi.advanceTimersByTimeAsync(2999);
+    const s = track(waitForTabLoad(ID, { timeoutMs: 8000, recheckMs: 500, scanIfCommitted: true }));
+    await vi.advanceTimersByTimeAsync(7999);
     expect(s.state).toBe('pending');
     await vi.advanceTimersByTimeAsync(1);
     expect(s.state).toBe('resolved');
@@ -304,20 +304,59 @@ describe('waitForTabLoad (SPC-28)', () => {
     // Reads never answer, so the last state comes from events alone.
     const a = stubTabs([loading]);
     a.get.mockImplementation(() => new Promise<Tab>(() => {}));
-    const s1 = track(waitForTabLoad(ID, { timeoutMs: 3000, scanIfCommitted: true }));
+    const s1 = track(waitForTabLoad(ID, { timeoutMs: 8000, scanIfCommitted: true }));
     await vi.advanceTimersByTimeAsync(100);
     a.fireUpdated(9, { status: 'loading' }, { id: 9, status: 'loading', url: PAGE });
-    await vi.advanceTimersByTimeAsync(2900);
+    await vi.advanceTimersByTimeAsync(7900);
     expect(s1.state).toBe('rejected');
 
     const b = stubTabs([loading]);
     b.get.mockImplementation(() => new Promise<Tab>(() => {}));
-    const s2 = track(waitForTabLoad(ID, { timeoutMs: 3000, scanIfCommitted: true }));
+    const s2 = track(waitForTabLoad(ID, { timeoutMs: 8000, scanIfCommitted: true }));
     await vi.advanceTimersByTimeAsync(100);
     b.fireUpdated(ID, { status: 'loading' }, loading);
-    await vi.advanceTimersByTimeAsync(2900);
+    await vi.advanceTimersByTimeAsync(7900);
     expect(s2.state).toBe('resolved');
     expect(b.listeners()).toBe(0);
+  });
+
+  it('T5.12 scanIfCommitted: a page that committed just before the limit still rejects', async () => {
+    let state: Tab = { id: ID, status: 'loading', pendingUrl: PAGE };
+    const t = stubTabs([state]);
+    t.get.mockImplementation(async () => state);
+    const s = track(
+      waitForTabLoad(ID, { timeoutMs: 30000, recheckMs: 500, scanIfCommitted: true }),
+    );
+    await vi.advanceTimersByTimeAsync(27000);
+    state = loading; // committed 3 s before the limit: under the 5 s minimum
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.state).toBe('rejected');
+    expect(s.error?.message).toBe('The page took too long to load');
+
+    // A new navigation resets the clock: committed, then pending again, then committed late.
+    state = loading;
+    const s2 = track(
+      waitForTabLoad(ID, { timeoutMs: 30000, recheckMs: 500, scanIfCommitted: true }),
+    );
+    await vi.advanceTimersByTimeAsync(20000);
+    state = { id: ID, status: 'loading', pendingUrl: PAGE };
+    await vi.advanceTimersByTimeAsync(7000);
+    state = loading;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s2.state).toBe('rejected');
+  });
+
+  it('T5.12 scanIfCommitted: a read issued before an event cannot overwrite it', async () => {
+    let answer: ((t: Tab) => void) | undefined;
+    const t = stubTabs([loading]);
+    t.get.mockImplementation(() => new Promise<Tab>((r) => (answer = r)));
+    const s = track(waitForTabLoad(ID, { timeoutMs: 8000, recheckMs: 500, scanIfCommitted: true }));
+    await vi.advanceTimersByTimeAsync(100);
+    // A client-side redirect starts while the read is in flight; the read then answers the old page.
+    t.fireUpdated(ID, { status: 'loading' }, { id: ID, status: 'loading', pendingUrl: PAGE });
+    answer?.(loading);
+    await vi.advanceTimersByTimeAsync(7900);
+    expect(s.state).toBe('rejected');
   });
 
   it('T5.12 a slow read is never overlapped by the next one', async () => {

@@ -105,3 +105,15 @@ committed event can't satisfy it, tested). (c) The accepted residuals go in the 
 - PR is open against exec/spc-44; fold in review files from `docs/sprint/reviews/SPC-45-*.md` with new commits.
 - 2026-10-17: PR #48 open. Lens A r1 (pe-b2): APPROVED, 0 findings, committed. CI reports no checks on this branch
   (the PR's base is exec/spc-44, not main). Waiting for lens B.
+- 2026-10-17: lens B r1 (spc-45-e9): 0 C · 1 H · 2 M · 3 L. Folded in a new commit:
+  - **H1** (a committed page that never reaches DOMContentLoaded holds `executeScript` at document_idle forever):
+    `rescanUrl` bounds the scan at 20 s (`scanWithin`). It rejects with the timeout text, closes the tab, and
+    `scanTab`'s new `signal` drops a late answer before it's saved. This isn't verified by a manual run: the bound is
+    correct whether or not document_idle hangs. Manual test 3 now uses a page that reaches DCL and holds `load` (a
+    stalled `<img>`).
+  - **M1:** scan-what's-there needs ≥ 5 s committed (`COMMITTED_MIN_MS`); the clock resets when a `pendingUrl` shows up.
+  - **L1:** a read answer is ignored for `last` if an event for our tab arrived while it was in flight.
+  - **M2** (the "Reload it…/Click Scan again" texts after the tab is closed), **L2** (Library re-scan drops
+    `saveError`), **L3** (two concurrent re-scans share panel state): all need `Library/index.tsx`, which SPC-43's open
+    PR owns. Proposed to the orchestrator as follow-ups, not done here.
+  - The 3 new cases fail on the pre-fix code; 33/33 pass.
