@@ -217,6 +217,8 @@ export function Scan() {
   }, [scanId]);
 
   const scanning = status === 'scanning';
+  // A failed scan keeps the last one in the store (Generate and Inspect still use it): say it is that one.
+  const stale = status === 'error' && !!scan;
   return (
     <div className="flex flex-col gap-3">
       {!scan && (
@@ -256,11 +258,29 @@ export function Scan() {
           className="flex items-start gap-2 rounded-md border border-destructive/40 p-2 text-destructive"
         >
           {scan && <Mascot size={32} mood="sad" />}
-          <span className="min-w-0">{error}</span>
+          <span className="min-w-0">
+            {error}
+            {stale && <span className="block">The card below is your previous scan.</span>}
+          </span>
         </div>
       )}
       {scan && (
-        <Card className="flex flex-col gap-2.5" data-testid="scan-result">
+        <Card
+          className={`flex flex-col gap-2.5${stale ? ' border-dashed' : ''}`}
+          data-testid="scan-result"
+          data-stale={stale ? 'true' : undefined}
+          aria-labelledby={stale ? 'previous-scan' : undefined}
+          role={stale ? 'region' : undefined}
+        >
+          {stale && (
+            <p
+              id="previous-scan"
+              data-testid="previous-scan"
+              className="rounded border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
+            >
+              Previous scan: {scan.host}. The last scan failed.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {/* Only a brief reaction: at rest the favicon alone identifies the scan. */}
             {(scanning || cheer) && (
@@ -307,13 +327,15 @@ export function Scan() {
             </details>
           )}
           <Captures scan={scan} />
-          <Button onClick={() => setTab('generate')}>Generate prompt</Button>
+          <Button onClick={() => setTab('generate')}>
+            {stale ? 'Generate prompt (previous scan)' : 'Generate prompt'}
+          </Button>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setTab('inspect')}>
               Inspect
             </Button>
             <Button variant="outline" onClick={run} disabled={scanning}>
-              {scanning ? 'Scanning…' : 'Re-scan'}
+              {scanning ? 'Scanning…' : stale ? 'Scan this page' : 'Re-scan'}
             </Button>
           </div>
         </Card>
