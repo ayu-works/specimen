@@ -1,6 +1,6 @@
 import { BOUNDS, type DesignScan, DesignScanSchema } from '@specimen/core/schema';
 import { describe, expect, it } from 'vitest';
-import { httpError } from '../errors';
+import { httpError, TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan } from '../testing/testUtils';
 import { ProviderError } from '../types';
@@ -32,6 +32,19 @@ describe('vibe', () => {
     expect(v.usedImage).toBe(false);
     expect(typeof p.calls[0]?.messages[0]?.content).toBe('string');
     expect(String(p.calls[0]?.messages[0]?.content)).toContain('<page_data>');
+  });
+
+  it('a reply cut off at the length limit rejects with the cut-off text and is never parsed', async () => {
+    const p = createMockProvider({
+      chunks: ['{"summary":"Calm and airy."', '}', ',"keywords":["calm"'],
+      error: new ProviderError('other', TRUNCATED_TEXT),
+      errorAfter: 3,
+    });
+    await expect(vibe(p, scan, null)).rejects.toMatchObject({
+      kind: 'other',
+      message: TRUNCATED_TEXT,
+    });
+    expect(p.calls).toHaveLength(1);
   });
 
   it('is text-only when no screenshot is given', async () => {

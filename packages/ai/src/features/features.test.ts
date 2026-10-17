@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan, loadInjectionStrings } from '../testing/testUtils';
 import { ProviderError } from '../types';
@@ -17,6 +18,16 @@ const ORIGINAL = [
 ].join('\n');
 
 describe('polishPrompt', () => {
+  it('T3.07 a rewrite cut off at the length limit keeps the original, with the cut-off reason', async () => {
+    const p = createMockProvider({
+      chunks: [ORIGINAL.slice(0, 40)],
+      error: new ProviderError('other', TRUNCATED_TEXT),
+      errorAfter: 1,
+    });
+    const r = await polishPrompt(p, scan, ORIGINAL);
+    expect(r).toEqual({ text: ORIGINAL, polished: false, reason: TRUNCATED_TEXT });
+  });
+
   it('T3.07 accepts a faithful rewrite and marks it polished', async () => {
     const rewrite = [
       '# Design system',
@@ -166,6 +177,21 @@ describe('ask', () => {
     expect(out).toBe('abcdefghij');
     expect(seen).toEqual(['abcd', 'abcdefgh', 'abcdefghij']);
     expect(p.calls[0]?.messages).toHaveLength(13);
+  });
+
+  it('T3.08 an answer cut off mid-way still reports its whole sanitized text before the error', async () => {
+    // One open line past the stream sanitizer's 512-char threshold: running snapshots lag behind it.
+    const line = 'The accent #0d9488 sits on white at 16px. '.repeat(20).slice(0, 700);
+    const p = createMockProvider({
+      chunks: line.match(/.{1,50}/gs) ?? [],
+      error: new ProviderError('other', TRUNCATED_TEXT),
+      errorAfter: 14,
+    });
+    const seen: string[] = [];
+    await expect(ask(p, scan, 'q', [], { onText: (t) => seen.push(t) })).rejects.toMatchObject({
+      message: TRUNCATED_TEXT,
+    });
+    expect(seen.at(-1)).toBe(line);
   });
 
   it('T3.08 strips the website host and brand from answers', async () => {

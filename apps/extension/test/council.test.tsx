@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { CRITIQUE_TRUNCATED } from '@specimen/ai';
 import { createMockProvider } from '@specimen/ai/testing';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -269,6 +270,35 @@ describe('Ask + council (component)', () => {
     );
     // The header mascot was sad until the panel showed it.
     await waitFor(() => expect(headerMood()).toBe('idle'));
+  });
+
+  it('T3.33 a cut-off turn shows its partial text above the error, and no verdict report', async () => {
+    await putRun(
+      record({
+        status: 'error',
+        verdict: null,
+        error: CRITIQUE_TRUNCATED,
+        turns: [
+          { kind: 'persona', persona: 'brand', content: 'turn 1 at 16px.', status: 'done' },
+          {
+            kind: 'summary',
+            content: 'Verdict: Solid.\nWorks:\n- 16px rhythm\nChange:\n- Raise',
+            status: 'error',
+            error: CRITIQUE_TRUNCATED,
+          },
+        ],
+      }),
+    );
+    inject(mock());
+    await flagOn();
+    useStore.setState({ askMode: 'council' });
+    render(<App />);
+    expect((await screen.findByTestId('council-error')).textContent).toContain(CRITIQUE_TRUNCATED);
+    const summary = screen.getByTestId('council-turn-summary');
+    expect(summary.textContent).toContain('Verdict: Solid.');
+    expect(summary.textContent).toContain(CRITIQUE_TRUNCATED);
+    expect(screen.queryByTestId('council-report')).toBeNull();
+    expect(screen.queryByTestId('council-verdict')).toBeNull();
   });
 
   it('T3.32 reattach: no offscreen document → interrupted', async () => {

@@ -15,9 +15,19 @@ export async function collect(
 ): Promise<string> {
   let raw = '';
   const snapshot = safeStream(scan);
-  for await (const d of provider.chat(req, signal)) {
-    raw += d;
-    if (onText) onText(snapshot(raw));
+  try {
+    for await (const d of provider.chat(req, signal)) {
+      raw += d;
+      if (onText) onText(snapshot(raw));
+    }
+  } catch (e) {
+    // The last snapshot can lag on a long line: callers that keep the partial text get all of it.
+    try {
+      if (onText && raw) onText(safe(raw, scan));
+    } catch {
+      /* never mask the provider's error */
+    }
+    throw e;
   }
   return safe(raw, scan);
 }

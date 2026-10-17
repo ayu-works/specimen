@@ -1,4 +1,11 @@
-import type { LlmEvent, LlmRequest } from '@specimen/ai';
+import {
+  CRITIQUE_TRUNCATED,
+  createWebLLMProvider,
+  type LlmEvent,
+  type LlmRequest,
+  type PortLike,
+  runCritique,
+} from '@specimen/ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -6,7 +13,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * with `finish_reason: 'abort'`, and one generation runs at a time. Each `create()` takes the next
  * entry of `state.calls` (default: three tokens, one every 10 ms).
  */
-type Call = { tokens?: string[]; manual?: boolean; throwAt?: number; endAbort?: boolean };
+type Call = {
+  tokens?: string[];
+  manual?: boolean;
+  throwAt?: number;
+  endAbort?: boolean;
+  /** End like WebLLM at `max_tokens`: `finish_reason: 'length'`. */
+  endLength?: boolean;
+};
 type Stream = { interrupted: boolean; wake: () => void };
 
 const state = vi.hoisted(() => ({
@@ -50,7 +64,14 @@ vi.mock('@mlc-ai/web-llm', () => {
         if (call.throwAt === i) throw new Error('decode failed');
         yield { choices: [{ delta: { content: tokens[i] }, finish_reason: null }] };
       }
-      yield { choices: [{ delta: {}, finish_reason: call.endAbort ? 'abort' : 'stop' }] };
+      yield {
+        choices: [
+          {
+            delta: {},
+            finish_reason: call.endAbort ? 'abort' : call.endLength ? 'length' : 'stop',
+          },
+        ],
+      };
     } finally {
       if (state.current === h) state.current = null;
     }
@@ -115,6 +136,7 @@ vi.mock('@mlc-ai/web-llm', () => {
 });
 vi.mock('@/lib/webllmConfig', () => ({ buildAppConfig: () => ({ model_list: [] }) }));
 
+import { sampleScan } from '@/entrypoints/sidepanel/dev/sampleScan';
 import { DEFAULT_GEMMA, GEMMA_MODELS } from '@/lib/gemmaModels';
 import { createPortPair } from '@/lib/localPort';
 
@@ -306,6 +328,56 @@ describe('llm Port protocol (host)', () => {
     c.send({ type: 'chat', id: 'A', req: req('a') });
     expect(await c.waitFor(ended('A'))).toMatchObject({ type: 'error', kind: 'other' });
     expect(c.of('A').some((e) => e.type === 'done')).toBe(false);
+  });
+
+  it('T3.11 a stream that ends at the length limit sends done{truncated}, never a plain done', async () => {
+    const c = await loaded();
+    c.send({ type: 'chat', id: 'whole', req: req('w') });
+    expect(await c.waitFor(ended('whole'))).toEqual({ type: 'done', id: 'whole' });
+    state.calls = [{ endLength: true }];
+    c.send({ type: 'chat', id: 'cut', req: req('c') });
+    expect(await c.waitFor(ended('cut'))).toEqual({ type: 'done', id: 'cut', truncated: true });
+    expect(c.of('cut').map((e) => e.type)).toEqual(['delta', 'delta', 'delta', 'done']);
+    // The queue moves on.
+    c.send({ type: 'chat', id: 'next', req: req('n') });
+    expect(await c.waitFor(ended('next'))).toEqual({ type: 'done', id: 'next' });
+  });
+
+  it('T3.11 a chat stopped by its own abort ends aborted even if the stream then hits the length limit', async () => {
+    const c = await loaded();
+    state.calls = [{ manual: true, endLength: true }];
+    state.loseInterrupts = 100; // every interrupt is lost: the stream runs to its 'length' end
+    c.send({ type: 'chat', id: 'A', req: req('a') });
+    for (let i = 0; i < 100 && !state.current; i++) await sleep(5);
+    c.send({ type: 'abort', id: 'A' });
+    for (let i = 0; i < 10 && state.current; i++) {
+      state.current.wake();
+      await sleep(5);
+    }
+    expect(await c.waitFor(ended('A'))).toMatchObject({ type: 'error', kind: 'aborted' });
+    expect(c.of('A').some((e) => e.type === 'done')).toBe(false);
+  });
+
+  it('T3.11 end to end: a council whose summary hits the length limit stops with no verdict', async () => {
+    const connect = (): PortLike => {
+      const [client, end] = createPortPair('llm');
+      host.attachLlmPort(end as unknown as chrome.runtime.Port);
+      return client as unknown as PortLike;
+    };
+    const provider = createWebLLMProvider({ modelId: DEFAULT_GEMMA, connect });
+    // Two reviewers × one round, then a summary whose cut-off text would still parse as a verdict.
+    state.calls = [
+      { tokens: ['Contrast ', 'is 4.6:1.'] },
+      { tokens: ['Spacing ', 'is 16px.'] },
+      { tokens: ['Verdict: Solid.\nWorks:\n- 16px rhythm\n', 'Change:\n- Raise'], endLength: true },
+    ];
+    const r = await runCritique(provider, sampleScan, { personas: ['brand', 'a11y'], rounds: 1 });
+    expect(state.creates).toHaveLength(3);
+    expect(r.status).toBe('error');
+    expect(r.error).toBe(CRITIQUE_TRUNCATED);
+    expect(r.turns.at(-1)).toMatchObject({ kind: 'summary', status: 'error' });
+    expect(r.turns.at(-1)?.content).toContain('Verdict: Solid.');
+    expect(r.verdict).toBeNull();
   });
 
   it("T3.11 a port can't abort another port's chat", async () => {

@@ -1,3 +1,4 @@
+import { TRUNCATED_TEXT } from '../errors';
 import type { LlmEvent, PortLike } from '../llmProtocol';
 import { LLM_PORT } from '../llmProtocol';
 import type { LLMProvider } from '../types';
@@ -153,8 +154,11 @@ export class WebLLMClient {
       for (;;) {
         const ev = await q.next();
         if (ev.type === 'delta' && ev.id === id) yield ev.text;
-        else if (ev.type === 'done' && ev.id === id) return;
-        else if (ev.type === 'error' && (ev.id === id || ev.id === undefined)) {
+        else if (ev.type === 'done' && ev.id === id) {
+          // Every delta is already out: callers keep the partial text, but never as a whole reply.
+          if (ev.truncated) throw new ProviderError('other', TRUNCATED_TEXT);
+          return;
+        } else if (ev.type === 'error' && (ev.id === id || ev.id === undefined)) {
           throw new ProviderError(ev.kind, ev.message);
         }
       }

@@ -17,7 +17,12 @@ export type LlmEvent =
   | { type: 'progress'; p: number; text: string }
   | { type: 'ready'; modelId: string }
   | { type: 'delta'; id: string; text: string }
-  | { type: 'done'; id: string }
+  | {
+      type: 'done';
+      id: string;
+      /** The model stopped at `maxTokens` (WebLLM `finish_reason: 'length'`): the text is cut off. */
+      truncated?: true;
+    }
   | { type: 'error'; id?: string; kind: ProviderErrorKind; message: string }
   | { type: 'deleted'; modelId: string }
   | {

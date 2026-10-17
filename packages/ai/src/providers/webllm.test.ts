@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { TRUNCATED_TEXT } from '../errors';
 import type { LlmEvent, LlmRequest, PortLike } from '../llmProtocol';
 import { drain } from '../testing/testUtils';
+import { ProviderError } from '../types';
 import { createWebLLMProvider, WebLLMClient } from './webllm';
 
 /** A fake Port wired to a scripted host: `script` answers each request with events. */
@@ -93,6 +95,27 @@ describe('llm Port protocol (client)', () => {
       kind: 'other',
       message: 'GPU ran out of memory',
     });
+  });
+
+  it('T3.11 chat: done{truncated} yields every delta, then rejects with the fixed cut-off text', async () => {
+    const f = fakePort((m, emit) => {
+      if (m.type !== 'chat') return;
+      emit({ type: 'delta', id: m.id, text: 'Verdict: ok' });
+      emit({ type: 'delta', id: m.id, text: '\nChange:\n- ' });
+      emit({ type: 'done', id: m.id, truncated: true });
+    });
+    const seen: string[] = [];
+    const run = async () => {
+      for await (const d of new WebLLMClient(undefined, () => f.port).chat(REQ)) seen.push(d);
+    };
+    const err = await run().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err).toMatchObject({ kind: 'other', message: TRUNCATED_TEXT });
+    expect(seen.join('')).toBe('Verdict: ok\nChange:\n- ');
+    expect(f.isDisconnected()).toBe(true);
   });
 
   it('T3.11 chat: abort posts an abort message for the same id and rejects as aborted', async () => {

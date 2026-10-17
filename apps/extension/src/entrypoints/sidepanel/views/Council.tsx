@@ -50,7 +50,15 @@ function Countdown({ at }: { at: number }) {
 }
 
 function TurnBody({ t }: { t: CritiqueTurn }) {
-  if (t.status === 'error') return <span className="text-destructive">{t.error}</span>;
+  if (t.status === 'error') {
+    // Text that streamed before the error (e.g. a reply cut off at the length limit); never a verdict.
+    return (
+      <>
+        {t.content && <span className="mb-1 block">{t.content}</span>}
+        <span className="text-destructive">{t.error}</span>
+      </>
+    );
+  }
   if (t.status === 'waiting' || t.status === 'retrying') {
     return <span className="text-muted-foreground">Waiting for the rate limit…</span>;
   }
