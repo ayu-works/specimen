@@ -66,8 +66,19 @@ after the text; (b) Gemini's `MAX_TOKENS` is final: one throw, later chunks are 
 
 - PR #45 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-41-a-r1.md`).
 
+- Lens B r1 (`docs/sprint/reviews/SPC-41-b-r1.md`): 1 HIGH, 1 MEDIUM, 4 LOW. Fold:
+  - **H1** (fixed): the BYOK Settings Test button (maxTokens 32) treated a reasoning model that thinks up to the cap
+    as broken. `Byok.tsx` `test()` now takes `TRUNCATED_TEXT` as "Works: connected"; every other error stays red.
+    The orchestrator gave me Byok.tsx. The tests are in a new file, `apps/extension/test/byokTest.test.tsx` (Groq
+    `length`, Gemini `MAX_TOKENS`, Anthropic `max_tokens` with no text → connected; a 401 is still an alert), because
+    `options.test.tsx` belongs to #40. The T3.13 row is #40's too, so these cases are described in the T3.02 row.
+  - **M1** (fixed): openaiCompat also treats Mistral's `model_length` as a cut-off (tested).
+  - **L3** (fixed): negative cases added: OpenAI `tool_calls`/`content_filter`, Anthropic
+    `stop_sequence`/`tool_use`/`refusal`, Gemini `SAFETY`/`RECITATION` end whole.
+  - **L1, L2, L4** (skipped): the orchestrator is filing them as one follow-up ticket (outside the token-limit scope).
+
 ## Next
-- Lens B review; fold its findings with new commits. Then wait for the owner's "merge all".
+- PE fold check (covers the H1 re-check). Then wait for the owner's "merge all".
 
 ## How to resume
 Branch `exec/spc-41`, worktree `worktrees/spc-41`. Read this file, then `packages/ai/src/providers/`.

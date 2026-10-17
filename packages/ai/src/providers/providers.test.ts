@@ -396,6 +396,12 @@ describe('a reply cut off at the token limit (SPC-41)', () => {
       'Hello',
     ],
     [
+      'T3.02 openaiCompat: Mistral\'s finish_reason "model_length" (context window full)',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', 'model_length'), 'data: [DONE]\n\n'],
+      'Hello',
+    ],
+    [
       'T3.03 anthropic: stop_reason "max_tokens"',
       ant,
       [antText('Hel'), antText('lo'), ...antStop('max_tokens')],
@@ -441,6 +447,22 @@ describe('a reply cut off at the token limit (SPC-41)', () => {
       [antText('Hel'), antText('lo'), ...antStop('end_turn')],
     ],
     ['T3.04 gemini: finishReason "STOP"', gem, [gemChunk('Hel'), gemChunk('lo', 'STOP')]],
+    // Other stop reasons are not a token-limit cut-off: an exact-value match must not widen.
+    ...['tool_calls', 'content_filter'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.02 openaiCompat: finish_reason "${r}"`,
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', r), 'data: [DONE]\n\n'],
+    ]),
+    ...['stop_sequence', 'tool_use', 'refusal'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.03 anthropic: stop_reason "${r}"`,
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop(r)],
+    ]),
+    ...['SAFETY', 'RECITATION'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.04 gemini: finishReason "${r}"`,
+      gem,
+      [gemChunk('Hel'), gemChunk('lo', r)],
+    ]),
   ];
   for (const [name, make, chunks] of whole) {
     it(`${name} still ends as a whole reply`, async () => {

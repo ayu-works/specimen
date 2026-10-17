@@ -6,6 +6,8 @@ import { postSse, trimSlash } from './http';
 
 /** Presets served by the OpenAI-compatible adapter (ARCHITECTURE §7). */
 export const OPENAI_COMPAT_PRESETS: readonly Preset[] = PRESETS.filter((p) => p.kind === 'openai');
+/** Finish reasons for a reply cut at a limit; Mistral says `model_length` when the context is full. */
+const CUT_OFF = new Set(['length', 'model_length']);
 
 function toContent(content: string | ContentPart[]): unknown {
   if (typeof content === 'string') return content;
@@ -65,7 +67,7 @@ export function createOpenAICompat(
         const text = json.choices?.[0]?.delta?.content;
         if (typeof text === 'string' && text) yield text;
         // The last text can share the chunk with the finish reason, so it goes out first.
-        if (json.choices?.[0]?.finish_reason === 'length')
+        if (CUT_OFF.has(String(json.choices?.[0]?.finish_reason)))
           throw new ProviderError('other', TRUNCATED_TEXT);
       }
     },
