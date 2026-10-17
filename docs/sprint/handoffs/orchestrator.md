@@ -6,7 +6,11 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 ~15:50 (CURRENT STATE)
+## UPDATE 2026-10-17 ~18:30 (CURRENT STATE)
+
+- Orchestrator **sprint-log-30** (pane w1:p2S, LEFT of control; the specimen-75 session resumed). The owner said "merge all": **#39–#55 are all merged**, main 8e9c479, CI green. TESTING.md row clashes were resolved by merging main into each branch (no force-push). All 17 tickets are Done with closing comments. The exec/spc-* branches are deleted (local + remote) and their worktrees removed. Still open: Backlog follow-ups SPC-47–54, 56–59; owner items SPC-9, SPC-10; SPC-23 (site + privacy debugger line).
+
+## UPDATE 2026-10-17 ~15:50
 
 - Orchestrator is now **specimen-5c** (w1:p3), restarted via keeper. All agents told. Rest of the state is the ~15:31 block below.
 - **CI red on every PR's gate:** gitleaks flags a dummy key (`sk-test-key-…`) in byokTest.test.tsx, commit 37da9be on exec/spc-41 (#45). PE ruling A (recommended): spc-41-18 rewrites the commit and force-pushes, with no allowlist. Then tell spc-38-63 and spc-43-b9 to re-run CI, and re-run the other PRs.
