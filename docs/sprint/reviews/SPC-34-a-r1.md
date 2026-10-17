@@ -37,3 +37,12 @@ In the PE worktree at 2bac238, I copied in the PR's tests together with its type
 - `packages/ai`: 3 failed (the T3.11 client test and T3.21 ×2) and 78 passed.
 - `apps/extension`: 3 failed (T3.12 Ask, the T3.11 host test and the T3.11 end-to-end test) and 33 passed.
 The polish and vibe tests pass on main, as expected: they pin behaviour that main already has.
+
+## Fold check (pe-4d, 2026-10-17): lens B r1 fold @ cb1bc74, APPROVED
+- **M1 (Council shows partial text):** `TurnBody` renders `t.content` above the error as a React text node.
+  Council error turns always hold `safe(raw)` (critique.ts:621), so it's sanitized. `Report`/verdict stay gated on
+  `done`, so no verdict appears on a cut. T3.33 fails on 81f7c0c's Council.tsx ("…length limit" without the partial text).
+- **L1 (collect's final snapshot):** on any throw, `collect` sends one `safe(raw)` before rethrowing. A throw from
+  `safe` is swallowed, so the provider error is never masked; `onText` runs before the caller handles the error.
+  T3.08 fails on 81f7c0c's collect.ts (the last snapshot lagged on the 700-char line).
+- L2–L4: no code, reasons in the handoff; agreed. Contract unchanged. 0 new findings.
