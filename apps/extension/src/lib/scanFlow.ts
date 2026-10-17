@@ -57,6 +57,11 @@ export interface ScanTabOptions {
   save?: boolean;
   /** Skip the thumbnail. */
   noScreenshot?: boolean;
+  /**
+   * Bound on the page's answer (`scan.run`), rejecting with the timeout text. A late answer is
+   * dropped; once the page has answered, extracting and saving are never cut off.
+   */
+  answerWithinMs?: number;
 }
 
 /**
@@ -64,10 +69,10 @@ export interface ScanTabOptions {
  * scan; it comes back as `saveError` so the panel can say so.
  */
 export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
-  const res = await send('scan.run', {
-    tabId,
-    opts: opts.noScreenshot ? { noScreenshot: true } : undefined,
-  });
+  const res = await within(
+    send('scan.run', { tabId, opts: opts.noScreenshot ? { noScreenshot: true } : undefined }),
+    opts.answerWithinMs,
+  );
   const scan = extract(res.raw);
   let saveError: string | null = null;
   if (opts.save !== false) {
@@ -87,6 +92,12 @@ export interface TabLoadOptions {
   url?: string;
   timeoutMs?: number;
   recheckMs?: number;
+  /**
+   * At the timeout, resolve instead of rejecting when the last state seen shows the navigation
+   * committed to a page we can see for at least `COMMITTED_MIN_MS` (still `loading`, e.g. a slow
+   * ad or iframe): scan what's there.
+   */
+  scanIfCommitted?: boolean;
 }
 
 /** Whether Chrome shows us `url` in `Tab.url` (no `tabs` permission: only with host access). */
@@ -101,6 +112,9 @@ async function urlVisible(url: string | undefined): Promise<boolean> {
 
 /** Hidden or blank `complete` reads after a pending navigation before we stop waiting (~2 s). */
 const ABANDONED_READS = 4;
+
+/** How long a page must have shown as committed before the timeout scans it as it is. */
+const COMMITTED_MIN_MS = 5000;
 
 /**
  * Resolve when the tab finishes loading; reject on timeout or when it is closed. The listener can
@@ -122,15 +136,36 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
     // and let the scan say what is really there (not a website, or site access needed).
     let pendingSeen = false;
     let blankReads = 0;
+    // The latest read or event tab for this id, for the timeout's committed check, and since when
+    // it has shown as committed. A read issued before an event can't overwrite what the event said.
+    let last: TabLoadState | undefined;
+    let committedAt: number | undefined;
+    let events = 0;
     /** Loaded means `complete` on the real page, never the initial about:blank or a pending navigation. */
     const loaded = (t: TabLoadState) => {
       if (t.pendingUrl || (t.url && t.url !== 'about:blank')) visible = true;
       if (t.status !== 'complete' || t.pendingUrl) return false;
       return t.url ? t.url !== 'about:blank' : !visible;
     };
-    const timer = setTimeout(() => done(new Error('The page took too long to load')), timeoutMs);
+    const committed = (t?: TabLoadState) =>
+      Boolean(t && !t.pendingUrl && t.url && t.url !== 'about:blank');
+    const see = (t: TabLoadState) => {
+      last = t;
+      if (!committed(t)) committedAt = undefined;
+      else committedAt ??= Date.now();
+    };
+    const timer = setTimeout(() => {
+      const settledFor = committedAt === undefined ? 0 : Date.now() - committedAt;
+      if (opts.scanIfCommitted && committed(last) && settledFor >= COMMITTED_MIN_MS) done();
+      else done(new Error('The page took too long to load'));
+    }, timeoutMs);
     const onUpdated = (tabId: number, info: { status?: string }, tab?: TabLoadState) => {
-      if (!ready || tabId !== id || info.status !== 'complete') return;
+      if (tabId !== id) return;
+      if (tab) {
+        events++;
+        see(tab);
+      }
+      if (!ready || info.status !== 'complete') return;
       // Without the tab argument, trust the event; with it, skip the initial about:blank.
       if (!tab || loaded(tab)) done();
     };
@@ -148,8 +183,10 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
       else resolve();
     }
     function check() {
+      const eventsBefore = events;
       chrome.tabs.get(id).then(
         (t) => {
+          if (events === eventsBefore) see(t);
           if (loaded(t)) return done();
           if (t.pendingUrl) pendingSeen = true;
           const abandoned = pendingSeen && t.status === 'complete' && !t.pendingUrl;
@@ -174,16 +211,51 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
   });
 }
 
-/** Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. */
+/** Close a tab we opened, best effort: it may already be gone, and cleanup never throws. */
+async function closeOwnTab(id: number): Promise<void> {
+  try {
+    await chrome.tabs.remove(id);
+  } catch {
+    // Already closed (No tab with id) or not closable: the caller's own error is what matters.
+  }
+}
+
+/** Bound on the page's answer: a page that committed but never reaches DOMContentLoaded can hold the injection. */
+const RESCAN_ANSWER_MS = 20000;
+
+/**
+ * Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. On
+ * success the tab stays open; on any failure the tab we opened (and only that one) is closed.
+ * A page still loading at the time limit is scanned as it is once its navigation has committed.
+ */
 export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: string | null }> {
   const tab = await chrome.tabs.create({ url, active: true });
   const id = tab.id;
   if (id === undefined) throw new Error('Could not open a tab');
-  await waitForTabLoad(id, { url });
-  await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
-  const out = await scanTab(id);
-  const fresh = await chrome.tabs.get(id).catch(() => null);
-  return { ...out, favicon: fresh?.favIconUrl ?? null };
+  try {
+    await waitForTabLoad(id, { url, scanIfCommitted: true });
+    await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
+    const out = await scanTab(id, { answerWithinMs: RESCAN_ANSWER_MS });
+    const fresh = await chrome.tabs.get(id).catch(() => null);
+    return { ...out, favicon: fresh?.favIconUrl ?? null };
+  } catch (e) {
+    await closeOwnTab(id);
+    throw e;
+  }
+}
+
+/** `p`, or a rejection with the timeout text after `ms` (no bound when `ms` is undefined). */
+async function within<T>(p: Promise<T>, ms: number | undefined): Promise<T> {
+  if (ms === undefined) return p;
+  let bound: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    bound = setTimeout(() => reject(new Error('The page took too long to load')), ms);
+  });
+  try {
+    return await Promise.race([p, limit]);
+  } finally {
+    clearTimeout(bound);
+  }
 }
 
 export { sameUrl } from './sameUrl';
