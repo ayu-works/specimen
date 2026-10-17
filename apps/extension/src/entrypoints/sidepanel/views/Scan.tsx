@@ -260,19 +260,25 @@ export function Scan() {
           {scan && <Mascot size={32} mood="sad" />}
           <span className="min-w-0">
             {error}
-            {stale && ' The card below is your previous scan.'}
+            {stale && <span className="block">The card below is your previous scan.</span>}
           </span>
         </div>
       )}
       {scan && (
         <Card
-          className={`flex flex-col gap-2.5${stale ? ' opacity-70' : ''}`}
+          className={`flex flex-col gap-2.5${stale ? ' border-dashed' : ''}`}
           data-testid="scan-result"
           data-stale={stale ? 'true' : undefined}
+          aria-labelledby={stale ? 'previous-scan' : undefined}
+          role={stale ? 'region' : undefined}
         >
           {stale && (
-            <p role="note" data-testid="previous-scan" className="text-xs font-medium">
-              Previous scan, not this page.
+            <p
+              id="previous-scan"
+              data-testid="previous-scan"
+              className="rounded border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
+            >
+              Previous scan: {scan.host}. The last scan failed.
             </p>
           )}
           <div className="flex items-center gap-2">
@@ -321,7 +327,9 @@ export function Scan() {
             </details>
           )}
           <Captures scan={scan} />
-          <Button onClick={() => setTab('generate')}>Generate prompt</Button>
+          <Button onClick={() => setTab('generate')}>
+            {stale ? 'Generate prompt (previous scan)' : 'Generate prompt'}
+          </Button>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setTab('inspect')}>
               Inspect

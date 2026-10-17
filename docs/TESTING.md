@@ -76,7 +76,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T1.34 | E | Inspector hover streams the element's styles to the panel |
 | T1.35 | 🖐 | Scan linear.app, stripe.com, ramp.com, cal.com: roles and type look right (screenshots in the PR) |
 | T1.36 | 🖐 | Eyedropper pick → nearest token shown |
-| T1.37 | C | A failed scan after one that worked (SPC-38): the old card stays but is labelled "Previous scan, not this page." (`data-stale`), the alert says the card below is the previous scan, and the card's button reads "Scan this page"; its Add another page still merges into the previous scan's id; a retry that works shows the new scan with no label; no label while the retry runs; a failure with no earlier scan shows the alert alone; an unsaved previous scan keeps its "Not saved to Library" line; opening a Library scan clears the label |
+| T1.37 | C | A failed scan after one that worked (SPC-38): the old card stays but is labelled "Previous scan: <host>. The last scan failed." (`data-stale`, a region named by that label), the alert says on its own line that the card below is the previous scan (also after an unmapped error), the card's buttons read "Scan this page" and "Generate prompt (previous scan)"; its Add another page still merges into the previous scan's id; a background failure (timeout) labels it too; Alt+Shift+C whose scan fails lands on Scan with the alert and label (one that works stays on Generate); a retry that works shows the new scan with no label; no label while the retry runs; a failure with no earlier scan shows the alert alone; an unsaved previous scan keeps its "Not saved to Library" line; opening a Library scan clears the label |
 
 ## Phase 2: Outputs
 | ID | Type | Test |

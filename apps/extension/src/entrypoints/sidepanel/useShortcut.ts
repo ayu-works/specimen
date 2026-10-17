@@ -25,6 +25,8 @@ async function consume(): Promise<void> {
     }
     setTab('generate');
     await runTabScan();
+    // Generate would keep showing the previous scan's prompt: the failure and its label are on Scan.
+    if (useStore.getState().status === 'error') setTab('scan');
   } catch {
     /* storage.session unavailable: the shortcut just opens the panel */
   } finally {

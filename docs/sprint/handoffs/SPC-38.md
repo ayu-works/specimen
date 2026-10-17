@@ -75,7 +75,7 @@ Driven through the real `runTabScan` and the real `<Scan />`, like `scanSave.tes
 then go back and scan again → normal card).
 
 ## Done
-- `Scan.tsx`: `stale = status === 'error' && !!scan`; label "Previous scan, not this page." (`data-testid="previous-scan"`,
+- (r0) `Scan.tsx`: `stale = status === 'error' && !!scan`; label "Previous scan, not this page." (reworded in the lens B fold) (`data-testid="previous-scan"`,
   role `note`), card `data-stale="true"` + `opacity-70`, alert adds "The card below is your previous scan.", button
   "Scan this page" instead of "Re-scan".
 - `test/scanStale.test.tsx`: 7 T1.37 tests (plan 1–7). Per pe-b2's note, test 2 also pins that the stale card's
@@ -85,4 +85,18 @@ then go back and scan again → normal card).
 
 ## Next / how to resume
 - Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-38-a-r1.md`).
-- Waiting for the lens-B review; fold findings in new commits.
+- Lens B r1 (`docs/sprint/reviews/SPC-38-b-r1.md`, 1H 2M 4L) folded in one commit:
+  - H1: `useShortcut.consume` switches to the Scan tab when the shortcut's scan ends in `error`, so the alert and
+    label are what the user sees (reviewer's smallest option; no Generate.tsx or store change). Tests: a failing
+    shortcut lands on Scan with the alert + label; a working one stays on Generate. Checked the test fails without the fix.
+  - M1: the label is a full-strength chip (`border-destructive/40`, `text-destructive`, the alert's style); the card's
+    `opacity-70` is gone, the card gets a dashed border instead. No tinted fill: 10% red behind small red text drops
+    below 4.5:1 on the light theme.
+  - M2: a stale card is `role="region"` named by the label (`aria-labelledby`), and "Generate prompt" reads
+    "Generate prompt (previous scan)". "Add another page" keeps its text: it does add the current tab, to that scan.
+  - L1: the "card below" sentence is its own block line. Test with an unmapped error.
+  - L2: label reworded to "Previous scan: <host>. The last scan failed." (true whatever tab is active).
+  - L3: skipped. The "Click Scan again" wording is SPC-20's alert text, which this ticket keeps unchanged; flagged for
+    a later text pass.
+  - L4: test with a background failure (timeout) after a success.
+- Next: gate + CI green, then pe-b2 fold check and tell specimen-75.

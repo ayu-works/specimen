@@ -3,10 +3,19 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RawPage } from '@specimen/core/schema';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTabScan } from '../src/entrypoints/sidepanel/runScan';
 import { NO_EXTRAS, useStore } from '../src/entrypoints/sidepanel/store';
+import { useShortcut } from '../src/entrypoints/sidepanel/useShortcut';
 import { Scan } from '../src/entrypoints/sidepanel/views/Scan';
 import { db } from '../src/lib/db';
 import { type FakeChrome, installChrome } from './helpers/chrome';
@@ -42,6 +51,7 @@ beforeEach(async () => {
     saveError: null,
     extras: NO_EXTRAS,
     offer: null,
+    activeTab: 'scan',
   });
 });
 
@@ -80,10 +90,17 @@ describe('T1.37 a failed scan labels the card below it as the previous scan (SPC
     expect(alert.textContent).toContain(RESTRICTED);
     expect(alert.textContent).toContain('The card below is your previous scan.');
     expect(card().dataset.stale).toBe('true');
-    expect(screen.getByTestId('previous-scan').textContent).toBe('Previous scan, not this page.');
+    expect(screen.getByTestId('previous-scan').textContent).toBe(
+      'Previous scan: stripe.com. The last scan failed.',
+    );
+    // The card is named by the label, so its buttons are read in that context (lens B M2).
+    expect(
+      screen.getByRole('region', { name: 'Previous scan: stripe.com. The last scan failed.' }),
+    ).toBe(card());
     expect(card().textContent).toContain('stripe.com');
     expect(screen.queryByRole('button', { name: 'Re-scan' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Scan this page' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Generate prompt (previous scan)' })).toBeTruthy();
 
     // The card's own actions still act on the previous scan, by its id (PE note).
     activeTab('https://stripe.com/pricing');
@@ -108,6 +125,57 @@ describe('T1.37 a failed scan labels the card below it as the previous scan (SPC
     expect(card().textContent).toContain('linear.app');
     expect(card().textContent).not.toContain('stripe.com');
     expect(screen.getByRole('button', { name: 'Re-scan' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generate prompt' })).toBeTruthy();
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+
+  it('T1.37 a background failure after a success: the timeout text, then the label (lens B L4)', async () => {
+    render(<Scan />);
+    await act(() => runTabScan());
+    chrome.runtime.sendMessage = vi.fn(async () => ({
+      ok: false,
+      error: 'The page took too long to load',
+    })) as never;
+    await act(() => runTabScan());
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('The page took too long to load. Check the address');
+    expect(screen.getByTestId('previous-scan')).toBeTruthy();
+    expect(card().dataset.stale).toBe('true');
+  });
+
+  it('T1.37 an unmapped error with no final period stays apart from the "card below" sentence (lens B L1)', async () => {
+    render(<Scan />);
+    await act(() => runTabScan());
+    chrome.runtime.sendMessage = vi.fn(async () => ({
+      ok: false,
+      error: 'Could not open a tab',
+    })) as never;
+    await act(() => runTabScan());
+    const alert = screen.getByRole('alert');
+    const note = Array.from(alert.querySelectorAll('span')).find(
+      (el) => el.textContent === 'The card below is your previous scan.',
+    );
+    expect(note?.className).toContain('block');
+    expect(alert.textContent).toContain('Scan failed: Could not open a tab');
+  });
+
+  it('T1.37 Alt+Shift+C whose scan fails lands on Scan, not on the previous prompt (lens B H1)', async () => {
+    await act(() => runTabScan());
+    activeTab('chrome://settings/');
+    await chrome.storage.session.set({ 'shortcut.pending': Date.now() });
+    renderHook(() => useShortcut());
+    await waitFor(() => expect(useStore.getState().status).toBe('error'));
+    await waitFor(() => expect(useStore.getState().activeTab).toBe('scan'));
+    render(<Scan />);
+    expect(screen.getByRole('alert').textContent).toContain(RESTRICTED);
+    expect(screen.getByTestId('previous-scan')).toBeTruthy();
+  });
+
+  it('T1.37 Alt+Shift+C whose scan works still shows Generate', async () => {
+    await chrome.storage.session.set({ 'shortcut.pending': Date.now() });
+    renderHook(() => useShortcut());
+    await waitFor(() => expect(useStore.getState().status).toBe('done'));
+    expect(useStore.getState().activeTab).toBe('generate');
   });
 
   it('T1.37 while the retry runs, neither the alert nor the label is shown', async () => {
