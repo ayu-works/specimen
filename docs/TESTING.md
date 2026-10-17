@@ -82,7 +82,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 |---|---|---|
 | T2.01 | U | Prompt (generic) contains every role hex, the body + heading sizes, base unit, radii and the section list |
 | T2.02 | U | Each target (`claude-code`, `cursor`, `v0`, `lovable`) produces distinct wording and stack hints; snapshot |
-| T2.03 | U | **Ethics guardrail**: prompt never contains the site host/brand name, `title`, or heading snippets (fixture with brand text); DESIGN.md drops brands in camelCase, digit-suffixed and run-together CSS variable names (short brands only at boundaries); host forms (subdomain, `WWW.`, `.co.uk`, port, title-only) and the branded-font placeholder |
+| T2.03 | U | **Ethics guardrail**: prompt never contains the site host/brand name, `title`, or heading snippets (fixture with brand text); DESIGN.md drops brands in camelCase, digit-suffixed and run-together CSS variable names (short brands only at boundaries); host forms (subdomain, `WWW.`, `.co.uk`, port, title-only) and the branded-font placeholder; brands spelled with ß, İ/ı, accents, decomposed marks or fullwidth/ligature forms are matched on a folded skeleton in every generator and the stream sanitizer, removing exactly the original characters, with the B1 hex/unit cases kept on that path (SPC-31) |
 | T2.04 | U | Prompt length 800–1500 tokens (approx. tokenizer) on all raw fixtures |
 | T2.05 | U | DESIGN.md has a table for colors, type, spacing, radii, shadows, layout; parses as valid Markdown (remark) |
 | T2.06 | U | Tailwind v4 `@theme` output compiles with `@tailwindcss/node`; utility `bg-accent` resolves to the accent hex |
@@ -120,7 +120,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T3.19 | U | Critique panel: default 3 reviewers × 2 rounds + 1 summary in order; the cap (2–3 reviewers, 1–3 rounds) is enforced in the engine |
 | T3.20 | U | Critique panel: Stop mid-stream, before start, or by a stream that ends quietly on abort → turn and run `stopped`, no further call or summary |
 | T3.21 | U | Critique panel: a provider error mid-round ends the run with a fixed per-kind message (never the provider's text); a rate limit is retried up to 3 times after cancellable waits; known free-tier TPM limits (Groq) pace calls; a stalled stream times out; an empty reply is marked `empty` A reply cut off at the length limit (`TRUNCATED_TEXT`) ends the run with its own fixed text, no retry and no verdict (SPC-34). |
-| T3.22 | U | Critique panel: the brand sanitizer runs on every turn (snapshots, transcript, next request) and keeps measured values; an emptied turn is `filtered` |
+| T3.22 | U | Critique panel: the brand sanitizer runs on every turn (snapshots, transcript, next request) and keeps measured values; an emptied turn is `filtered`; a brand spelled with ß, İ, accents or fullwidth letters is gone from every turn and the verdict (SPC-31) |
 | T3.23 | U | Critique panel: a human message queued mid-turn reaches the next reviewer (clipped) without adding calls |
 | T3.24 | U | Critique panel: the transcript fits the context budget, keeping the newest turns and the latest human message |
 | T3.25 | ⊘ | **Dropped 2026-10-15** (replaced by T3.29 / T3.33, SPC-24): ~~Critique panel: `parseKeepChange` reads lenient keep/change lists and rejects prose~~ |
