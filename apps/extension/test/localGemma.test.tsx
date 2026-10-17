@@ -79,6 +79,8 @@ describe('Options: Local Gemma card without WebGPU (audit H13)', () => {
         const gpu = screen.getByTestId('webgpu-status');
         await waitFor(() => expect(gpu.textContent).toMatch(text));
         expect(gpu.className).toContain('text-destructive');
+        // Past 'checking', so only the GPU check can be what disables Download.
+        await waitFor(() => expect(status()).toBe('Not downloaded'));
         const button = screen.getByRole('button', { name: 'Download & load' }) as HTMLButtonElement;
         expect(button.disabled).toBe(true);
         fireEvent.click(button);

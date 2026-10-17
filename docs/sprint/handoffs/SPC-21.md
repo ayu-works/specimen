@@ -49,5 +49,5 @@ as intended.
 - **Drift:** the stub's "throw" message matches Chrome's real text (probed on 156.0.8078.4).
 
 ## Next / how to resume
-- Lens A r1 (pe-b2): APPROVED, L1 (debugger wording in the stub) folded in a follow-up commit. Waiting for lens B.
+- Lens A r1 (pe-b2): APPROVED, L1 folded. Lens B r1 (spc-21-ed): APPROVED 0C/0H/0M/3L, all three folded (T3.17 waits past `checking`, so removing the GPU guard fails 3 tests (checked); throw case uses a realistic error with a comment; `held` JSDoc for the `all` mode). Review rounds done; waiting on the owner to merge.
 - SPC-44 builds on this branch and can use `installChrome({permissions:…})` for its own refusal tests.

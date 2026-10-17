@@ -65,6 +65,7 @@ function permissionsArea(opts: PermissionOpts = {}) {
     ((q.origins ?? []).every((o) => held.origins.has(o) || held.origins.has('<all_urls>')) &&
       (q.permissions ?? []).every((p) => held.permissions.has(p)));
   return {
+    /** What was granted. In `'all'` mode it stays empty and `remove` is a no-op; pass `held: {}` to track grants. */
     held,
     contains: vi.fn(async (q: PermissionQuery = {}) => has(q)),
     request: vi.fn(async (q: PermissionQuery = {}) => {

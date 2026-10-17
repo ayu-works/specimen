@@ -180,7 +180,15 @@ describe('Options: API key when the browser says no (audit H13)', () => {
   });
 
   it('T3.13 Save when the permission request throws: the same message, the key is saved', async () => {
-    chrome = installChrome({ permissions: { held: {}, answer: 'throw' } });
+    // A real throw for a provider origin is a lost user gesture (the origin is always in
+    // optional_host_permissions). The "choose Allow" wording is today's, not a spec.
+    chrome = installChrome({
+      permissions: {
+        held: {},
+        answer: 'throw',
+        error: 'This function must be called during a user gesture',
+      },
+    });
     renderByok();
     typeKey();
     click('Save');
