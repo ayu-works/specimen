@@ -69,7 +69,7 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u);
   // A word cut by the window is a fragment, not a word.
-  if (scan.title.length > TITLE_SCAN) words.pop();
+  if (/[\p{L}\p{N}]/u.test(scan.title[TITLE_SCAN] ?? '')) words.pop();
   let n = 0;
   for (const w of words) {
     if (n >= MAX_TITLE_TOKENS) break;

@@ -69,7 +69,7 @@ export function describeBase(base: Record<string, string>): string {
     );
   }
   if (base['box-shadow'] && base['box-shadow'] !== 'none')
-    parts.push(`shadow \`${base['box-shadow']}\``);
+    parts.push(`shadow ${code(base['box-shadow'])}`);
   else if (base['box-shadow']) parts.push('no shadow');
   if (base.height) parts.push(`height ${px(Number.parseFloat(base.height))}`);
   return parts.join(', ');

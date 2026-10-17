@@ -130,8 +130,13 @@ title bound stays with SPC-19; (5) Vibe keywords are pinned as dropped when the 
   `packages/ai/src/features/failClosed.test.ts` (T3.22, T3.08, polish, Vibe). Existing guardrail tests unchanged.
 - `pnpm gate` green locally (gitleaks not installed here, so `secrets` was skipped; CI runs it).
 
+- Lens A r1 (`docs/sprint/reviews/SPC-32-a-r1.md`, 0C/0H/1M/2L) folded: M1, `code()` now also used in the
+  agent prompts (`prompt/sections.ts` font stack, shadow levels, card shadow; `components.ts` `describeBase`
+  shadow), with a T2.05 test over every prompt target + DESIGN.md. L2 also fixed: the last title word is dropped only
+  when the 300-char window really cuts it. L1 is accepted (it goes away with SPC-19's v5 title bound).
+
 ## Next
-- PR review (PE lens A, lens B, security). Fold findings as new commits.
+- Lens B + security review still running: fold as new commits.
 
 ## How to resume
 Read this file, `git log origin/main..`, and the review file above. `pnpm i` then `pnpm gate`.
