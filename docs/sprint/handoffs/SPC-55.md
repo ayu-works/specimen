@@ -91,6 +91,12 @@ any scanned page → a vibe is shown (no "error mid-response").
   #52's lane); the Gemini test catches drift.
 - `docs/TESTING.md` T3.35 row extended.
 
+- Lens A r1 (pe-b2): APPROVED, 0 C/H/M, 1 LOW (HTTP_400_PREFIX copies httpError's text; guarded by the Gemini
+  test; exporting a constant is a follow-up for errors.ts' lane). Rebased onto exec/spc-46 a877227.
+- SPC-46 lens B M1 (handed to SPC-55, "1200 too small for Gemini 2.5 thinking"): covered by the 10000 cap; the
+  1M-context test asserts 10000. Its L1 (whitespace runaway is longer with a bigger cap) is accepted: latency only,
+  still ends as TRUNCATED.
+
 ## Next / how to resume
 - `pnpm gate`, commit, push, PR (base `exec/spc-46`), comment on SPC-55, message specimen-5c. Then fold reviews.
 - Known, not this ticket: OpenAI o-series reject `max_tokens` (adapter fix filed separately by specimen-5c); a fixed
