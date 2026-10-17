@@ -37,3 +37,17 @@ The unit fake can't show this: each fake Port is independent.
 
 The rest of the PR (the shape guard typed against `InspectorHover`, the `live` flag, cleanup that removes the onConnect
 listener first and is idempotent) checks out and stays.
+
+## Fold check of r1 (4954fdf, pe-b2): APPROVED, C1 fixed, 0 new C/H/M, 1 LOW (a follow-up note)
+- **C1:** foreign Ports are ignored (return before any listener). Detach and onDisconnect only remove this panel's
+  listeners, and `port.disconnect()` appears nowhere in Inspect. The councilProtocol.ts comment now says "never
+  disconnect". The e2e "a council Port opened elsewhere still reaches its host while Inspect is on" pins the real Chrome
+  behaviour from my probe.
+- **B-H1:** the listener attaches (scoped to the scanned tab's sender) *before* `overlay.set`. The component test fires
+  the Port inside the `sendMessage` mock, and the real-button e2e hovers and sees the card, again after leaving the view.
+  Detach sends best-effort `overlay.set {inspector:false}` on unmount (B-M1). `pending` stops overlapping toggles.
+  32/32 component + council tests green here.
+- **L1 (for SPC-52, no change here):** two windows inspecting the *same* tab. Panel B's Inspect-on hits the
+  overlay's `on === inspecting` early return, so it never gets a Port, and panel B's Inspect-off makes the overlay
+  disconnect the Port panel A is reading. Same root cause as SPC-52 (the overlay should reconnect on every
+  `inspector:true`, and only stop when no panel wants it). Add this case to SPC-52.

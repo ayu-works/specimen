@@ -100,5 +100,9 @@ Not fixed here (follow-ups for the orchestrator):
   (local fake `onConnect`/Port; the shared stub is untouched); T1.38 row in docs/TESTING.md.
 - `pnpm gate` green locally (gitleaks not installed locally, CI runs it). T1.34 e2e and the council suites green.
 
+- 2026-10-17: pe-b2 fold check at 4954fdf: APPROVED, lens A done. One LOW for SPC-52 (two windows inspecting the
+  same tab: B's Inspect-on hits the overlay's early return, and B's Inspect-off ends A's stream), appended to
+  SPC-27-a-r1.md; no change here.
+
 ## Next / how to resume
-r1 folded and pushed → pe-b2 fold check (and lens B if asked). Reviews in docs/sprint/reviews/SPC-27-{a,b}-r1.md.
+Lens A done. Waiting on the orchestrator (lens B fold check if wanted) and the owner's final "merge all".
