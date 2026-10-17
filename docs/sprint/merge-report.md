@@ -7,6 +7,7 @@ Short and plain: one or two lines per item.
 - **#40 SPC-21: tests can now say "no".** Test-only. The tests can finally check what happens when you refuse a permission or have no WebGPU (for example, the key isn't saved and you get a clear message).
 - **#41 SPC-29: a flaky test is fixed.** Test-only. A council test sometimes failed on CI for no real reason. It now passes 60/60 even under heavy load.
 - **#42 SPC-37: local Gemma stays in a correct state.** Deleting or unloading the model during a download, or downloading during a delete, no longer leaves a wrong status. A quick Delete then Download no longer says "Not downloaded" for the whole download.
+- **#44 SPC-40: a stuck AI "vibe" no longer freezes a Library card.** If the AI never answers, the card stops after a time limit, shows an error and goes back to normal. A late answer is ignored.
 
 ## Decisions taken for you (standing OK: "go with the recommended")
 - **SPC-44 — remove the `debugger` permission (option B, you OK'd it directly).** Dark-mode and exact-mobile capture never worked for real users (Chrome refuses the permission at click time). We remove them and keep the permission-free fallbacks. Trade-off: some sites get estimated dark colours, and mobile scans may be a little wider than 390px.

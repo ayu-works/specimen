@@ -9,12 +9,12 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 ## UPDATE 2026-10-17 ~15:25 (CURRENT STATE)
 
 - Orchestrator specimen-75 (w1:p3); PE **pe-b2** (w1:pS); keeper sprint-log-50 (w1:p1R, tab keeper). Owner rules for THIS RUN: 3 at a time, no merges until one "merge all", go with the recommended option (record it in Linear and in merge-report.md). Reports: docs/sprint/merge-report.md (merge checklist), docs/sprint/reports/{sprint-report,linear-report}.md. Keep all of them short and plain.
-- **READY (both lenses + CI):** #39 SPC-28 (base main), #40 SPC-21, #41 SPC-29, #42 SPC-37 (head docs commit 306017f after the approval at a6feb5b).
+- **READY (both lenses + CI):** #39 SPC-28 (base main), #40 SPC-21, #41 SPC-29, #44 SPC-40 (5701c1f), #42 SPC-37 (head docs commit 306017f after the approval at a6feb5b).
 - **In review:** #43 SPC-44 (base exec/spc-28; spc-44-4d w1:p1V; lens A approved with an optional LOW; lens B r1 1M/3L being folded. M1 = check the xvfb popup width in the CI log). #44 SPC-40 (spc-40-3c w1:p1Z; lens A approved; lens B r1 2M/3L being folded). Both then go to pe-b2 for a fold check.
-- **Building:** SPC-38 (spc-38-63 w1:p22, stacked on exec/spc-44, PR base exec/spc-44, plan approved). SPC-41 (w1:p23, from main, just started).
+- **Building:** SPC-38 (spc-38-63 w1:p22, stacked on exec/spc-44, PR base exec/spc-44, plan approved). SPC-41 (spc-41-18 w1:p23, plan approved; contract ruling applied: all adapters throw TRUNCATED_TEXT). SPC-43 (w1:p24?, from main, just started; Library cross-panel refresh).
 - Panes closed: the spc-28, spc-29 and spc-37 executors and all reviewers. spc-21 (w1:p1N) is idle. Worktrees are kept for the merge-all rebases.
 - **Merge order at the end:** #39 → #43 → SPC-38's PR (stack; retarget each to main as its base merges, or merge with the base chain), then #40, #41, #42, #44, the rest. Rebase each on main; TESTING.md rows conflict (additive). `--match-head-commit`. Check main CI after each. Then Linear Done + closing comments.
-- Queue after SPC-41: SPC-42 → 43 → 45 (stack on #39: scanFlow.ts) → 30 → 31 → 36 → 27 → 23 (site; + privacy page debugger line) → 10 (PE recommends). SPC-9 is the owner's.
+- Queue: SPC-42 (after SPC-41: packages/ai overlap) → 45 (stack on #39: scanFlow.ts) → 30 → 31 → 36 → 27 → 23 (site; + privacy page debugger line) → 10 (PE recommends). SPC-9 is the owner's.
 - Linear: Product label group (Specimen) on all issues/projects; projects renamed "Specimen: …". The owner still renames the team to Build (keep SPC) and creates Growth.
 
 ## UPDATE 2026-10-17 ~14:40
