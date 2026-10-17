@@ -20,6 +20,8 @@ export function friendlyScanError(msg: string): string {
     return SITE_ACCESS;
   if (/No tab with id|tab was closed/i.test(msg))
     return 'The tab was closed before the scan finished.';
+  if (/took too long to load/i.test(msg))
+    return 'The page took too long to load. Check the address or your connection and try again.';
   if (
     /Receiving end does not exist|Could not establish connection|no response for|message (port|channel) closed/i.test(
       msg,
@@ -81,32 +83,97 @@ export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise
   return { scan, screenshot: res.screenshot, hints: res.raw.hints, saveError };
 }
 
-/** Resolve when the tab finishes loading; reject on timeout or when it is closed. */
-export function waitForTabLoad(id: number, timeoutMs = 30000): Promise<void> {
+type TabLoadState = Pick<chrome.tabs.Tab, 'status' | 'url' | 'pendingUrl'>;
+
+export interface TabLoadOptions {
+  /** The url the tab was opened on: when we may read it, a hidden url means still about:blank. */
+  url?: string;
+  timeoutMs?: number;
+  recheckMs?: number;
+}
+
+/** Whether Chrome shows us `url` in `Tab.url` (no `tabs` permission: only with host access). */
+async function urlVisible(url: string | undefined): Promise<boolean> {
+  if (!url) return false;
+  try {
+    return await chrome.permissions.contains({ origins: [`${new URL(url).origin}/*`] });
+  } catch {
+    return false;
+  }
+}
+
+/** Hidden or blank `complete` reads after a pending navigation before we stop waiting (~2 s). */
+const ABANDONED_READS = 4;
+
+/**
+ * Resolve when the tab finishes loading; reject on timeout or when it is closed. The listener can
+ * miss a `complete` that Chrome sent before it was registered, so the tab is also re-read until
+ * it settles (each read waits for the previous answer).
+ */
+export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<void> {
+  const { timeoutMs = 30000, recheckMs = 500 } = opts;
   return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let recheck: ReturnType<typeof setTimeout> | undefined;
+    // Once we know Chrome shows this tab's url, a hidden one is the initial about:blank (outside
+    // our host access). Until then a hidden url is the page itself and `complete` is trusted.
+    let visible = false;
+    // Events wait for that answer; the read that follows it sees whatever they would have said.
+    let ready = false;
+    // A navigation we saw pending that settled where we can't see the page (a download, an empty
+    // response, a redirect to an origin without host access): after a few such reads, stop waiting
+    // and let the scan say what is really there (not a website, or site access needed).
+    let pendingSeen = false;
+    let blankReads = 0;
+    /** Loaded means `complete` on the real page, never the initial about:blank or a pending navigation. */
+    const loaded = (t: TabLoadState) => {
+      if (t.pendingUrl || (t.url && t.url !== 'about:blank')) visible = true;
+      if (t.status !== 'complete' || t.pendingUrl) return false;
+      return t.url ? t.url !== 'about:blank' : !visible;
+    };
     const timer = setTimeout(() => done(new Error('The page took too long to load')), timeoutMs);
-    const onUpdated = (tabId: number, info: { status?: string }) => {
-      if (tabId === id && info.status === 'complete') done();
+    const onUpdated = (tabId: number, info: { status?: string }, tab?: TabLoadState) => {
+      if (!ready || tabId !== id || info.status !== 'complete') return;
+      // Without the tab argument, trust the event; with it, skip the initial about:blank.
+      if (!tab || loaded(tab)) done();
     };
     const onRemoved = (tabId: number) => {
       if (tabId === id) done(new Error('The tab was closed'));
     };
     function done(err?: Error) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      clearTimeout(recheck);
       chrome.tabs.onUpdated.removeListener(onUpdated);
       chrome.tabs.onRemoved.removeListener(onRemoved);
       if (err) reject(err);
       else resolve();
     }
+    function check() {
+      chrome.tabs.get(id).then(
+        (t) => {
+          if (loaded(t)) return done();
+          if (t.pendingUrl) pendingSeen = true;
+          const abandoned = pendingSeen && t.status === 'complete' && !t.pendingUrl;
+          blankReads = abandoned ? blankReads + 1 : 0;
+          if (blankReads >= ABANDONED_READS) done();
+          else if (!settled) recheck = setTimeout(check, recheckMs);
+        },
+        (e: unknown) => {
+          if (/No tab with id/i.test(e instanceof Error ? e.message : String(e))) {
+            done(new Error('The tab was closed'));
+          } else if (!settled) recheck = setTimeout(check, recheckMs); // a passing read failure
+        },
+      );
+    }
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.tabs.onRemoved.addListener(onRemoved);
-    // The tab may already be complete by the time the listener is attached.
-    chrome.tabs
-      .get(id)
-      .then((t) => {
-        if (t.status === 'complete') done();
-      })
-      .catch(() => {});
+    void urlVisible(opts.url).then((v) => {
+      visible ||= v;
+      ready = true;
+      if (!settled) check();
+    });
   });
 }
 
@@ -115,7 +182,7 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
   const tab = await chrome.tabs.create({ url, active: true });
   const id = tab.id;
   if (id === undefined) throw new Error('Could not open a tab');
-  await waitForTabLoad(id);
+  await waitForTabLoad(id, { url });
   await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
   const out = await scanTab(id);
   const fresh = await chrome.tabs.get(id).catch(() => null);

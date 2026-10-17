@@ -120,7 +120,7 @@ function rig(opts: RigOpts): Rig {
   tabs.get = vi.fn(async (id: number) =>
     id === 5
       ? { id: 5, windowId: scannedWin.id, url: opts.scannedTabUrl ?? PAGE, status: 'complete' }
-      : { id, windowId: 7, status: 'complete' },
+      : { id, windowId: 7, status: 'complete', url: PAGE },
   );
   tabs.query = vi.fn(async (q: { windowId?: number }) =>
     q.windowId === 1 ? [...panelTabs] : q.windowId === 2 ? [...otherTabs] : [],
