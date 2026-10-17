@@ -62,3 +62,18 @@ dropped. The effect is minor: one fewer token, and the phrase pass still covers 
   target and DESIGN.md, and requires the payload to appear only inside code spans.
 - L2 fixed: the pop happens only when `title[TITLE_SCAN]` is a letter or digit. L1 accepted (closed by SPC-19's
   v5 title bound).
+
+## Lens-B fold check (dc682a8, on top of fd082e6): APPROVED
+- **Single-word title/sample phrases now go through `wordRegex`.** `anyCase` escapes every non-letter, so regex
+  syntax in a title can't throw. Probed against the real `sanitize` and `generateDesignMd` (production mode) with
+  the titles `C++`, `Node.js`, `[Beta]`, `a-b`, `(x)`, `Café`, `İstanbul`, `ß-Straße`, `Box` and a 1000-char
+  single word: none throw, each title and the host are removed, `box-shadow` and `#cafe00` survive, and each
+  takes 2–20 ms.
+- **Head and tail title tokens (6 + 6) with fragment drops at both window edges.** Correct. Titles ≤ 1000 chars
+  are still removed whole as a phrase.
+- **Patterns compiled once per stream.** The host and brand set can't change within one stream, so this is safe.
+  The LRU reorder on a hit is correct.
+- **`critique.ts`.** `turn.content = safe(raw)` now runs before every exit: stop, stall, error and done. It is
+  still fail-closed, and the new T3.22 test pins that the content is the full sanitized text.
+- **`cell`/`code`.** These now map CR, C0 controls, DEL and U+2028/9 to spaces (tab kept), and `code('')` → `''`.
+  Correct; there is no empty-span pairing.
