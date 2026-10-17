@@ -85,6 +85,7 @@ export function VibeCard() {
     const watched: typeof provider = {
       ...provider,
       async *chat(req, signal) {
+        arm(VIBE_TIMEOUT_MS); // each call (a retry too) is a fresh request with its own wait for text
         for await (const d of provider.chat(req, signal)) {
           arm(VIBE_GAP_MS);
           yield d;

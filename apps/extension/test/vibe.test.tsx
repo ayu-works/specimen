@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { ProviderError } from '@specimen/ai';
+import { IMAGE_REJECTED_TEXT, ProviderError } from '@specimen/ai';
 import { BOUNDS } from '@specimen/core/schema';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,7 +54,7 @@ beforeEach(async () => {
   installChrome();
   toastSpy.mockReset();
   await db.scans.clear();
-  useStore.setState({ scan: sampleScan, status: 'done', activeTab: 'inspect' });
+  useStore.setState({ scan: sampleScan, screenshot: null, status: 'done', activeTab: 'inspect' });
 });
 
 afterEach(() => {
@@ -345,6 +345,31 @@ describe('Vibe card: a model call that never settles times out (SPC-40)', () => 
     await vi.advanceTimersByTimeAsync(VIBE_GAP_MS);
     await idleButton();
     expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+  });
+
+  it('T3.38 a second call inside vibe() gets the full first-text timeout, not the gap', async () => {
+    // Call 1 streams, then fails (the image is rejected); call 2 thinks for 40 s before its text.
+    let calls = 0;
+    const provider = {
+      ...fakeProvider([]),
+      capabilities: { vision: true, streaming: true, contextTokens: 8000 },
+      async *chat() {
+        calls++;
+        if (calls === 1) {
+          yield '{"summary":"Half';
+          throw new ProviderError('other', IMAGE_REJECTED_TEXT);
+        }
+        await new Promise((r) => setTimeout(r, 40_000));
+        yield REPLY;
+      },
+    };
+    useStore.setState({ screenshot: 'data:image/png;base64,AAAA' });
+    renderCard([], provider);
+    await describeVibe();
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(await screen.findByText('Calm and airy.')).toBeTruthy();
+    expect(calls).toBe(2);
+    expect(screen.queryByText(VIBE_TIMEOUT_TEXT)).toBeNull();
   });
 
   it('T3.38 a card remounted during the hang is busy, then idle with the error at the timeout', async () => {

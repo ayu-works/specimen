@@ -83,3 +83,4 @@ Not touched: `sidepanel/store.ts` (SPC-44), `council.test.tsx` (#41), `test/help
 
 ## Next / how to resume
 - Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Lens B r1 folded (above); pe-b2 fold check at 5701c1f APPROVED (2026-10-17). Reviews done; waiting on the owner's "merge all"; never merge.
+- **SPC-55 lens B M1 fold (spc-40-ca, 2026-10-17):** `watched.chat` re-arms `VIBE_TIMEOUT_MS` at the start of each call, so a retry inside `vibe()` gets the full first-text wait, not the 30 s gap left over; T3.38 test: call 1 streams then fails, call 2's first text at 40 s, run succeeds (fails without the line). Awaiting pe-b2 fold check.
