@@ -2,7 +2,7 @@
 
 Executor session: `spc-43-b9` · Branch `exec/spc-43` (from origin/main b01ea77) · PE `pe-b2` · Orchestrator `specimen-75`, then `specimen-5c`
 
-Status: **PR #47 open; lens A r1 APPROVED by pe-b2 (0 findings, `docs/sprint/reviews/SPC-43-a-r1.md`). CI gate red only from a gitleaks hit in commit 37da9be on origin/exec/spc-41 (not on this branch); re-run CI after spc-41 force-pushes. Lens B r1 (`SPC-43-b-r1.md`, 0C 0H 2M 3L) folded: M1, M2 (Compose.tsx OK'd by pe-b2), L1, L2, L3 (tests); the optional Playwright two-tab check is listed as a follow-up. Waiting for pe-b2's fold check.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
+Status: **PR #47 open; lens A r1 APPROVED by pe-b2 (0 findings, `docs/sprint/reviews/SPC-43-a-r1.md`). CI gate red only from a gitleaks hit in commit 37da9be on origin/exec/spc-41 (not on this branch); re-run CI after spc-41 force-pushes. Lens B r1 (`SPC-43-b-r1.md`, 0C 0H 2M 3L) folded: M1, M2 (Compose.tsx OK'd by pe-b2), L1, L2, L3 (tests); the optional Playwright two-tab check is listed as a follow-up. pe-b2 fold check APPROVED at fe4cbc0 (lens A done). Waiting for CI re-run after spc-41's gitleaks fix, the owner's manual test and merge.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
 PE build notes, all done: (a) the sender channel is `unref()`ed (no hang in vitest); (b) `updateScan` on a missing row
 sends no ping, tested with the throwing writers and the duplicates-only import; (c) a superseded re-list makes no
 object URLs, a newer one revokes the previous list's, and a re-list in flight at unmount makes none (generation
