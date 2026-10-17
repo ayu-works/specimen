@@ -10,6 +10,7 @@ Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/
 
 - **Orchestrator is now specimen-75** (pane w1:p3, session 9a801fc2-f35e-4093-af49-48aab6a38438; kickoffs in its scratchpad). PE **pe-4d** (w1:pS) told.
 - **Running (build tab w1:tX), all from origin/main b01ea77, In Progress in Linear:** spc-28-10 (w1:p1M, SPC-28 waitForTabLoad race, lane A, scanFlow.ts; stubs chrome.tabs locally), spc-21-6e (w1:p1N, SPC-21 deny-capable stubs, lane B, Owns test/helpers/chrome.ts + wxt e2e config; PE agrees the stub design), spc-29-68 (w1:p1P, SPC-29 T3.33 flake, lane C, Owns council.test.tsx). Worktrees worktrees/spc-28|21|29, branches exec/<ticket>.
+- **Keeper** sprint-log-50 (pane w1:p1R, control tab, Haiku): at 30% context (≈300k tokens on a 1M window; check with jq over the session transcript's last usage), save this handoff, then SendMessage the keeper "restart w1:p3 /Users/ayushmayank/Claude coding/Projects/specimen-herdr/worktrees/sprint-log/docs/sprint/kickoffs/orchestrator.md". After a restart, message the keeper first so it knows the new name.
 - Next by priority when a slot frees: SPC-38 → SPC-37 → SPC-40 → SPC-41 → SPC-42 → SPC-43 → SPC-30 → SPC-31 → SPC-36 → SPC-27. SPC-23 held (Netlify).
 
 ## UPDATE 2026-10-17 ~14:35
