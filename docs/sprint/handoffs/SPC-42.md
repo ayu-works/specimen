@@ -77,4 +77,4 @@ mode). So no adapter change or SPC-46 seam is needed. The only gap is local Gemm
 - `pnpm gate` green 2026-10-17 (gitleaks skipped locally; CI scans).
 
 ## Next / resume
-- PR open against `exec/spc-41`; wait for reviews (lens A pe-b2, lens B fresh). L4 is SPC-54.
+- PR #53 open against `exec/spc-41`. Lens A r1: APPROVED, 0 findings. Waiting for lens B. L4 is SPC-54.
