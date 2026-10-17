@@ -3,6 +3,10 @@ import { type SseEvent, sseEvents } from '../sse';
 import { ProviderError } from '../types';
 
 const EMPTY_TEXT = 'The provider returned an empty response';
+/** The stream closed before the provider said it was done, so the text may be partial. */
+export const CUT_SHORT_TEXT = 'The response was cut off. Try again.';
+/** A provider's safety or content filter stopped the reply (or blocked the prompt). */
+export const FILTERED_TEXT = "The provider's content filter stopped this answer.";
 
 /** POST JSON and yield SSE events, mapping every failure to a ProviderError. */
 export async function* postSse(

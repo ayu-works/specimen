@@ -2,10 +2,19 @@ import { parseDataUrl } from '../dataUrl';
 import { streamError, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { ProviderError } from '../types';
-import { postSse, trimSlash } from './http';
+import { CUT_SHORT_TEXT, FILTERED_TEXT, postSse, trimSlash } from './http';
 
 export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
 export const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
+/** Finish reasons for a reply stopped by a safety, recitation or blocklist filter. */
+const FILTERED = new Set([
+  'SAFETY',
+  'RECITATION',
+  'BLOCKLIST',
+  'PROHIBITED_CONTENT',
+  'SPII',
+  'IMAGE_SAFETY',
+]);
 
 function toParts(content: string | ContentPart[]): unknown[] {
   if (typeof content === 'string') return [{ text: content }];
@@ -52,9 +61,11 @@ export function createGemini(cfg: ProviderConfig): LLMProvider {
     },
     async *chat(req, signal) {
       const { url, headers, body } = buildGeminiRequest(cfg, req);
+      let finished = false;
       for await (const ev of postSse(url, headers, body, signal)) {
         let json: {
           candidates?: { content?: { parts?: { text?: unknown }[] }; finishReason?: unknown }[];
+          promptFeedback?: { blockReason?: unknown };
           error?: unknown;
         };
         try {
@@ -63,13 +74,20 @@ export function createGemini(cfg: ProviderConfig): LLMProvider {
           continue;
         }
         if (json.error) throw streamError(json.error);
+        // A blocked prompt gets no candidates, only this.
+        if (json.promptFeedback?.blockReason) throw new ProviderError('other', FILTERED_TEXT);
         for (const part of json.candidates?.[0]?.content?.parts ?? []) {
           if (typeof part.text === 'string' && part.text) yield part.text;
         }
-        // Final: the chunk's own text is out, and nothing after it is read.
-        if (json.candidates?.[0]?.finishReason === 'MAX_TOKENS')
-          throw new ProviderError('other', TRUNCATED_TEXT);
+        // The chunk's own text is out before any throw, and nothing after a throw is read.
+        const finish = json.candidates?.[0]?.finishReason;
+        if (typeof finish !== 'string' || !finish) continue;
+        if (finish === 'MAX_TOKENS') throw new ProviderError('other', TRUNCATED_TEXT);
+        if (FILTERED.has(finish)) throw new ProviderError('other', FILTERED_TEXT);
+        finished = true;
       }
+      // Gemini always sends a finishReason on its last chunk; without one the reply was cut off.
+      if (!finished) throw new ProviderError('other', CUT_SHORT_TEXT);
     },
   };
 }

@@ -1,13 +1,15 @@
-import { streamError, TRUNCATED_TEXT } from '../errors';
+import { MID_STREAM_TEXT, streamError, TRUNCATED_TEXT } from '../errors';
 import { PRESETS, type Preset } from '../presets';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { ProviderError } from '../types';
-import { postSse, trimSlash } from './http';
+import { CUT_SHORT_TEXT, FILTERED_TEXT, postSse, trimSlash } from './http';
 
 /** Presets served by the OpenAI-compatible adapter (ARCHITECTURE §7). */
 export const OPENAI_COMPAT_PRESETS: readonly Preset[] = PRESETS.filter((p) => p.kind === 'openai');
 /** Finish reasons for a reply cut at a limit; Mistral says `model_length` when the context is full. */
 const CUT_OFF = new Set(['length', 'model_length']);
+/** Mistral's `error` and DeepSeek's `insufficient_system_resource` end a reply that failed on their side. */
+const FAILED = new Set(['error', 'insufficient_system_resource']);
 
 function toContent(content: string | ContentPart[]): unknown {
   if (typeof content === 'string') return content;
@@ -52,6 +54,8 @@ export function createOpenAICompat(
     },
     async *chat(req, signal) {
       const { url, headers, body } = buildOpenAIRequest(cfg, req);
+      // Local servers send `[DONE]` or a finish_reason, not always both; either one ends a whole reply.
+      let finished = false;
       for await (const ev of postSse(url, headers, body, signal)) {
         if (ev.data === '[DONE]') return;
         let json: {
@@ -67,9 +71,16 @@ export function createOpenAICompat(
         const text = json.choices?.[0]?.delta?.content;
         if (typeof text === 'string' && text) yield text;
         // The last text can share the chunk with the finish reason, so it goes out first.
-        if (CUT_OFF.has(String(json.choices?.[0]?.finish_reason)))
-          throw new ProviderError('other', TRUNCATED_TEXT);
+        const finish = json.choices?.[0]?.finish_reason;
+        // Some servers (LocalAI) send `""` on every chunk until the real reason.
+        if (finish == null || finish === '') continue;
+        finished = true;
+        const reason = String(finish);
+        if (CUT_OFF.has(reason)) throw new ProviderError('other', TRUNCATED_TEXT);
+        if (reason === 'content_filter') throw new ProviderError('other', FILTERED_TEXT);
+        if (FAILED.has(reason)) throw new ProviderError('other', MID_STREAM_TEXT);
       }
+      if (!finished) throw new ProviderError('other', CUT_SHORT_TEXT);
     },
   };
 }

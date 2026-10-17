@@ -20,6 +20,11 @@ export const VIBE_FILTERED = 'The description was filtered (brand names are remo
 /** Keywords kept, and raw keywords looked at to find them (some may sanitize to nothing). */
 const MAX_KEYWORDS = Math.min(8, BOUNDS.keywords);
 const RAW_KEYWORDS = 4 * MAX_KEYWORDS;
+/**
+ * Output cap. The reply is ~100 tokens, but thinking models (Gemini 2.5, gpt-oss) count their
+ * thinking against it, so it is generous; at most a quarter of a small context (like critique).
+ */
+const MAX_TOKENS = 1200;
 
 /**
  * Sanitized `text` within `max` chars (the v5 bound), so `updateScan` accepts it. Only a bounded
@@ -85,6 +90,7 @@ export async function vibe(
   signal?: AbortSignal,
 ): Promise<Vibe & { model: string; usedImage: boolean }> {
   const data = wrapPageData(compactScan(scan), pageDataBudget(provider.capabilities.contextTokens));
+  const maxTokens = Math.min(MAX_TOKENS, Math.floor(provider.capabilities.contextTokens / 4));
   const run = (withImage: boolean) =>
     collect(
       provider,
@@ -93,7 +99,7 @@ export async function vibe(
         system: withImage ? SYSTEM_IMAGE : SYSTEM_TEXT,
         json: true,
         temperature: 0.4,
-        maxTokens: 300,
+        maxTokens,
         messages: [
           {
             role: 'user',

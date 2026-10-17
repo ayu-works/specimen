@@ -2,7 +2,7 @@ import { parseDataUrl } from '../dataUrl';
 import { streamError, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { ProviderError } from '../types';
-import { postSse, trimSlash } from './http';
+import { CUT_SHORT_TEXT, FILTERED_TEXT, postSse, trimSlash } from './http';
 
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 export const ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-5-5';
@@ -76,12 +76,16 @@ export function createAnthropic(cfg: ProviderConfig): LLMProvider {
           if (typeof t === 'string' && t) yield t;
         }
         // Every text delta comes before message_delta.
-        if (json.type === 'message_delta' && CUT_OFF.has(String(json.delta?.stop_reason)))
-          throw new ProviderError('other', TRUNCATED_TEXT);
+        if (json.type === 'message_delta') {
+          const reason = String(json.delta?.stop_reason);
+          if (CUT_OFF.has(reason)) throw new ProviderError('other', TRUNCATED_TEXT);
+          // A streaming safety classifier stopped the reply.
+          if (reason === 'refusal') throw new ProviderError('other', FILTERED_TEXT);
+        }
         if (json.type === 'message_stop') return;
       }
       // Anthropic always ends with message_stop; without it the answer was cut off.
-      throw new ProviderError('other', 'The response was cut off. Try again.');
+      throw new ProviderError('other', CUT_SHORT_TEXT);
     },
   };
 }
