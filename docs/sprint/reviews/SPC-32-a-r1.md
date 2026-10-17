@@ -106,3 +106,28 @@ common: shop subdomains of platforms, CDNs, marketplaces.
 
 Re-run P1 and P3 (cache miss) to show the bar still holds. Add a test with the 176-char title on a non-brand
 host.
+
+## M2 fold check: 097ef81 (pe-8a, 2026-10-17): APPROVED, 1 optional LOW
+- **Tokens.** These are the first 32 tokens of `title[0:300]`, the last 6 of `title[-300:]`, and up to 16 tokens from
+  segments of ≤ 3 words. Probed with the real `sanitize` in production mode: the 176-char title on
+  `shop.example-cdn.com` and `… | Ankora | …` past the 32-word cap are both removed. As accepted, a brand at word
+  61 of 71 in a 546-char title with no separators still leaks (it is outside both caps).
+- **Grouped regexes (you asked me to check this).** Within a group, one alternation in longest-first order matches
+  what the old sequential longest-first pass did. One pass also reads the boundaries against the original text, so
+  nothing can cascade.
+  - The caps branch `UPPER(?=\p{Ll})` inside the left boundary group is the same as the old
+    `(?<=\p{Lu}{n})(?=\p{Ll})`. The hex guard and `box` stay per group.
+  - `containsBrand` resets `lastIndex` before `.test`, and `replace` resets it itself. No other caller uses
+    `.test`/`.exec` on the cached patterns.
+  - Probe: `ZENTRIXapi`, `zentrixBlue`, `Zentrix2`, `2zentrix` and `ZenAnkora` are all stripped, and `#cafe00` and
+    `box-shadow` survive.
+- **Tests:** `sanitizeLimits` and `sanitize` pass, 13 of 13. Cold perf as measured in the handoff: DESIGN.md
+  ~5–7 ms (bar 100).
+
+**L (optional). Group order can leave a fragment.** Groups run in the order of each group's longest word, not
+word by word. So with title `Deadbeefcafe | Cafeteria | Cafe`, the hex group (`deadbeefcafe`, `cafe`) runs
+before the `cafeteria` group. `cafe` then matches at the hump in `cafeTeria`, and the output is `Try Teria blue`.
+The old sequential pass gave `Try  blue`. Only a fragment of a brand is left, and only when a hex-only token is
+the prefix of a longer brand at a case hump. Fix (if wanted): keep one regex list but order it by each group's
+*shortest* word descending, or put a word in a group before any shorter group whose word is its prefix. Or
+accept it.
