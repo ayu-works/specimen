@@ -85,9 +85,9 @@ Folded:
 - **B-L1:** only the targeted tab's `inspector` Port is read (`port.sender.tab.id`), others ignored.
 - **B-L2:** a `pending` ref drops a second click while `overlay.set` is in flight.
 Not fixed here (follow-ups for the orchestrator):
-- The original B-L4 symptom (a crashed council host looks alive) can't be fixed from a receiver: it belongs in
-  `council.ts` (the `awaiting` timeout or a host heartbeat).
-- If the panel closes without the unmount cleanup's `overlay.set {inspector:false}` getting through, the overlay
+- **SPC-51:** the original B-L4 symptom (a crashed council host looks alive) can't be fixed from a receiver: it
+  belongs in `council.ts` (the `awaiting` timeout or a host heartbeat).
+- **SPC-52:** if the panel closes without the unmount cleanup's `overlay.set {inspector:false}` getting through, the overlay
   stays "inspecting" with no Port, and the next Inspect-on returns early (`on === inspecting`) in
   `overlay/index.ts`. A one-line overlay fix (reconnect when inspecting but port is null) was ruled out of this PR.
 
