@@ -100,7 +100,7 @@ the key choice: the existing case-sensitive camel/acronym/digit-hump boundaries,
   now fold to width 0 like marks; tests for text, title, `containsBrand`, and ZWJ emoji next to a brand.
 
 ## Next
-- Lens B review; fold findings.
+- Lens B review; fold findings. Then ask pe-b2 for ONE fold check covering ccf1c50 + the lens B fixes (orchestrator, 2026-10-17).
 
 ## How to resume
 Read this file, `packages/core/src/generate/sanitize.ts`, `packages/core/test/sanitizeFold.test.ts`.
