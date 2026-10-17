@@ -120,8 +120,11 @@ T3.35 only (append "SPC-46" text; no new IDs).
   - **L4** (council/Ask show the generic line for a filter stop or a cut-short stream): **follow-up**, already listed (critique.ts + exporting the constants).
   - Pre-existing note (an OpenAI reasoning model's `max_tokens` 400 maps to TOO_LONG_TEXT): **follow-up** ticket, not #54.
 
+- pe-b2 fold check on 9d17ce2: APPROVED (222/222). Both lenses are done.
+
 ## Next
-- pe-b2 fold check.
+- Nothing on the code. Waiting for the owner's "merge all" (open PRs pile up; the base is `exec/spc-41`, #45).
+- If #45 changes, rebase onto `origin/exec/spc-41` and rerun the gate.
 
 ## How to resume
 Read this file, `gh pr diff 45`, and `docs/sprint/reviews/SPC-41-b-r1.md` (L1/L2/L4).
