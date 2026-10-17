@@ -9,7 +9,7 @@ import App from '../src/entrypoints/sidepanel/App';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
 import { SETUP_HINT } from '../src/lib/aiRuntime';
-import { _resetCouncil, councilIo, SETTINGS_CHANGED } from '../src/lib/council';
+import { _resetCouncil, councilIo, SETTINGS_CHANGED, useCouncil } from '../src/lib/council';
 import { _resetCouncilDb, getRun, latestRun, putRun } from '../src/lib/councilDb';
 import { COUNCIL_REJECT, type CouncilRecord, SEEN_KEY } from '../src/lib/councilProtocol';
 import { flagKey } from '../src/lib/flags';
@@ -35,17 +35,21 @@ function mock(opts: Parameters<typeof createMockProvider>[0] = {}) {
 type RuntimeListener = (msg: unknown) => unknown;
 let runtimeListeners: Set<RuntimeListener>;
 const hostEnds: { disconnect(): void }[] = [];
+const hosts: ReturnType<typeof createCouncilHost>[] = [];
 
 /** A real council host on the far end of an in-memory Port pair. Its SW notices reach the panel. */
 function wireHost(provider = mock(), extra: Partial<Parameters<typeof createCouncilHost>[0]> = {}) {
+  // This test's listeners only: a host left over from an earlier test never reaches a later panel.
+  const listeners = runtimeListeners;
   const host = createCouncilHost({
     makeProvider: async () => provider,
     notify: (m) => {
-      for (const l of runtimeListeners) l(m);
+      for (const l of listeners) l(m);
     },
     engine: { tokensPerMinute: 0, retryDelaysMs: [5] },
     ...extra,
   });
+  hosts.push(host);
   councilIo.connect = () => {
     const [panel, hostEnd] = createPortPair('council');
     host.attach(hostEnd as never);
@@ -106,6 +110,17 @@ beforeEach(async () => {
 
 afterEach(async () => {
   cleanup();
+  // Stop every host's run and wait for its final write, so none lands in the next test's DB.
+  for (const h of hosts) h.halt(Date.now());
+  await waitFor(
+    () => {
+      const stuck = hosts.map((h) => h.liveRunId).filter(Boolean);
+      if (stuck.length)
+        throw new Error(`council host still running after halt: ${stuck.join(', ')}`);
+    },
+    { timeout: 5_000 },
+  );
+  hosts.length = 0;
   _resetCouncil();
   Object.assign(councilIo, io);
   vi.unstubAllGlobals();
@@ -413,6 +428,10 @@ describe('Ask + council (component)', () => {
     useStore.setState({ askMode: 'council' });
     render(<App />);
     await screen.findByTestId('council-setup');
+    // SPC-29: the setup card renders before initCouncil's effect registers the runtime listener.
+    // Wait until this panel listens, or under load `council.started` reaches no one and the panel
+    // only hears `council.finished`. Hosts notify only their own test's listeners (see wireHost).
+    await waitFor(() => expect(useCouncil.getState().loaded).toBe(true));
     // The other window's panel starts a run on the same host.
     const [other, hostEnd] = createPortPair('council');
     host.attach(hostEnd as never);
@@ -427,7 +446,7 @@ describe('Ask + council (component)', () => {
       context: '',
       resolvedAt: Date.now(),
     });
-    await screen.findByTestId('council-running');
+    await screen.findByTestId('council-running', {}, { timeout: 5_000 });
     await screen.findByTestId('council-report', {}, { timeout: 10_000 });
   });
 
