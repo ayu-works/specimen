@@ -2,7 +2,7 @@
 
 Executor session `spc-33-4f` · branch `exec/spc-33` · lane A · PE `pe-8a` · orchestrator `specimen-6a`.
 
-## Plan (awaiting PE approval)
+## Plan (APPROVED by pe-8a 2026-10-17; build notes on the Linear comment)
 
 **Problem.** (1) `packages/ai/src/features/vibe.ts` returns the parsed summary uncapped and keywords uncapped in
 length (count is already `.slice(0, 8)`), so a looping model (or one ignoring `maxTokens: 300`) yields a vibe over
@@ -77,10 +77,22 @@ fail-closed vibe code is what I edit), and rebase onto `main` once #33 merges; t
 **Out of scope.** Other `updateScan` callers (#33 covered card edits/ScanCard). No schema change.
 
 ## Done
-- Read brief/setup/plan, SPC-33 + "Sprint plan overrides" comment, #33's bounds/db diff; `pnpm i`.
+- Read brief/setup/plan, SPC-33 + overrides; `pnpm i`; plan approved (stack on #33, IDs T3.35/T3.36).
+- `vibe.ts`: `clamp()` = bounded 2×max pre-slice → `safe()` → drop trailing partial word if pre-sliced → `cutText` to
+  `BOUNDS`. Keywords: first 32 raw → clamp → drop empties → first 8 (≤ `BOUNDS.keywords`). No hard-coded bounds.
+  Note: an over-long one-word keyword is dropped (same rule as the summary), tested.
+- `Vibe.tsx`: awaits `updateScan`; failure → `role="alert"` "Vibe not saved to Library: <libraryErrorText>", tied to
+  the scan id; run counter + current-scan check drop stale results (a vibe for an old scan is no longer written onto
+  the new one either). Scan id passed through uncut (PE note 4).
+- Tests: T3.35 ×8 in `packages/ai/src/features/vibe.test.ts`; T3.36 ×4 in `apps/extension/test/vibe.test.tsx`.
+- Shown to bite: old `vibe.ts` → 4 T3.35 fail and the T3.36 integration save test fails (real `updateScan` rejects);
+  no partial-word drop → the brand-fragment, one-long-word and one-word-keyword tests fail; old `Vibe.tsx` → the
+  "not saved" test fails; no stale guard → the moved-scan test fails.
+- Rebased on `origin/main` de35272 (#33, #34), temp base dropped. `pnpm gate` green (1 pre-existing lint warning in
+  chatScrub, not this PR); check-ids --all passes.
 
 ## Next
-- PE approval → tests first in `packages/ai` → code → component test → `pnpm gate` → rebase on main after #33 → PR.
+- PR open → reviews (PE lens A + lens B) → fold findings.
 
 ## How to resume
-- Worktree as above; check whether #33 is merged (`gh pr view 33`); read this file.
+- Worktree as above; read this file and the PR's reviews under `docs/sprint/reviews/SPC-33-*`.

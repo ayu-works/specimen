@@ -109,8 +109,10 @@ describe('vibe output fits the DesignScan v5 bounds (SPC-33)', () => {
   };
   const reply = (summary: string, keywords: string[]) => JSON.stringify({ summary, keywords });
   const fitsSchema = (v: { summary: string; keywords: string[]; model: string }) =>
-    DesignScanSchema.safeParse({ ...scan, vibe: { summary: v.summary, keywords: v.keywords, model: v.model } })
-      .success;
+    DesignScanSchema.safeParse({
+      ...scan,
+      vibe: { summary: v.summary, keywords: v.keywords, model: v.model },
+    }).success;
 
   it('T3.35 a looping JSON reply is clamped: summary, keyword count and keyword length', async () => {
     const summary = 'calm airy spacious '.repeat(3000);
@@ -174,7 +176,9 @@ describe('vibe output fits the DesignScan v5 bounds (SPC-33)', () => {
   });
 
   it('T3.35 a summary that is all brand still fails closed as filtered (SPC-32 kept)', async () => {
-    const p = createMockProvider({ text: String.raw`{"summary":"Zen\u0074rix","keywords":["calm"]}` });
+    const p = createMockProvider({
+      text: String.raw`{"summary":"Zen\u0074rix","keywords":["calm"]}`,
+    });
     await expect(vibe(p, branded, null)).rejects.toMatchObject({ message: VIBE_FILTERED });
   });
 });

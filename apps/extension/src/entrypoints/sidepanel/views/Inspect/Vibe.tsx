@@ -44,7 +44,10 @@ export function VibeCard() {
       } catch (e) {
         // The vibe stays usable in this panel, but it must not look saved.
         if (current())
-          setSaveErr({ scanId: scan.id, text: `Vibe not saved to Library: ${libraryErrorText(e)}` });
+          setSaveErr({
+            scanId: scan.id,
+            text: `Vibe not saved to Library: ${libraryErrorText(e)}`,
+          });
       }
     } catch (e) {
       if (current()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
