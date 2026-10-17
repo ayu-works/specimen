@@ -103,8 +103,10 @@ T3.35 only (append "SPC-46" text; no new IDs).
 - Follow-ups (not in this lane): critique.ts maps `'other'` to its generic line, so the council won't show the filter wording.
   `FILTERED_TEXT` / `CUT_SHORT_TEXT` could move to `errors.ts` and be exported once a caller needs to match them.
 
+- `pnpm gate` green (secrets skipped locally: no gitleaks). PR #54 (base `exec/spc-41`), rebased on 81b4386; link on SPC-46.
+
 ## Next
-- `pnpm gate` → PR (base `exec/spc-41`) → reviews.
+- Reviews (PE lens A + lens B): fold findings with new commits.
 
 ## How to resume
 Read this file, `gh pr diff 45`, and `docs/sprint/reviews/SPC-41-b-r1.md` (L1/L2/L4).
