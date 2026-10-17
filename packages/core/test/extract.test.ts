@@ -315,5 +315,6 @@ describe('CSS variable filter (sec L2)', () => {
       Array.from({ length: 300 }, (_, i) => [`--color-${String(i).padStart(3, '0')}`, 'red']),
     );
     expect(Object.keys(filterCssVariables(many))).toHaveLength(200);
+    expect(Object.keys(filterCssVariables(many, 250))).toHaveLength(250);
   });
 });

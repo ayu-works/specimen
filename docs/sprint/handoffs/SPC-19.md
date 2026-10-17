@@ -1,6 +1,6 @@
 # SPC-19 handoff: Library writes (import atomicity, silent save failure) + SPC-17 sec M2, L1, L2 (import), L3
 
-Executor session: `spc-19-02` · Branch `exec/spc-19` (from origin/main 77ac925) · Lane C · PE `pe-ed` · Orchestrator `specimen-6a`
+Executor session: `spc-19-02` · Branch `exec/spc-19` (from origin/main 77ac925) · Lane C · PE `pe-ed`, then `pe-8a` · Orchestrator `specimen-6a`
 
 Status: **BUILT, PR open, waiting for reviews.** Plan APPROVED by pe-ed 2026-10-17 (answers below). M2 ruling:
 `worktrees/pe/docs/sprint/reviews/SPC-19-m2-ruling.md`; owner OK relayed by specimen-6a 2026-10-17 (recorded on SPC-19).
@@ -165,6 +165,18 @@ parents it touches), not the whole input. Output identical to today for valid in
 
 - PE lens A r1: APPROVED, 0C/0H/0M/3L. Folded L1 (stored side filtered before comparing) and L2 (title input
   maxLength). L3 not taken: the raw storage message is the only clue for an unknown failure and isn't secret.
+
+- Lens B r1 (0C/0H/2M/4L) folded:
+  - M1: `filterCssVariables(vars, max)`, and the import and its stored-side compare pass `BOUNDS.cssVariables`. A merged
+    scan with 400 vars now round-trips.
+  - M2: `toStored` returns the stored key as `id`. `updateScan`/`replaceStoredScan` find the row by the long or cut id
+    and re-key it to the cut id, moving thumb + chat in the same transaction (`findRow`, `putReplacing`). Scan.tsx keeps
+    `scan.id` on the merged scan.
+  - L2: `libraryErrorText` reads Dexie's `failures[]`.
+  - L3: a successful merge save clears `saveError`.
+  - L4: `cutText` never splits a surrogate pair, and it's used for the trim and the id cut.
+  - L1 (vibe.ts bounds): not folded. vibe.ts is SPC-32's file and SPC-33 owns the Vibe save, so it's routed to the
+    orchestrator for SPC-33.
 
 ## Next
 - Reviews (PE lens A, lens B, security). Fold findings as new commits.

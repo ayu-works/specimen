@@ -40,16 +40,20 @@ function hash(s: string): string {
 }
 
 /**
- * The design-relevant root variables: design-shaped names, values up to 200 chars, at most 200.
- * Also re-applied to imported scans, so a shared file can't carry more than a live scan would.
+ * The design-relevant root variables: design-shaped names, values up to 200 chars, at most `max`
+ * (200 per page). Also re-applied to imported scans with the v5 bound as `max`, since a merged
+ * scan legitimately holds more than one page's worth.
  */
-export function filterCssVariables(vars: Record<string, string>): Record<string, string> {
+export function filterCssVariables(
+  vars: Record<string, string>,
+  max = 200,
+): Record<string, string> {
   const out: Record<string, string> = {};
   let n = 0;
   for (const [k, v] of Object.entries(vars).sort(([a], [b]) => a.localeCompare(b))) {
     if (!VAR_NAME.test(k) || v.length > 200) continue;
     out[k] = v;
-    if (++n >= 200) break;
+    if (++n >= max) break;
   }
   return out;
 }

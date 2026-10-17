@@ -66,8 +66,11 @@ export async function importFile(file: File): Promise<ImportResult> {
   for (const raw of rawScans) {
     try {
       const scan = migrate(raw);
-      // A shared file carries no more CSS variables than a live scan would keep.
-      valid.push({ ...scan, cssVariables: filterCssVariables(scan.cssVariables) });
+      // A shared file carries no more CSS variables than a (merged) live scan would keep.
+      valid.push({
+        ...scan,
+        cssVariables: filterCssVariables(scan.cssVariables, BOUNDS.cssVariables),
+      });
     } catch {
       /* counted as skipped */
     }

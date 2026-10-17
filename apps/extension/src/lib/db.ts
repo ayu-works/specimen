@@ -3,7 +3,7 @@
  * Everything stays on the device; scans are re-validated through `migrate()` on every read.
  */
 import { filterCssVariables } from '@specimen/core';
-import { BOUNDS, type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
+import { BOUNDS, cutText, type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
 
 export interface StoredScan extends DesignScan {
@@ -92,8 +92,11 @@ export async function saveScan(
 
 /** A Library write error as a short, user-readable reason. */
 export function libraryErrorText(e: unknown): string {
-  const err = e as { name?: string; message?: string; inner?: { name?: string } } | null;
-  const names = [err?.name, err?.inner?.name];
+  type Named = { name?: string; inner?: { name?: string } };
+  const err = e as (Named & { message?: string; failures?: Named[] }) | null;
+  // Dexie wraps the browser's error: an aborted transaction keeps it in `inner`, a BulkError in `failures`.
+  const first = err?.failures?.[0];
+  const names = [err?.name, err?.inner?.name, first?.name, first?.inner?.name];
   if (names.includes('QuotaExceededError')) return 'your browser is out of storage space';
   if (err?.name === 'ZodError') return "the scan didn't pass validation";
   if (
@@ -109,6 +112,8 @@ function toStored(row: StoredScan): StoredScan | null {
   try {
     return {
       ...migrate(row),
+      // The stored key, even when the v5 upgrade cut an over-long v4 id: the UI must address this row.
+      id: row.id,
       tags: Array.isArray(row.tags) ? row.tags : [],
       favorite: row.favorite,
     };
@@ -153,18 +158,46 @@ export async function countScans(): Promise<number> {
   return db.scans.count();
 }
 
+/** The row for an id the panel holds: under that key, or under its cut v5 id once it was re-keyed. */
+async function findRow(id: string): Promise<StoredScan | undefined> {
+  const row = await db.scans.get(id);
+  if (row || id.length <= BOUNDS.text) return row;
+  return db.scans.get(cutText(id, BOUNDS.text));
+}
+
+/**
+ * Store `row` in place of the row kept under `key` (inside the caller's transaction). When the v5
+ * upgrade cut an over-long v4 id, the row moves to its new key, with its thumbnail and chat.
+ */
+async function putReplacing(key: string, row: StoredScan): Promise<void> {
+  await db.scans.put(row);
+  if (row.id === key) return;
+  await db.scans.delete(key);
+  const thumb = await db.thumbs.get(key);
+  if (thumb) {
+    await db.thumbs.put({ ...thumb, scanId: row.id });
+    await db.thumbs.delete(key);
+  }
+  const chat = await db.chats.get(key);
+  if (chat) {
+    await db.chats.put({ ...chat, scanId: row.id });
+    await db.chats.delete(key);
+  }
+}
+
 /** Patch a stored scan. The merged row must meet the current schema, or nothing is written. */
 export async function updateScan(
   id: string,
   patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe' | 'variants'>>,
 ): Promise<void> {
   const { tags, favorite, ...data } = patch;
-  await db.transaction('rw', db.scans, async () => {
-    const row = await db.scans.get(id);
+  await chatsReady; // a re-key may move a chat row
+  await db.transaction('rw', db.scans, db.thumbs, db.chats, async () => {
+    const row = await findRow(id);
     if (!row) return;
     // The stored row may be older (repaired on read); the patched result must meet the current schema.
     const clean = DesignScanSchema.parse({ ...migrate(row), ...data });
-    await db.scans.put({
+    await putReplacing(row.id, {
       ...clean,
       tags: tags ?? (Array.isArray(row.tags) ? row.tags : []),
       favorite: 'favorite' in patch ? favorite : row.favorite,
@@ -174,10 +207,16 @@ export async function updateScan(
 
 /** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
 export async function replaceStoredScan(scan: DesignScan): Promise<void> {
-  const clean = DesignScanSchema.parse(scan);
-  await db.transaction('rw', db.scans, async () => {
-    const old = await db.scans.get(clean.id);
-    await db.scans.put({ ...clean, tags: old?.tags ?? [], favorite: old?.favorite });
+  // The panel may hold an over-long v4 id (`toStored` keeps the stored key); it is stored cut.
+  const clean = DesignScanSchema.parse({ ...scan, id: cutText(scan.id, BOUNDS.text) });
+  await chatsReady; // a re-key may move a chat row
+  await db.transaction('rw', db.scans, db.thumbs, db.chats, async () => {
+    const old = await findRow(scan.id);
+    await putReplacing(old?.id ?? clean.id, {
+      ...clean,
+      tags: old?.tags ?? [],
+      favorite: old?.favorite,
+    });
   });
 }
 
@@ -239,7 +278,10 @@ export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
       try {
         // Compared as an import would store it: rows imported before the filter keep extra variables.
         const s = migrate(row);
-        key = contentKey({ ...s, cssVariables: filterCssVariables(s.cssVariables) });
+        key = contentKey({
+          ...s,
+          cssVariables: filterCssVariables(s.cssVariables, BOUNDS.cssVariables),
+        });
       } catch {
         /* unreadable: its id is taken, its content matches nothing */
       }

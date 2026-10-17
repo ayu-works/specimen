@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RawPage } from '@specimen/core/schema';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTabScan } from '../src/entrypoints/sidepanel/runScan';
 import { NO_EXTRAS, useStore } from '../src/entrypoints/sidepanel/store';
@@ -73,5 +73,19 @@ describe('a scan whose Library save fails (audit H7)', () => {
     expect(await db.scans.count()).toBe(1);
     render(<Scan />);
     expect(screen.queryByTestId('save-error')).toBeNull();
+  });
+
+  it('T4.08 (unit) when "Add another page" then saves the scan, the warning goes away (lens B L3)', async () => {
+    db.scans.hook('creating', quota);
+    await runTabScan();
+    db.scans.hook('creating').unsubscribe(quota);
+    chrome.tabs.query.mockResolvedValue([
+      { id: 7, windowId: 1, url: 'https://stripe.com/pricing', active: true },
+    ] as never);
+    render(<Scan />);
+    expect(screen.getByTestId('save-error')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Add another page/ }));
+    await waitFor(() => expect(screen.queryByTestId('save-error')).toBeNull());
+    expect(await db.scans.count()).toBe(1);
   });
 });

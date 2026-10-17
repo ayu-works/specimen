@@ -15,6 +15,13 @@ interface Def {
 }
 const defOf = (s: z.ZodType) => (s as unknown as { _zod: { def: Def } })._zod.def;
 
+/** `text` cut to at most `max` UTF-16 units, never ending on half a surrogate pair. */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const end = /[\ud800-\udbff]/.test(text.charAt(max - 1)) ? max - 1 : max;
+  return text.slice(0, end);
+}
+
 /**
  * Cut `value` to the bounds the schema node declares (strings truncated, arrays and records keep
  * their first entries), recording each cut path. Containers are shallow-copied, never mutated;
@@ -30,7 +37,7 @@ function walk(schema: z.ZodType, value: unknown, path: string, cut: Set<string>)
     case 'string':
       if (typeof value !== 'string' || max === undefined || value.length <= max) return value;
       cut.add(path);
-      return value.slice(0, max);
+      return cutText(value, max);
     case 'array': {
       if (!Array.isArray(value) || !def.element) return value;
       let items = value;

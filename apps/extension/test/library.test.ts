@@ -1,11 +1,12 @@
 import 'fake-indexeddb/auto';
-import { generateDesignMd, generatePrompt } from '@specimen/core';
+import { generateDesignMd, generatePrompt, mergeScans } from '@specimen/core';
 import { type DesignScan, migrate, SCHEMA_VERSION } from '@specimen/core/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import {
   db,
   deleteScans,
+  libraryErrorText,
   listScans,
   loadChat,
   replaceStoredScan,
@@ -308,6 +309,21 @@ describe('Library writes are atomic and idempotent (audit H6, M14)', () => {
     expect(new Set((await listScans()).map((s) => s.id)).size).toBe(2);
   });
 
+  it('T4.02 a merged scan with 400 CSS variables restores all of them from a backup (lens B M1)', async () => {
+    const vars = (p: string) =>
+      Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`--color-${p}-${i}`, 'red']));
+    const merged = mergeScans([
+      scanOf('mg', { url: 'https://a.test/1', cssVariables: vars('a') }),
+      scanOf('mg2', { url: 'https://a.test/2', cssVariables: vars('b') }),
+    ]);
+    expect(Object.keys(merged.cssVariables)).toHaveLength(400);
+    const backup = buildExport([merged]);
+    expect(await importFile(fileOf(backup))).toMatchObject({ imported: 1 });
+    expect(Object.keys((await db.scans.get(merged.id))?.cssVariables ?? {})).toHaveLength(400);
+    // Restoring it again finds it.
+    expect(await importFile(fileOf(backup))).toMatchObject({ imported: 0, duplicates: 1 });
+  });
+
   it('T4.03 a file with more than 500 scans is rejected whole (sec M2)', async () => {
     const many = Array.from({ length: 501 }, (_, i) => scanOf(`m${i}`, { scannedAt: i }));
     await expect(importFile(exportOf(many))).rejects.toThrow(/501 scans.*at most 500/);
@@ -401,5 +417,63 @@ describe('Library writers store the parsed scan (sec L3)', () => {
     await db.scans.put({ id: 'broken', scannedAt: 1, tags: [] } as never);
     await expect(updateScan('broken', { title: 'x' })).rejects.toThrow();
     expect(await db.scans.get('broken')).not.toHaveProperty('title');
+  });
+});
+
+describe('an old row whose id is over the v5 bound (lens B M2)', () => {
+  const long = 'L'.repeat(1500);
+  const seed = async () => {
+    await db.scans.put({ ...scanOf(long), schemaVersion: 4, tags: ['t'] } as never);
+    await db.thumbs.put({ scanId: long, blob: new Blob(['x']) });
+    await db.chats.put({ scanId: long, messages: [{ role: 'user', content: 'hi' }] });
+  };
+
+  it('T4.01 it lists under its stored key and can be deleted', async () => {
+    await seed();
+    const [listed] = await listScans();
+    expect(listed?.id).toBe(long);
+    await deleteScans([long]);
+    expect(await db.scans.count()).toBe(0);
+  });
+
+  it('T4.01 an edit stores it under its cut id, moving the thumbnail and chat; later writes find it', async () => {
+    await seed();
+    await updateScan(long, { title: 'Renamed' });
+    const cut = long.slice(0, 1000);
+    expect(await db.scans.get(long)).toBeUndefined();
+    expect(await db.scans.get(cut)).toMatchObject({
+      title: 'Renamed',
+      tags: ['t'],
+      schemaVersion: 5,
+    });
+    expect([...(await thumbBlobs()).keys()]).toEqual([cut]);
+    expect((await db.chats.get(cut))?.messages).toHaveLength(1);
+
+    // The panel may still hold the long id: a favourite and a merge-style replace hit the same row.
+    await updateScan(long, { favorite: true });
+    await replaceStoredScan({ ...scanOf(long), title: 'Merged' });
+    expect(await db.scans.count()).toBe(1);
+    expect(await db.scans.get(cut)).toMatchObject({ title: 'Merged', favorite: true, tags: ['t'] });
+  });
+
+  it('T4.01 a merge-style replace of the never-edited row re-keys it instead of adding a copy', async () => {
+    await seed();
+    await replaceStoredScan({ ...scanOf(long), title: 'Merged' });
+    expect(await db.scans.count()).toBe(1);
+    expect(await db.scans.get(long.slice(0, 1000))).toMatchObject({ title: 'Merged', tags: ['t'] });
+  });
+});
+
+describe('storage errors read as plain language (lens B L2)', () => {
+  it('T4.03 a quota failure is named whether Dexie wraps it as an abort or a BulkError', () => {
+    const quota = new DOMException('q', 'QuotaExceededError');
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError', inner: quota });
+    const bulk = Object.assign(new Error('scans.bulkAdd(): 3 of 3 operations failed'), {
+      name: 'BulkError',
+      failures: [quota],
+    });
+    for (const e of [quota, abort, bulk]) {
+      expect(libraryErrorText(e)).toBe('your browser is out of storage space');
+    }
   });
 });

@@ -64,10 +64,15 @@ function Captures({ scan }: { scan: DesignScan }) {
         throw new Error('That page is already merged. Open a different page of the site.');
       }
       const out = await scanTab(tab.id, { save: false, noScreenshot: true });
-      const merged = mergeScans([scan, out.scan]);
+      // Keep the id the panel and Library hold (an old over-long one is cut and re-keyed on write).
+      const merged = { ...mergeScans([scan, out.scan]), id: scan.id };
       setScan(merged);
       const unsaved = await replaceStoredScan(merged).then(
-        () => '',
+        () => {
+          // The scan is in the Library now, even if its first save failed.
+          if (useStore.getState().scan?.id === merged.id) useStore.setState({ saveError: null });
+          return '';
+        },
         (e) => ` (not saved to Library: ${libraryErrorText(e)})`,
       );
       patchExtras({

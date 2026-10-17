@@ -4,4 +4,4 @@ export { BOUNDS } from './bounds';
 export { migrate } from './migrations';
 export * from './raw';
 export * from './scan';
-export { clampToBounds } from './trim';
+export { clampToBounds, cutText } from './trim';

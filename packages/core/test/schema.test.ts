@@ -13,6 +13,7 @@ import {
   SCHEMA_VERSION,
 } from '../src/schema';
 import { MAX } from '../src/schema/bounds';
+import { cutText } from '../src/schema/trim';
 import { withCounterpart } from '../src/theme';
 import minimalRaw from './fixtures/minimal-raw.json';
 import minimalScan from './fixtures/minimal-scan.json';
@@ -358,6 +359,12 @@ describe('v5 size bounds (sec M2)', () => {
       expect(migrate(out), name).toEqual(out);
       expect(migrate({ ...out, schemaVersion: 4 }), name).toEqual(out);
     }
+  });
+
+  it('T1.01 a cut never ends on half a surrogate pair (lens B L4)', () => {
+    expect(cutText(`${'a'.repeat(9)}😀b`, 10)).toBe('a'.repeat(9));
+    expect(cutText(`${'a'.repeat(8)}😀b`, 10)).toBe(`${'a'.repeat(8)}😀`);
+    expect(cutText('short', 10)).toBe('short');
   });
 
   it('T1.01 a hostile v4 row (150k palette, 100k variables, 30k title) upgrades trimmed, with valid roles', () => {
