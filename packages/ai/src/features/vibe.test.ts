@@ -1,8 +1,10 @@
 import { BOUNDS, type DesignScan, DesignScanSchema } from '@specimen/core/schema';
-import { describe, expect, it } from 'vitest';
-import { httpError, TRUNCATED_TEXT } from '../errors';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { httpError, MID_STREAM_TEXT, TOO_LONG_TEXT, TRUNCATED_TEXT } from '../errors';
+import { createGemini } from '../providers/gemini';
+import { createOpenAICompat } from '../providers/openaiCompat';
 import { createMockProvider } from '../testing/mockProvider';
-import { loadFixtureScan } from '../testing/testUtils';
+import { loadFixtureScan, sseResponse } from '../testing/testUtils';
 import { ProviderError } from '../types';
 import { VIBE_FILTERED, vibe } from './vibe';
 
@@ -47,10 +49,13 @@ describe('vibe', () => {
     expect(p.calls).toHaveLength(1);
   });
 
-  it('T3.35 asks for a budget a thinking model can use, capped at a quarter of a small context (SPC-46)', async () => {
+  it('T3.35 asks for a budget a thinking model can use, capped at a quarter of a small context (SPC-46, SPC-55)', async () => {
     const big = createMockProvider({ text: JSON_OUT, contextTokens: 1_000_000 });
     await vibe(big, scan, null);
-    expect(big.calls[0]?.maxTokens).toBe(1200);
+    expect(big.calls[0]?.maxTokens).toBe(10_000);
+    const mid = createMockProvider({ text: JSON_OUT, contextTokens: 32_000 });
+    await vibe(mid, scan, null);
+    expect(mid.calls[0]?.maxTokens).toBe(8000);
     const small = createMockProvider({ text: JSON_OUT, contextTokens: 4096 });
     await vibe(small, scan, null);
     expect(small.calls[0]?.maxTokens).toBe(1024);
@@ -82,6 +87,7 @@ describe('vibe', () => {
     const v = await vibe(p, scan, SHOT);
     expect(n).toBe(2);
     expect(v.usedImage).toBe(false);
+    expect(base.calls[0]?.json).toBe(true);
     expect(v.summary).toBe('Calm and airy.');
   });
 
@@ -252,5 +258,267 @@ describe('vibe output fits the DesignScan v5 bounds (SPC-33)', () => {
     ];
     const p = createMockProvider({ text: reply('Calm.', keywords) });
     expect((await vibe(p, branded, null)).keywords).toEqual(['calm', 'airy']);
+  });
+});
+
+// Groq reports a JSON-mode failure as an error event inside the 200 stream (SPC-55). These drive
+// the real OpenAI-compatible adapter with fake Groq stream bodies; no network.
+describe('vibe retries a mid-stream provider error (SPC-55)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ECHO = 'sk-live-ECHOECHOECHO';
+  const sse = (...events: unknown[]) =>
+    sseResponse([...events.map((e) => `data: ${JSON.stringify(e)}\n\n`), 'data: [DONE]\n\n']);
+  const reply = (text: string) =>
+    sse(
+      { choices: [{ delta: { content: text } }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }] },
+    );
+  const jsonFailed = () =>
+    sse({
+      error: {
+        message: `Failed to validate JSON. Please adjust your prompt. key ${ECHO}`,
+        type: 'invalid_request_error',
+        code: 'json_validate_failed',
+      },
+    });
+  const imageFailed = () =>
+    sse({
+      error: {
+        message: `model does not support image input ${ECHO}`,
+        type: 'invalid_request_error',
+      },
+    });
+
+  type Body = {
+    max_tokens?: number;
+    response_format?: unknown;
+    messages: { role: string; content: unknown }[];
+  };
+  function stubGroq(respond: (body: Body, n: number) => Response) {
+    const bodies: Body[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as Body;
+        bodies.push(body);
+        return respond(body, bodies.length);
+      }),
+    );
+    return bodies;
+  }
+  const groq = (o: { vision?: boolean; contextTokens?: number } = {}) =>
+    createOpenAICompat({
+      id: 'groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'openai/gpt-oss-20b',
+      apiKey: 'gsk_test',
+      vision: o.vision ?? false,
+      contextTokens: o.contextTokens ?? 131_072,
+    });
+  const sentImage = (b: Body | undefined) => {
+    const c = b?.messages.at(-1)?.content;
+    return Array.isArray(c) && c.some((p) => p.type === 'image_url');
+  };
+
+  it('T3.35 json_validate_failed mid-stream: retried once with JSON off, same prompt and page data', async () => {
+    const bodies = stubGroq((b) => (b.response_format ? jsonFailed() : reply(JSON_OUT)));
+    const v = await vibe(groq(), scan, SHOT);
+    expect(v).toMatchObject({
+      summary: 'Calm and airy.',
+      keywords: ['calm', 'airy'],
+      usedImage: false,
+    });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.response_format).toEqual({ type: 'json_object' });
+    expect(bodies[1]?.response_format).toBeUndefined();
+    // Only JSON mode differs: the system prompt and the wrapped page data are kept.
+    expect(bodies[1]?.messages).toEqual(bodies[0]?.messages);
+    expect(String(bodies[1]?.messages.at(-1)?.content)).toContain('<page_data>');
+  });
+
+  it('T3.35 an image rejected mid-stream: retried once text-only with JSON off', async () => {
+    const bodies = stubGroq((b) => (sentImage(b) ? imageFailed() : reply(JSON_OUT)));
+    const v = await vibe(groq({ vision: true }), scan, SHOT);
+    expect(v).toMatchObject({ summary: 'Calm and airy.', usedImage: false });
+    expect(bodies).toHaveLength(2);
+    expect(sentImage(bodies[0])).toBe(true);
+    expect(sentImage(bodies[1])).toBe(false);
+    expect(bodies[1]?.response_format).toBeUndefined();
+    expect(String(bodies[1]?.messages.at(-1)?.content)).toContain('<page_data>');
+  });
+
+  it('T3.35 a retry that fails too is final, with the fixed text and none of the provider text', async () => {
+    const bodies = stubGroq(() => jsonFailed());
+    const err = await vibe(groq(), scan, null).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err).toMatchObject({ kind: 'other', message: MID_STREAM_TEXT });
+    expect(String((err as Error).message)).not.toContain(ECHO);
+    expect(JSON.stringify(err)).not.toContain(ECHO);
+    expect(bodies).toHaveLength(2);
+  });
+
+  it('T3.35 no retry on a mid-stream rate limit, a cut-off reply, or Stop', async () => {
+    const rate = stubGroq(() => sse({ error: { type: 'rate_limit_exceeded', message: ECHO } }));
+    await expect(vibe(groq(), scan, null)).rejects.toMatchObject({ kind: 'rate' });
+    expect(rate).toHaveLength(1);
+
+    const cut = stubGroq(() =>
+      sse({ choices: [{ delta: { content: '{"summary":"Ca' }, finish_reason: 'length' }] }),
+    );
+    await expect(vibe(groq(), scan, null)).rejects.toMatchObject({ message: TRUNCATED_TEXT });
+    expect(cut).toHaveLength(1);
+
+    const ac = new AbortController();
+    const stopped = stubGroq(() => {
+      ac.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    await expect(vibe(groq(), scan, null, ac.signal)).rejects.toMatchObject({ kind: 'aborted' });
+    expect(stopped).toHaveLength(1);
+  });
+
+  it('T3.35 the JSON-off retry still parses fenced JSON, and prose is sanitized', async () => {
+    stubGroq((b) =>
+      b.response_format
+        ? jsonFailed()
+        : reply('Here you go:\n```json\n{"summary":"Calm and airy.","keywords":["calm"]}\n```'),
+    );
+    expect(await vibe(groq(), scan, null)).toMatchObject({
+      summary: 'Calm and airy.',
+      keywords: ['calm'],
+    });
+
+    const branded: DesignScan = {
+      ...scan,
+      host: 'zentrix.io',
+      url: 'https://zentrix.io/',
+      title: 'Zentrix',
+    };
+    stubGroq((b) =>
+      b.response_format ? jsonFailed() : reply('Zentrix feels calm, airy and precise.'),
+    );
+    const v = await vibe(groq(), branded, null);
+    expect(v.summary.toLowerCase()).not.toContain('zentrix');
+    expect(v.summary).toContain('calm');
+  });
+
+  const tooBig = (limit: number) =>
+    new Response(
+      JSON.stringify({
+        error: {
+          message: `max_tokens must be less than or equal to \`${limit}\`, the maximum value for max_tokens is less than the context_window for this model`,
+        },
+      }),
+      { status: 400 },
+    );
+
+  it('T3.35 a 400 for the output cap: retried once with the smaller cap, JSON kept', async () => {
+    const bodies = stubGroq((b) => ((b.max_tokens ?? 0) > 4096 ? tooBig(4096) : reply(JSON_OUT)));
+    expect(await vibe(groq(), scan, null)).toMatchObject({ summary: 'Calm and airy.' });
+    expect(bodies.map((b) => b.max_tokens)).toEqual([10_000, 4096]);
+    expect(bodies[1]?.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('T3.35 the cap-down is used once; no retry when the cap is already small', async () => {
+    const twice = stubGroq(() => tooBig(1000));
+    await expect(vibe(groq(), scan, null)).rejects.toMatchObject({ message: TOO_LONG_TEXT });
+    expect(twice).toHaveLength(2);
+    const small = stubGroq(() => tooBig(1000));
+    await expect(vibe(groq({ contextTokens: 8192 }), scan, null)).rejects.toMatchObject({
+      message: TOO_LONG_TEXT,
+    });
+    expect(small).toHaveLength(1);
+  });
+
+  it('T3.35 OpenAI o-series rejecting max_tokens itself: one wasted cap-down call, then rethrown', async () => {
+    const bodies = stubGroq(
+      () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              message:
+                "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            },
+          }),
+          { status: 400 },
+        ),
+    );
+    await expect(vibe(groq(), scan, null)).rejects.toMatchObject({ message: TOO_LONG_TEXT });
+    expect(bodies).toHaveLength(2);
+  });
+
+  it('T3.35 cap-down, then a mid-stream error, then an error again: exactly 3 calls', async () => {
+    const bodies = stubGroq((b, n) =>
+      (b.max_tokens ?? 0) > 4096 ? tooBig(4096) : n < 9 ? jsonFailed() : reply(JSON_OUT),
+    );
+    await expect(vibe(groq(), scan, null)).rejects.toMatchObject({ message: MID_STREAM_TEXT });
+    expect(bodies).toHaveLength(3);
+    // The smaller cap sticks; only the 3rd call has JSON off.
+    expect(bodies.map((b) => b.max_tokens)).toEqual([10_000, 4096, 4096]);
+    expect(bodies.map((b) => !!b.response_format)).toEqual([true, true, false]);
+
+    const ok = stubGroq((b, n) =>
+      (b.max_tokens ?? 0) > 4096 ? tooBig(4096) : n === 2 ? jsonFailed() : reply(JSON_OUT),
+    );
+    expect(await vibe(groq(), scan, null)).toMatchObject({ summary: 'Calm and airy.' });
+    expect(ok).toHaveLength(3);
+  });
+
+  it('T3.35 an image rejected (400) then an error mid-stream: one content retry only', async () => {
+    let n = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        n++;
+        return n === 1
+          ? new Response(JSON.stringify({ error: { message: 'image input is not supported' } }), {
+              status: 400,
+            })
+          : jsonFailed();
+      }),
+    );
+    await expect(vibe(groq({ vision: true }), scan, SHOT)).rejects.toMatchObject({
+      message: MID_STREAM_TEXT,
+    });
+    expect(n).toBe(2);
+  });
+
+  it('T3.35 Gemini 8k-output models: the generic 400 for maxOutputTokens also caps down', async () => {
+    const caps: number[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string | URL, init?: RequestInit) => {
+        const cap = (
+          JSON.parse(String(init?.body)) as { generationConfig: { maxOutputTokens: number } }
+        ).generationConfig.maxOutputTokens;
+        caps.push(cap);
+        if (cap > 8192)
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: 400,
+                message: `Unable to submit request because it has a maxOutputTokens value of ${cap} but the supported range is from 1 (inclusive) to 8193 (exclusive). Update the value and try again.`,
+                status: 'INVALID_ARGUMENT',
+              },
+            }),
+            { status: 400 },
+          );
+        return sseResponse([
+          `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON_OUT }] }, finishReason: 'STOP' }] })}\n\n`,
+        ]);
+      }),
+    );
+    const p = createGemini({
+      baseUrl: '',
+      model: 'gemini-2.0-flash',
+      apiKey: 'AIza-test',
+      vision: false,
+    });
+    expect(await vibe(p, scan, null)).toMatchObject({ summary: 'Calm and airy.' });
+    expect(caps).toEqual([10_000, 4096]);
   });
 });
