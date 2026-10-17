@@ -8,6 +8,7 @@ import { openSettings, useAiContext } from '@/lib/aiContext';
 import { SETUP_HINT } from '@/lib/aiRuntime';
 import { loadChat, saveChat } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { askHistory, STOPPED_TEXT } from '../askHistory';
 import { useStore } from '../store';
 
 const STARTERS = [
@@ -79,9 +80,7 @@ export function Ask() {
     if (!question || busy) return;
     setInput('');
     setBusy(true);
-    const history = (chats[scanId] ?? [])
-      .filter((m) => !m.error && m.content)
-      .map((m) => ({ role: m.role, content: m.content }));
+    const history = askHistory(chats[scanId] ?? []);
     setChat(scanId, (p) => [
       ...p,
       { role: 'user', content: question },
@@ -89,19 +88,24 @@ export function Ask() {
     ]);
     const setLast = (patch: { content?: string; error?: string }) =>
       setChat(scanId, (p) => p.map((m, i) => (i === p.length - 1 ? { ...m, ...patch } : m)));
-    controller = new AbortController();
+    const ctl = new AbortController();
+    controller = ctl;
     try {
       if (!scan) return;
       const final = await ask(provider, scan, question, history, {
-        signal: controller.signal,
+        signal: ctl.signal,
         onText: (t) => setLast({ content: t }),
       });
       setLast({ content: final });
     } catch (e) {
-      const kind = (e as { kind?: string } | null)?.kind;
-      if (kind !== 'aborted') {
-        setLast({ error: e instanceof Error ? e.message : 'Something went wrong.' });
-      }
+      // Stopped by the user, however the abort surfaced: marked, so it is never replayed as whole.
+      setLast({
+        error: ctl.signal.aborted
+          ? STOPPED_TEXT
+          : e instanceof Error
+            ? e.message
+            : 'Something went wrong.',
+      });
     } finally {
       controller = null;
       setBusy(false);
@@ -143,10 +147,14 @@ export function Ask() {
               <>
                 {/* Text that streamed before the error (e.g. an answer cut off at the length limit). */}
                 {m.content && <span className="mb-2 block">{m.content}</span>}
-                <span className="flex items-center gap-2 text-destructive">
-                  <Mascot size={32} mood="sad" />
-                  {m.error}
-                </span>
+                {m.error === STOPPED_TEXT ? (
+                  <span className="text-muted-foreground text-xs">{m.error}</span>
+                ) : (
+                  <span className="flex items-center gap-2 text-destructive">
+                    <Mascot size={32} mood="sad" />
+                    {m.error}
+                  </span>
+                )}
               </>
             ) : m.content ? (
               m.content
