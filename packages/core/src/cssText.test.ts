@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCssText, parseDeclarations, stripComments } from './cssText';
+import { MAX_NESTING, parseCssText, parseDeclarations, stripComments } from './cssText';
 
 describe('cssText', () => {
   it('strips comments but keeps string contents', () => {
@@ -78,6 +78,25 @@ describe('cssText', () => {
       ['--b', 'url(x;y)'],
       ['color', 'red'],
     ]);
+  });
+
+  it('T1.12 survives 20k nested @media and still parses the rules after it (audit H11)', () => {
+    const n = 20_000;
+    const css = `:root{--before:1}${'@media a{'.repeat(n)}:root{--deep:1}${'}'.repeat(n)}:root{--after:2}`;
+    const t0 = performance.now();
+    const r = parseCssText(css);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(r.vars['--before']).toBe('1');
+    expect(r.vars['--after']).toBe('2');
+    expect(r.vars['--deep']).toBeUndefined();
+    expect(r.mediaQueries).toHaveLength(MAX_NESTING);
+  });
+
+  it('T1.12 reads vars nested up to the cap and drops the ones beyond it', () => {
+    const nest = (depth: number, inner: string) =>
+      `${'@media a{'.repeat(depth)}${inner}${'}'.repeat(depth)}`;
+    expect(parseCssText(nest(MAX_NESTING, ':root{--ok:1}')).vars['--ok']).toBe('1');
+    expect(parseCssText(nest(MAX_NESTING + 1, ':root{--no:1}')).vars['--no']).toBeUndefined();
   });
 
   it('handles empty input', () => {
