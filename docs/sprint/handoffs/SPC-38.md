@@ -99,4 +99,6 @@ then go back and scan again → normal card).
   - L3: skipped. The "Click Scan again" wording is SPC-20's alert text, which this ticket keeps unchanged; flagged for
     a later text pass.
   - L4: test with a background failure (timeout) after a success.
-- Next: gate + CI green, then pe-b2 fold check and tell specimen-75.
+- Rebased onto exec/spc-44 e5d4df7 (orchestrator), gate green, pushed e5abb50. Orchestrator is now specimen-5c.
+- CI on e5abb50 red only on `secrets`: gitleaks flags `byokTest.test.tsx:13` in 37da9be, which is only on exec/spc-41 (PR #45, SPC-41); CI scans every ref. specimen-5c asked spc-41-18 to rewrite it; they will message me, then re-run #46's CI (`gh run rerun 39045428567`).
+- pe-b2 fold check of lens B r1 (e5abb50): APPROVED, lens A done for #46. Only CI left (blocked on #45).
