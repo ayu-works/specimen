@@ -1,42 +1,85 @@
 import { vibe } from '@specimen/ai';
 import { Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from '@/components/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
 import { openSettings, useAiContext } from '@/lib/aiContext';
 import { SETUP_HINT } from '@/lib/aiRuntime';
-import { updateScan } from '@/lib/db';
+import { libraryErrorText, updateScan } from '@/lib/db';
 import { useStore } from '../../store';
+
+// Module state, not component state: Inspect unmounts on a tab switch while a run goes on.
+/** The latest run; an older run's result never reaches the panel. */
+let latestRun = 0;
+/** The model call in flight; a remounted card shows it as busy instead of starting another. */
+let running: Promise<void> | null = null;
+/** Library writes in order, so an older run's save never lands after a newer one's. */
+let saves: Promise<void> = Promise.resolve();
 
 /** "Describe the vibe": vision providers only; the result feeds the prompt's visual direction. */
 export function VibeCard() {
   const { scan, screenshot, setVibe } = useStore();
   const ai = useAiContext();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(running !== null);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
+  const [saveErr, setSaveErr] = useState<{ scanId: string; text: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void running?.then(() => {
+      if (live) setBusy(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   if (!scan) return null;
 
   const provider = ai.provider;
   const enabled = !!provider && !busy;
 
   async function run() {
-    if (!provider || !scan) return;
+    if (!provider || !scan || running) return;
+    const id = ++latestRun;
+    const shown = () => latestRun === id && useStore.getState().scan?.id === scan.id;
     setBusy(true);
     setErr('');
     setNote('');
+    setSaveErr(null);
+    const call = vibe(provider, scan, screenshot);
+    running = call.then(
+      () => {},
+      () => {},
+    );
+    let v: Awaited<typeof call>;
     try {
-      const v = await vibe(provider, scan, screenshot);
-      const next = { summary: v.summary, keywords: v.keywords, model: v.model };
-      setVibe(next);
-      // Persist for saved scans; a scan not in the Library simply has no row to update.
-      void updateScan(scan.id, { vibe: next }).catch(() => {});
-      if (!v.usedImage) setNote('Based on the measured values (this model can’t look at images).');
+      v = await call;
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
+      if (shown()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
+      return;
     } finally {
+      running = null;
       setBusy(false);
+    }
+    const next = { summary: v.summary, keywords: v.keywords, model: v.model };
+    // A vibe for a scan the panel has moved off is never shown on the new one, but is still saved.
+    if (shown()) {
+      setVibe(next);
+      if (!v.usedImage) setNote('Based on the measured values (this model can’t look at images).');
+    }
+    // Persist for saved scans, by id; a scan not in the Library simply has no row to update.
+    const save = saves.then(() => updateScan(scan.id, { vibe: next }));
+    saves = save.catch(() => {});
+    try {
+      await save;
+    } catch (e) {
+      // The vibe stays usable in this panel, but it must not look saved. The toast outlives this
+      // card (a tab switch) and covers a scan no longer shown; the line stays while it is.
+      const text = `Vibe not saved to Library: ${libraryErrorText(e)}`;
+      toast(text);
+      if (shown()) setSaveErr({ scanId: scan.id, text });
     }
   }
 
@@ -61,6 +104,11 @@ export function VibeCard() {
         </button>
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
+      {saveErr?.scanId === scan.id && (
+        <p role="alert" className="text-xs text-destructive">
+          {saveErr.text}
+        </p>
+      )}
       {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
       {scan.vibe && (
         <div className="flex flex-col gap-1.5">

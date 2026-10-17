@@ -1,4 +1,4 @@
-import type { DesignScan } from '@specimen/core/schema';
+import { BOUNDS, cutText, type DesignScan } from '@specimen/core/schema';
 import { z } from 'zod';
 import { IMAGE_REJECTED_TEXT } from '../errors';
 import { type LLMProvider, ProviderError } from '../types';
@@ -7,11 +7,46 @@ import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pag
 
 export const VibeSchema = z.object({
   summary: z.string().min(1),
-  keywords: z.array(z.string()).default([]),
+  // Non-string entries are dropped, not a reason to fall back to the raw reply.
+  keywords: z
+    .array(z.unknown())
+    .default([])
+    .transform((a) => a.filter((k): k is string => typeof k === 'string')),
 });
 export type Vibe = z.infer<typeof VibeSchema>;
 
 export const VIBE_FILTERED = 'The description was filtered (brand names are removed).';
+
+/** Keywords kept, and raw keywords looked at to find them (some may sanitize to nothing). */
+const MAX_KEYWORDS = Math.min(8, BOUNDS.keywords);
+const RAW_KEYWORDS = 4 * MAX_KEYWORDS;
+
+/**
+ * Sanitized `text` within `max` chars (the v5 bound), so `updateScan` accepts it. Only a bounded
+ * slice (2 × max) goes through the sanitizer; that cut may split a brand name, so its trailing
+ * partial word is dropped. The final cut can also make one ("zentrixology" → "zentrix"), so the
+ * cut text is sanitized again (sanitizing only removes text, so it stays within `max`). Fails
+ * closed like `safe`: `''`, never raw text.
+ */
+function clamp(text: string, max: number, scan: DesignScan): string {
+  const pre = cutText(text, 2 * max);
+  let out = safe(pre, scan);
+  if (pre.length < text.length) out = out.replace(/\S*$/, '');
+  out = out.trim();
+  if (out.length <= max) return out;
+  return safe(cutText(out, max), scan).trim();
+}
+
+/** Keywords in order, without repeats (sanitizing can make two the same); case-insensitive. */
+function unique(keywords: string[]): string[] {
+  const seen = new Set<string>();
+  return keywords.filter((k) => {
+    const key = k.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 const SYSTEM_IMAGE = [
   'You describe the visual feel of a website screenshot for a designer.',
@@ -95,17 +130,19 @@ export async function vibe(
   const parsed = VibeSchema.safeParse(extractJson(raw));
   const result: Vibe = parsed.success
     ? parsed.data
-    : { summary: raw.replace(/[{}"]/g, '').trim().slice(0, 280), keywords: [] };
+    : { summary: cutText(raw.replace(/[{}"]/g, '').trim(), 280), keywords: [] };
   if (!result.summary) throw new ProviderError('other', 'The model returned no description.');
   // Fail closed: a summary the brand filter empties (or can't process) is never shown raw.
-  const summary = safe(result.summary, scan).trim();
+  const summary = clamp(result.summary, BOUNDS.vibeSummary, scan);
   if (!summary) throw new ProviderError('other', VIBE_FILTERED);
   return {
     summary,
-    keywords: result.keywords
-      .map((k) => safe(k, scan).trim())
-      .filter(Boolean)
-      .slice(0, 8),
+    keywords: unique(
+      result.keywords
+        .slice(0, RAW_KEYWORDS)
+        .map((k) => clamp(k, BOUNDS.keyword, scan))
+        .filter(Boolean),
+    ).slice(0, MAX_KEYWORDS),
     model: provider.id,
     usedImage,
   };
