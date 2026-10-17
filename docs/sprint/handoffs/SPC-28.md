@@ -98,8 +98,11 @@ the event. One check can't close that gap; checking again later does. Also: a `t
   reverted (`grep TEMP` = 0).
 - `pnpm gate` green 2026-10-17 (gitleaks not installed locally; CI runs it). check-ids: 113 IDs present.
 
+- PR #39 opened; link commented on SPC-28. Lens A r1 (pe-4d, `docs/sprint/reviews/SPC-28-a-r1.md`): APPROVED, 0 findings.
+  Its note (rescanUrl leaves its tab open on failure) is existing behaviour, a possible follow-up for the orchestrator.
+
 ## Next
-- PR open → reviews (lens A pe-4d, lens B fresh) → fold findings.
+- Lens B review → fold findings.
 
 ## How to resume
 Read this file; branch `exec/spc-28`; plan above is the contract once approved.
