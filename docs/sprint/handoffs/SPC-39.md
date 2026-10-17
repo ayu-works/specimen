@@ -2,7 +2,7 @@
 
 Executor session: `spc-39-52` · Branch `exec/spc-39` (from origin/main 2bac238) · Lane A · PE `pe-8a`, then `pe-4d` · Orchestrator `specimen-6a`
 
-Status: **r1 reviews folded (lens A pe-4d 0C/0H/1M/0L; lens B 0C/0H/5M/5L), waiting for r2.** Was: BUILT, PR #38 open. Plan APPROVED by pe-8a 2026-10-17 (Q1 no bulk
+Status: **r1 folded; lens A fold check APPROVED by pe-4d @ 76bb1a1 (0 new). Waiting for lens B r2 (if any), the owner's manual test and merge.** Was: BUILT, PR #38 open. Plan APPROVED by pe-8a 2026-10-17 (Q1 no bulk
 delete; Q2 T4.12 C + T4.13 E OK; Q3 files free). Build notes from the approval (on SPC-39), all done: the failing-delete
 test asserts the thumb and chat rows survive; the confirm shows the title as plain text; the e2e hit test covers a
 left-column card and the last row.

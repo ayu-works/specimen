@@ -34,3 +34,15 @@ item, e.g. `expect(await card.evaluate((c) => c.scrollTop + c.scrollLeft)).toBe(
 `item`'s ancestors up to the scroll container and require `scrollTop === 0 && scrollLeft === 0` on each. Then re-run
 the mutation (re-add `overflow-hidden` to the card root) and confirm T4.13 goes red. Note the red run in the handoff.
 Do the run through `node scripts/e2e.mjs` (it builds `.output-e2e`).
+
+## Fold check (pe-4d, 2026-10-17): lens A + lens B r1 fold @ 76bb1a1, APPROVED (0 new findings)
+- **A-M1:** T4.13 no longer scrolls items by hand, and it asserts that no box between the menu and the page
+  scroller is scrolled. Re-run myself: with `overflow-hidden` back on the card root, T4.13 is red ("scrolled boxes
+  on card 0"); the real code is green. libraryDelete 14/14.
+- **B-M5 (data):** the store flip (`origin: 'tab'`, `saveError`) only changes Inspect's banner. Live captures depend
+  on `extras`, so nothing new unlocks. Later writes for the deleted id stay harmless: `updateScan` does nothing when
+  the row is gone, and `saveChat` checks the row exists, so there's no orphan chat row. The one re-save path is
+  Scan's "Add another page" (`replaceStoredScan` upserts). It's an explicit user action and it clears the banner,
+  so the UI stays accurate.
+- `onDeleted` runs only after `deleteScans` resolves, so a failed delete moves no focus and shows no "Deleted" toast.
+- B-M1–M4, L1–L3, L5: each maps to a change and a test. L4 (two windows) is a follow-up, as agreed.
