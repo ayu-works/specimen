@@ -116,7 +116,7 @@ orchestrator keeps the live log on branch `sprint/log` (worktree `worktrees/spri
 installed (`herdr integration status` → `claude: current`). Workspace `w1` "Specimen". Never run bare `herdr` from a
 pane, never `herdr server stop`, never kill the herdr process.
 
-Layout: tab `control` (orchestrator and PE only) · tab `keeper` (the keeper) · tab `build` (**all** executor panes, split side by side; never one tab per executor) · tab `review` (one pane per
+Layout: tab `control` (orchestrator on the LEFT, PE on the right; owner, 2026-10-17) · tab `keeper` (the keeper) · tab `build` (**all** executor panes, split side by side; never one tab per executor) · tab `review` (one pane per
 reviewer, closed when its review is done). Pane and agent names: lowercase, ≤ 32 chars, unique (`pe`,
 `exec-spc-6`, `review-spc-6-b`).
 
