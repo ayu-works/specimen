@@ -27,15 +27,25 @@ let loadedId: string | undefined;
 let loadingId: string | undefined;
 let loadPromise: Promise<void> | null = null;
 let lastP = 0;
-const aborted = new Set<string>();
 /** WebLLM runs one generation at a time; chain requests. */
 let chatChain: Promise<void> = Promise.resolve();
+
+/** One chat, owned by the Port that sent it: only that Port can stop it. */
+interface Job {
+  port: chrome.runtime.Port;
+  id: string;
+  stopped: boolean;
+}
+const jobs = new Map<chrome.runtime.Port, Map<string, Job>>();
+/** The job the engine is generating, if any. `interruptGenerate()` is engine-wide: only stop this one. */
+let running: Job | null = null;
 
 function send(port: chrome.runtime.Port, ev: LlmEvent): void {
   try {
     port.postMessage(ev);
   } catch {
-    ports.delete(port);
+    // Chrome throws on a closed Port: treat it like a disconnect.
+    dropPort(port);
   }
 }
 function broadcast(ev: LlmEvent): void {
@@ -69,6 +79,28 @@ function classify(e: unknown): { kind: Kind; message: string } {
     };
   }
   return { kind: 'other', message };
+}
+
+/** Interrupt the running generation; a failing interrupt never escapes. */
+function interrupt(): void {
+  try {
+    void Promise.resolve(engine?.interruptGenerate()).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Stop one job: a queued one is skipped when its turn comes, a running one is interrupted. */
+function stop(job: Job): void {
+  if (job.stopped) return;
+  job.stopped = true;
+  if (running === job) interrupt();
+}
+
+/** A closed Port's chats stop (queued or running); other Ports' chats are untouched. */
+function dropPort(port: chrome.runtime.Port): void {
+  ports.delete(port);
+  for (const job of jobs.get(port)?.values() ?? []) stop(job);
 }
 
 function disposeEngine(): void {
@@ -133,25 +165,56 @@ function toMessages(req: ChatRequest): { role: 'user' | 'assistant'; content: st
   return msgs;
 }
 
-async function runChat(port: chrome.runtime.Port, id: string, req: ChatRequest): Promise<void> {
+async function runChat(job: Job, req: ChatRequest): Promise<void> {
+  const { port, id } = job;
   try {
+    if (job.stopped) {
+      send(port, { type: 'error', id, kind: 'aborted', message: 'Stopped' });
+      return;
+    }
     if (!engine || !loadedId) throw new Error('No model is loaded');
+    running = job;
     const stream = await engine.chat.completions.create({
       messages: toMessages(req),
       stream: true,
       max_tokens: req.maxTokens,
       temperature: req.temperature,
     });
+    // Drain rather than break: the worker's generator holds the model lock until it ends. The
+    // worker also clears its interrupt flag when generation starts, so re-interrupt while stopped.
+    let finish: string | null | undefined;
     for await (const chunk of stream) {
-      if (aborted.has(id)) break;
-      const text = chunk.choices[0]?.delta?.content;
+      const choice = chunk.choices[0];
+      if (choice?.finish_reason) finish = choice.finish_reason;
+      if (job.stopped) {
+        if (!choice?.finish_reason) interrupt();
+        continue;
+      }
+      const text = choice?.delta?.content;
       if (text) send(port, { type: 'delta', id, text });
     }
-    send(port, { type: 'done', id });
+    if (job.stopped) send(port, { type: 'error', id, kind: 'aborted', message: 'Stopped' });
+    else if (finish === 'abort') {
+      // Interrupted, but not by this chat's own abort: partial text is not an answer.
+      send(port, {
+        type: 'error',
+        id,
+        kind: 'other',
+        message: 'The answer was cut short. Try again.',
+      });
+    } else send(port, { type: 'done', id });
   } catch (e) {
-    send(port, { type: 'error', id, ...classify(e) });
+    send(
+      port,
+      job.stopped
+        ? { type: 'error', id, kind: 'aborted', message: 'Stopped' }
+        : { type: 'error', id, ...classify(e) },
+    );
   } finally {
-    aborted.delete(id);
+    if (running === job) running = null;
+    const mine = jobs.get(port);
+    if (mine?.get(id) === job) mine.delete(id);
+    if (mine?.size === 0) jobs.delete(port);
   }
 }
 
@@ -180,13 +243,27 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
         send(port, { type: 'error', ...classify(e) });
       }
       return;
-    case 'chat':
-      chatChain = chatChain.then(() => runChat(port, msg.id, msg.req));
+    case 'chat': {
+      let mine = jobs.get(port);
+      if (mine?.has(msg.id)) {
+        send(port, { type: 'error', id: msg.id, kind: 'other', message: 'Duplicate request id' });
+        return;
+      }
+      if (!mine) {
+        mine = new Map();
+        jobs.set(port, mine);
+      }
+      const job: Job = { port, id: msg.id, stopped: false };
+      mine.set(msg.id, job);
+      chatChain = chatChain.then(() => runChat(job, msg.req));
       return;
-    case 'abort':
-      aborted.add(msg.id);
-      void engine?.interruptGenerate();
+    }
+    case 'abort': {
+      // Only this Port's own chat: an unknown id, or another Port's, is ignored.
+      const job = jobs.get(port)?.get(msg.id);
+      if (job) stop(job);
       return;
+    }
     case 'unload':
       disposeEngine();
       return;
@@ -210,7 +287,7 @@ export function llmBusy(): boolean {
 export function attachLlmPort(port: chrome.runtime.Port): void {
   ports.add(port);
   port.onMessage.addListener((m: LlmRequest) => void handle(port, m));
-  port.onDisconnect.addListener(() => ports.delete(port));
+  port.onDisconnect.addListener(() => dropPort(port));
 }
 
 export function startLlmHost(): void {
