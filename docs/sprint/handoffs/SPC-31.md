@@ -107,8 +107,10 @@ the key choice: the existing case-sensitive camel/acronym/digit-hump boundaries,
 - Not covered (separate decision): Indic/Thai brands aren't tokenised at all, since `words` splits on marks (same as
   main).
 
+- pe-b2 fold check of affb36e: APPROVED (2026-10-17). Reviews done.
+
 ## Next
-- pe-b2 fold check of the lens B commit.
+- Waiting on the owner's "merge all". Nothing open on this ticket.
 
 ## How to resume
 Read this file, `packages/core/src/generate/sanitize.ts`, `packages/core/test/sanitizeFold.test.ts`.
