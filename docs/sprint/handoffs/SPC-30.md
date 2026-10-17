@@ -117,8 +117,10 @@ optional one in the PR body.
   OpenRouter 403 "Key limit exceeded" and Gemini 403 "requires billing" shown as invalid key; mid-stream image
   rejection still MID_STREAM_TEXT (pe-b2 note).
 
+- pe-b2 fold check of 459bb42: APPROVED (2026-10-17). Both reviews are done.
+
 ## Next
-- pe-b2 fold check. No merge without the owner (run mode: one final "merge all").
+- None. Waiting for the owner's "merge all" (no agent merges). No merge without the owner (run mode: one final "merge all").
 
 ## How to resume
 Read this file, then `git log exec/spc-41..exec/spc-30`.
