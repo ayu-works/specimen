@@ -97,6 +97,17 @@ any scanned page → a vibe is shown (no "error mid-response").
   1M-context test asserts 10000. Its L1 (whitespace runaway is longer with a bigger cap) is accepted: latency only,
   still ends as TRUNCATED.
 
+- Lens B r1 (`SPC-55-b-r1.md`): 1 C, 2 M, 2 L.
+  - **C1** (the 10000 cap is over Groq free tier's 8000 TPM → 413, mapped to "rate", not retried): **owner decision
+    (via specimen-5c, 2026-10-17): keep 10000 everywhere, no Groq TPM clamp; accepted risk.** Free-tier Groq keys may
+    get a 413 / "rate limited" on Vibe; follow-up **SPC-59** covers the error text. (A TPM-clamp fold with a test was
+    drafted, then dropped on that decision; nothing of it is committed.)
+  - **M1** (a retry inherits #44's 30 s gap timer, not 120 s): goes into #44 (SPC-40), not this PR.
+  - **M2** (OpenRouter 402 for credit reserved against max_tokens): follow-up **SPC-59**.
+  - **L1** (the generic-400 cap-down also fires on unrelated 400s, and a `response_format` 400 never gets JSON off):
+    listed in the PR body, not folded (wrap-up mode, keep the PR small).
+  - **L2** (a mid-stream retry can bill the first attempt too): listed in the PR body.
+
 ## Next / how to resume
 - `pnpm gate`, commit, push, PR (base `exec/spc-46`), comment on SPC-55, message specimen-5c. Then fold reviews.
 - Known, not this ticket: OpenAI o-series reject `max_tokens` (adapter fix filed separately by specimen-5c); a fixed
