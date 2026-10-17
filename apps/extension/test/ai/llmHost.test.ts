@@ -493,16 +493,16 @@ describe('llm Port protocol (host)', () => {
   }
 
   it('T3.11 unload or delete mid-stream ends that chat in error and frees the queue', async () => {
-    for (const msg of [
-      { type: 'unload' } as const,
-      { type: 'delete', modelId: DEFAULT_GEMMA } as const,
-    ]) {
+    for (const [msg, reason] of [
+      [{ type: 'unload' } as const, /unloaded/],
+      [{ type: 'delete', modelId: DEFAULT_GEMMA } as const, /deleted/],
+    ] as const) {
       const a = await loaded();
       await hung(a, 'A');
       open().send(msg);
       const end = await a.waitFor(ended('A'));
       expect(end).toMatchObject({ type: 'error', kind: 'other' });
-      expect((end as { message: string }).message).toMatch(/unloaded/);
+      expect((end as { message: string }).message).toMatch(reason);
       expect(a.of('A').some((e) => e.type === 'done')).toBe(false);
       await nextChatRuns();
     }
@@ -601,7 +601,7 @@ describe('llm Port protocol (host)', () => {
     await d.waitFor((e) => e.type === 'deleted');
     expect(state.log).toEqual(['terminate', 'delete']);
     expect((await c.waitFor(loadError)) as { message: string }).toMatchObject({
-      message: expect.stringMatching(/unloaded/),
+      message: expect.stringMatching(/deleted/),
     });
     expect(c.events.some((e) => e.type === 'ready')).toBe(false);
   });

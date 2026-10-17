@@ -311,7 +311,9 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
     case 'delete':
       try {
         // A load still running would write the shards back after the delete: stop it first.
-        if (loadedId === msg.modelId || loadingId === msg.modelId) disposeEngine();
+        if (loadedId === msg.modelId || loadingId === msg.modelId) {
+          disposeEngine('The local model was deleted. Download it again to use it.');
+        }
         await deleteModelAllInfoInCache(msg.modelId, buildAppConfig());
         send(port, { type: 'deleted', modelId: msg.modelId });
       } catch (e) {
