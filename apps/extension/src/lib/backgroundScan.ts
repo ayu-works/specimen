@@ -1,10 +1,14 @@
 /** The background worker's scan work: sampling, the thumbnail, cross-origin CSS and the offscreen document. */
-import type { ScanOpts, ScanResult } from './messaging';
+import {
+  CSS_FETCH_MAX_URLS,
+  type CssFetchEntry,
+  type ScanOpts,
+  type ScanResult,
+} from './messaging';
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const THUMB_WIDTH = 640;
 const MAX_CSS_BYTES = 2_000_000;
-const MAX_CSS_URLS = 24;
 
 function toBase64(bytes: Uint8Array): string {
   let bin = '';
@@ -75,15 +79,30 @@ async function sample(tabId: number, opts: ScanOpts): Promise<ScanResult['raw']>
   return raw;
 }
 
-export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanResult> {
+export /** The tab, if it is the active tab of its window; throws otherwise. */
+async function inFront(tabId: number): Promise<chrome.tabs.Tab> {
   const tab = await chrome.tabs.get(tabId);
+  if (!tab.active) throw new Error('the tab was not in front');
+  return tab;
+}
+
+export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanResult> {
+  // Fails fast (before sampling) when the tab is already gone.
+  await chrome.tabs.get(tabId);
   const raw = opts.emulate
     ? await withColorSchemeEmulation(tabId, opts.emulate, () => sample(tabId, opts))
     : await sample(tabId, opts);
   if (opts.noScreenshot) return { raw, screenshot: '' };
   // The thumbnail is a nice-to-have: a failed capture must not fail the scan.
   try {
-    const shot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 });
+    // captureVisibleTab shoots whatever tab is in front of the window, so check the scanned tab
+    // is that tab right before the shot and still is right after (the sample can take seconds).
+    const front = await inFront(tabId);
+    const shot = await chrome.tabs.captureVisibleTab(front.windowId, {
+      format: 'jpeg',
+      quality: 70,
+    });
+    await inFront(tabId);
     return { raw, screenshot: await downscale(shot) };
   } catch (e) {
     raw.warnings.push(`screenshot unavailable: ${e instanceof Error ? e.message : String(e)}`);
@@ -91,20 +110,27 @@ export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanR
   }
 }
 
-/** Fetch stylesheet text only for origins we hold host permission for; others → null. */
-export async function cssFetch(urls: string[]): Promise<(string | null)[]> {
+/** Fetch stylesheet text only for origins we hold host permission for; others say why not. */
+export async function cssFetch(urls: string[]): Promise<CssFetchEntry[]> {
   return Promise.all(
-    urls.slice(0, MAX_CSS_URLS).map(async (u) => {
+    urls.map(async (u, i): Promise<CssFetchEntry> => {
+      if (i >= CSS_FETCH_MAX_URLS) return { skipped: 'over the 24-stylesheet limit' };
+      let url: URL;
       try {
-        const url = new URL(u);
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-        if (!(await chrome.permissions.contains({ origins: [`${url.origin}/*`] }))) return null;
+        url = new URL(u);
+      } catch {
+        return { skipped: 'not http(s)' };
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return { skipped: 'not http(s)' };
+      try {
+        if (!(await chrome.permissions.contains({ origins: [`${url.origin}/*`] })))
+          return { skipped: 'no site access' };
         const res = await fetch(url.href, { credentials: 'omit' });
-        if (!res.ok) return null;
+        if (!res.ok) return { skipped: `HTTP ${res.status}` };
         const text = await res.text();
         return text.length > MAX_CSS_BYTES ? text.slice(0, MAX_CSS_BYTES) : text;
       } catch {
-        return null;
+        return { skipped: 'network error' };
       }
     }),
   );

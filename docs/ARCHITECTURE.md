@@ -300,7 +300,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | Message | From → To | Payload → Response |
 |---|---|---|
 | `scan.run` | sidepanel → background | `{ tabId, opts? }` → `{ raw: RawPage, screenshot: string }`. `opts`: `theme` (toggle the page's own class/attribute switch), `emulate` (debugger color-scheme emulation), `colorsOnly`, `skipComponents`, `noScreenshot`. The options are handed to the sampler through `globalThis.__specimenOpts` in the same isolated world just before injection |
-| `css.fetch` | content → background | `{ urls[] }` → `{ texts[] }` |
+| `css.fetch` | content → background | `{ urls[] }` → `{ texts[] }`, each entry the text, `{ skipped: reason }` (a fixed string: `no site access`, `HTTP <status>`, `network error`, `not http(s)`, `over the 24-stylesheet limit`) or `null` |
 | `overlay.set` | sidepanel → background → content | `{ grid?: boolean; inspector?: boolean; highlight?: { tokenId, selectorHints } }` |
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |

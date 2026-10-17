@@ -2,7 +2,7 @@
 
 Executor session `spc-20-04`, branch `exec/spc-20` from `origin/main` de35272. PE `pe-8a`, orchestrator `specimen-6a`.
 
-## Plan (awaiting PE approval)
+## Plan (APPROVED by PE 2026-10-17; css.fetch change OK'd by the owner via the orchestrator)
 
 Goal: every scan failure a user can hit gives a clear message and never a misleading success, and a test drives each
 one. No test touches a real URL: `fetch`, `chrome.*` and the sampler are stubbed (unit), or served from the local
@@ -106,10 +106,26 @@ e2e (Playwright, local servers only):
 `pnpm gate` green. The core nesting test is shown failing on `main` first.
 
 ## Done
-- Read brief, setup, plan (Resume 2026-10-17), the audit H8/H9/H11/M9, the ticket (no comments). `pnpm i`.
+- Plan approved with PE notes, all applied: (1) skip reasons are a closed union of fixed strings, HTTP gives the
+  status number only (`skipReasonOf` also rejects anything outside the set on the sampler side); (2) `tab.active` is
+  checked right before and confirmed right after the capture, with a test where the tab goes to the background
+  mid-capture; (3) the move to `lib/backgroundScan.ts` is its own pure-move commit (67eeba6); (4) a rule after the
+  20k-deep block is shown parsed (core and e2e); (5) `test/helpers/chrome.ts` untouched (the extra stubs live in the
+  test file).
+- Core nesting cap (`MAX_NESTING = 32`); its test failed on `main` with RangeError first.
+- Error texts, per-sheet `try` in `cssom.ts`, reason-aware warnings, the shared 24 cap (sheets past it now get a
+  warning instead of being silently dropped, and duplicate URLs in one round are fetched once).
+- Tests: `apps/extension/test/scanFailures.test.ts` (H8 table + runTabScan failures, H9 screenshot paths incl.
+  the real `saveScan` with zero thumb rows, css.fetch reasons/cap/2 MB, M9 messaging + ensureOffscreen),
+  `apps/extension/test/cssom.test.ts` (warnings per reason, out-of-set reason, throwing fetcher, 20k nesting, a
+  parse that throws, the cap), and two e2e in `e2e/sampler.spec.ts` (a tab behind the panel: saved, no thumb, the
+  warning; the real background: `HTTP 404` warning and a 20k-deep sheet).
+- Finding: Chrome's own renderer crashes on a 20k-deep sheet ("Page crashed"), so the e2e server sends the deep text
+  only to the background's fetch (`sec-fetch-dest` is not `style`) and a plain sheet to the page.
+- ARCHITECTURE §8 `css.fetch` row updated. `pnpm gate` green.
 
 ## Next
-- PE approval (incl. the `css.fetch` type change), then tests first in core, then the rest.
+- Reviews (PE lens A + lens B), fold findings.
 
 ## How to resume
-Read this file, `git log origin/main..`, then continue from "Next".
+Read this file, `git log origin/main..`, the PR, then any `docs/sprint/reviews/SPC-20-*.md`.
