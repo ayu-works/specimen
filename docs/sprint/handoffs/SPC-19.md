@@ -2,10 +2,13 @@
 
 Executor session: `spc-19-02` · Branch `exec/spc-19` (from origin/main 77ac925) · Lane C · PE `pe-ed` · Orchestrator `specimen-6a`
 
-Status: **PLAN, waiting for PE approval.** No code written. M2 (schema bounds) is a contract: not built until the
-PE's final ruling and the orchestrator confirms the owner's OK.
+Status: **BUILT, PR open, waiting for reviews.** Plan APPROVED by pe-ed 2026-10-17 (answers below). M2 ruling:
+`worktrees/pe/docs/sprint/reviews/SPC-19-m2-ruling.md`; owner OK relayed by specimen-6a 2026-10-17 (recorded on SPC-19).
 
-## Plan
+## Plan (APPROVED by pe-ed 2026-10-17)
+PE answers: (1) yes, same id + same content is a duplicate (compare parsed values on both sides); (2) leave Vibe.tsx
+(PE files a follow-up); (3) M2 numbers fixed in the ruling, plus merge/compose clamp with the same trim; (4)
+ScanCard/extras/Scan.tsx OK. Build note: inside Dexie rw transactions await only Dexie calls.
 
 ### Scope (from the ticket, its comments and the kickoff)
 | Item | Source | Where |
@@ -149,10 +152,21 @@ parents it touches), not the whole input. Output identical to today for valid in
 4. Touching `ScanCard.tsx`, `extras.ts` and `Scan.tsx` (not in lane C's "Owns" list, but no active lane holds them).
 
 ## Done
-- (nothing yet)
+- Commit 1 (non-contract): `importScans` (one transaction, duplicates skipped, a clashing id gets a content-derived
+  id `<id>-<12 hex>` so a retry finds it: a deviation from the plan's random UUID, needed for idempotency), version 1
+  only, `filterCssVariables` exported from core and applied on import, saveScan scan+thumb in one transaction, every
+  writer stores the parsed value, `updateScan` validates every patch, `scanTab.saveError` + store `saveError` +
+  "Not saved to Library" line, merged-page and capture notes, ScanCard errors, `libraryErrorText`, L1.
+- Commit 2 (M2, v5): `schema/bounds.ts` (`BOUNDS`, `str`/`list`/`dict` helpers registering each bound in `MAX`),
+  `schema/trim.ts` (`trimToBounds` walks the zod schema, so trim and checks can't drift; `clampToBounds` for
+  producers), migrate v1–v4 → v5, extract/merge/compose clamp, 500-scan file cap, derived import id kept ≤ 1000.
+  Hex is deliberately not trimmed (a long hex must be rejected, not cut into a valid one).
+- `pnpm gate` green locally (gitleaks not installed here; CI scans).
 
 ## Next
-- Wait for the PE's verdict on this plan.
+- Reviews (PE lens A, lens B, security). Fold findings as new commits.
+- Follow-ups not in this PR: Vibe.tsx silent save (PE filing); caching migrated rows in `listScans`; Library
+  rescan (`rescanUrl`) ignores `saveError`.
 
 ## How to resume
 Read this file, then SPC-19 in Linear with comments. Worktree `specimen-herdr/worktrees/spc-19`, branch `exec/spc-19`.

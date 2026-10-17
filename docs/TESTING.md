@@ -28,7 +28,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 **Schema & color (U)**
 | ID | Test |
 |---|---|
-| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields; v4 rejects a non-`#rrggbb` hex and a role id outside its palette; v1–v3 rows are repaired (idempotent, input not mutated); every fixture, merge, compose and derived variant passes v4 with no repair |
+| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields; v4 rejects a non-`#rrggbb` hex and a role id outside its palette; v1–v3 rows are repaired (idempotent, input not mutated); every fixture, merge, compose and derived variant passes v5 with no repair or trim; v5 bounds every string, array and record (`BOUNDS`): a v5 scan over a bound is rejected, a v4 one is trimmed once (idempotent, roles kept valid), and merge/compose/extract clamp their output |
 | T1.02 | `parseColor` handles hex/rgb/rgba/hsl/oklch/`color()`/named/`transparent` → normalised value |
 | T1.03 | `contrast('#000','#fff') === 21`, `contrast('#777','#fff') ≈ 4.48` |
 | T1.04 | `deltaE2000` matches reference pairs (Sharma test data subset) within 0.01 |

@@ -308,6 +308,34 @@ describe('Library writes are atomic and idempotent (audit H6, M14)', () => {
     expect(new Set((await listScans()).map((s) => s.id)).size).toBe(2);
   });
 
+  it('T4.03 a file with more than 500 scans is rejected whole (sec M2)', async () => {
+    const many = Array.from({ length: 501 }, (_, i) => scanOf(`m${i}`, { scannedAt: i }));
+    await expect(importFile(exportOf(many))).rejects.toThrow(/501 scans.*at most 500/);
+    expect(await db.scans.count()).toBe(0);
+    expect(await importFile(exportOf(many.slice(0, 500)))).toMatchObject({ imported: 500 });
+  });
+
+  it('T4.03 an over-bound v5 scan is skipped; a v4 one is imported trimmed (sec M2)', async () => {
+    const huge = scanOf('huge5', { title: 'x'.repeat(5000) });
+    const old = { ...scanOf('huge4', { title: 'x'.repeat(5000) }), schemaVersion: 4 };
+    expect(await importFile(exportOf([huge, old]))).toEqual({
+      imported: 1,
+      duplicates: 0,
+      skipped: 1,
+    });
+    expect((await db.scans.get('huge4'))?.title).toHaveLength(1000);
+    expect(await db.scans.get('huge5')).toBeUndefined();
+  });
+
+  it('T4.03 a clashing id at the length bound still gets a valid id', async () => {
+    const id = 'i'.repeat(1000);
+    await saveScan(scanOf(id, { scannedAt: 1 }), null);
+    expect(await importFile(exportOf([scanOf(id, { scannedAt: 2 })]))).toMatchObject({
+      imported: 1,
+    });
+    expect((await listScans()).map((s) => s.id.length)).toEqual([1000, 1000]);
+  });
+
   it('T4.03 imported CSS variables go through the extractor filter (sec L2)', async () => {
     const s = scanOf('vars', {
       cssVariables: { constructor: 'x', '--brand': '#5e6ad2', '--color-x': '`'.repeat(300) },

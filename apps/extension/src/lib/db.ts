@@ -2,7 +2,7 @@
  * Local library (ARCHITECTURE §9): IndexedDB via Dexie, db `specimen`.
  * Everything stays on the device; scans are re-validated through `migrate()` on every read.
  */
-import { type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
+import { BOUNDS, type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
 
 export interface StoredScan extends DesignScan {
@@ -222,7 +222,9 @@ export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
     scans.map(async (s) => {
       const clean = DesignScanSchema.parse(s);
       const key = contentKey(clean);
-      return { clean, key, altId: `${clean.id}-${await shortHash(key)}` };
+      // `-` + 12 hex chars; the id stays inside its bound.
+      const altId = `${clean.id.slice(0, BOUNDS.text - 13)}-${await shortHash(key)}`;
+      return { clean, key, altId };
     }),
   );
   return db.transaction('rw', db.scans, async () => {

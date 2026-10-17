@@ -1,6 +1,6 @@
 /** `.specimen.json` export / import (ARCHITECTURE §9). Thumbnails are never exported. */
 import { filterCssVariables } from '@specimen/core';
-import { type DesignScan, migrate } from '@specimen/core/schema';
+import { BOUNDS, type DesignScan, migrate } from '@specimen/core/schema';
 import { importScans, libraryErrorText } from './db';
 
 export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
@@ -58,6 +58,10 @@ export async function importFile(file: File): Promise<ImportResult> {
     throw new Error('That file is from a newer Specimen. Update Specimen and try again.');
   if (doc.version !== 1) throw new Error('That does not look like a Specimen export.');
   const rawScans: unknown[] = doc.scans;
+  if (rawScans.length > BOUNDS.importScans)
+    throw new Error(
+      `That file has ${rawScans.length} scans; Specimen imports at most ${BOUNDS.importScans} at a time.`,
+    );
   const valid: DesignScan[] = [];
   for (const raw of rawScans) {
     try {

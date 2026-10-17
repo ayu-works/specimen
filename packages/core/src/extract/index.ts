@@ -1,5 +1,11 @@
 import { computeA11y } from '../a11y';
-import { type DesignScan, DesignScanSchema, type RawPage, SCHEMA_VERSION } from '../schema';
+import {
+  clampToBounds,
+  type DesignScan,
+  DesignScanSchema,
+  type RawPage,
+  SCHEMA_VERSION,
+} from '../schema';
 import { extractBorders } from './borders';
 import { analyzeColors, type ColorOptions, CSS_VAR_HINT } from './colors';
 import { extractComponents } from './components';
@@ -115,6 +121,8 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
   };
   const components = extractComponents(raw.components);
   if (components.length > 0) scan.components = components;
-  const out = opts.validate === false ? scan : DesignScanSchema.parse(scan);
+  // A page can hand us anything (a 30k-char title, thousands of warnings): stay inside the bounds.
+  const clamped = clampToBounds(scan);
+  const out = opts.validate === false ? clamped : DesignScanSchema.parse(clamped);
   return normalizeZeros(out);
 }

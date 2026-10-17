@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, dict, list, str } from './bounds';
 
 export const ColorRoleSchema = z.enum([
   'background',
@@ -19,21 +20,22 @@ export const ColorRoleSchema = z.enum([
 export type ColorRole = z.infer<typeof ColorRoleSchema>;
 
 /** Lower-case `#rrggbb`, as the extractor writes it (alpha lives in its own field). */
+/** Bounded by its pattern; deliberately not in `MAX`, so a long hex is rejected, never trimmed into shape. */
 export const HexSchema = z.string().regex(/^#[0-9a-f]{6}$/, 'expected #rrggbb');
 
 export const ColorTokenSchema = z.object({
-  id: z.string(),
+  id: str(),
   hex: HexSchema,
   oklch: z.tuple([z.number(), z.number(), z.number()]),
   alpha: z.number(),
   weight: z.number(),
   usage: z.object({ bg: z.number(), text: z.number(), border: z.number(), fill: z.number() }),
-  sourceVar: z.string().optional(),
+  sourceVar: str().optional(),
 });
 export type ColorToken = z.infer<typeof ColorTokenSchema>;
 
 export const TypeStyleSchema = z.object({
-  id: z.string(),
+  id: str(),
   role: z.enum([
     'display',
     'h1',
@@ -48,14 +50,14 @@ export const TypeStyleSchema = z.object({
     'button',
     'code',
   ]),
-  familyId: z.string(),
+  familyId: str(),
   size: z.number(),
   weight: z.number(),
   lineHeight: z.number(),
   letterSpacingEm: z.number(),
   transform: z.enum(['uppercase', 'lowercase', 'capitalize']).optional(),
   weightShare: z.number(),
-  sample: z.string().optional(),
+  sample: str(BOUNDS.sample).optional(),
 });
 export type TypeStyle = z.infer<typeof TypeStyleSchema>;
 
@@ -81,7 +83,7 @@ export const SectionSchema = z.object({
   columns: z.number().int(),
   align: z.enum(['left', 'center']),
   bgRole: ColorRoleSchema.optional(),
-  headingStyleId: z.string().optional(),
+  headingStyleId: str().optional(),
   confidence: z.number(),
 });
 export type Section = z.infer<typeof SectionSchema>;
@@ -96,32 +98,29 @@ export const ComponentSpecSchema = z.object({
     'nav-link',
     'badge',
   ]),
-  base: z.record(z.string(), z.string()),
-  states: z.partialRecord(
-    z.enum(['hover', 'focus', 'active', 'disabled']),
-    z.record(z.string(), z.string()),
-  ),
+  base: dict(str(), str()),
+  states: z.partialRecord(z.enum(['hover', 'focus', 'active', 'disabled']), dict(str(), str())),
 });
 export type ComponentSpec = z.infer<typeof ComponentSpecSchema>;
 
 const ColorsSchema = z.object({
-  palette: z.array(ColorTokenSchema),
-  roles: z.partialRecord(ColorRoleSchema, z.string()),
-  gradients: z.array(z.object({ css: z.string(), weight: z.number() })),
+  palette: list(ColorTokenSchema, BOUNDS.palette),
+  roles: z.partialRecord(ColorRoleSchema, str()),
+  gradients: list(z.object({ css: str(), weight: z.number() })),
 });
 
 const LayoutSchema = z.object({
   containerMaxWidth: z.number().nullable(),
   gutter: z.number().nullable(),
-  breakpoints: z.array(z.number()),
+  breakpoints: list(z.number()),
   density: z.enum(['compact', 'comfortable', 'airy']),
-  blueprint: z.array(SectionSchema),
+  blueprint: list(SectionSchema, BOUNDS.blueprint),
 });
 
 /** Layout measured at a phone-width viewport, plus what changes versus desktop. */
 const MobileSchema = LayoutSchema.partial().extend({
   /** Type sizes (px, by role) that differ from desktop. */
-  typeSizes: z.record(z.string(), z.number()).optional(),
+  typeSizes: dict(str(), z.number()).optional(),
   sectionPaddingY: z.number().optional(),
   /** True when the top navigation collapses into a menu button. */
   hamburger: z.boolean().optional(),
@@ -133,56 +132,56 @@ const MobileSchema = LayoutSchema.partial().extend({
 const ThemeVariantSchema = ColorsSchema.partial().extend({ measured: z.boolean().optional() });
 
 export const FamilySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  stack: z.string(),
+  id: str(),
+  name: str(),
+  stack: str(),
   role: z.enum(['display', 'body', 'mono']),
   source: z.enum(['google', 'adobe', 'self-hosted', 'system', 'unknown']),
-  weights: z.array(z.number()),
+  weights: list(z.number()),
 });
 
 const DesignScanObject = z.object({
-  schemaVersion: z.literal(4),
-  id: z.string(),
-  url: z.string(),
-  host: z.string(),
-  title: z.string(),
+  schemaVersion: z.literal(5),
+  id: str(),
+  url: str(BOUNDS.url),
+  host: str(BOUNDS.host),
+  title: str(BOUNDS.title),
   scannedAt: z.number(),
   viewport: z.object({ w: z.number(), h: z.number() }),
   colorScheme: z.enum(['light', 'dark']),
   colors: ColorsSchema,
   typography: z.object({
-    families: z.array(FamilySchema),
-    styles: z.array(TypeStyleSchema),
+    families: list(FamilySchema, BOUNDS.families),
+    styles: list(TypeStyleSchema, BOUNDS.styles),
     baseSize: z.number(),
     scaleRatio: z.number().nullable(),
   }),
   spacing: z.object({
     baseUnit: z.number(),
-    scale: z.array(z.number()),
+    scale: list(z.number()),
     sectionPaddingY: z.number(),
     contentGap: z.number(),
   }),
   radii: z.object({
-    scale: z.array(z.object({ value: z.number(), weight: z.number() })),
+    scale: list(z.object({ value: z.number(), weight: z.number() })),
     button: z.number().optional(),
     card: z.number().optional(),
     input: z.number().optional(),
     pillButtons: z.boolean(),
   }),
-  shadows: z.array(
+  shadows: list(
     z.object({
-      css: z.string(),
+      css: str(),
       weight: z.number(),
       level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     }),
   ),
-  borders: z.array(
+  borders: list(
     z.object({ width: z.number(), colorRole: ColorRoleSchema.optional(), weight: z.number() }),
   ),
   layout: LayoutSchema,
-  motion: z.object({ durationsMs: z.array(z.number()), easings: z.array(z.string()) }).optional(),
-  components: z.array(ComponentSpecSchema).optional(),
+  motion: z.object({ durationsMs: list(z.number()), easings: list(str()) }).optional(),
+  components: list(ComponentSpecSchema).optional(),
   variants: z
     .object({
       dark: ThemeVariantSchema.optional(),
@@ -191,14 +190,18 @@ const DesignScanObject = z.object({
     })
     .optional(),
   vibe: z
-    .object({ summary: z.string(), keywords: z.array(z.string()), model: z.string() })
+    .object({
+      summary: str(BOUNDS.vibeSummary),
+      keywords: list(str(BOUNDS.keyword), BOUNDS.keywords),
+      model: str(),
+    })
     .optional(),
   a11y: z
     .object({
-      pairs: z.array(
+      pairs: list(
         z.object({
-          fg: z.string(),
-          bg: z.string(),
+          fg: str(),
+          bg: str(),
           ratio: z.number(),
           aa: z.boolean(),
           aaLarge: z.boolean(),
@@ -207,18 +210,18 @@ const DesignScanObject = z.object({
           /** `ui` = non-text component (needs 3:1), `text` = needs 4.5:1 (3:1 when large). */
           kind: z.enum(['text', 'ui']).optional(),
           /** Nearest passing foreground (OKLCH lightness shift), when the pair fails. */
-          fix: z.string().optional(),
+          fix: str().optional(),
         }),
       ),
     })
     .optional(),
-  cssVariables: z.record(z.string(), z.string()),
+  cssVariables: dict(str(BOUNDS.cssVarKey), str(BOUNDS.cssVarValue), BOUNDS.cssVariables),
   meta: z.object({
-    extractorVersion: z.string(),
+    extractorVersion: str(),
     sampleCount: z.number(),
     durationMs: z.number(),
-    warnings: z.array(z.string()),
-    pages: z.array(z.string()).optional(),
+    warnings: list(str(BOUNDS.warning), BOUNDS.warnings),
+    pages: list(str(BOUNDS.url), BOUNDS.pages).optional(),
   }),
 });
 
