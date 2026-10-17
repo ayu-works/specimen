@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { makeChrome, NOT_IN_MANIFEST } from './helpers/chrome';
 
-const debuggerQ = { permissions: ['debugger'] };
+const notInManifest = { permissions: ['tabCapture'] };
 const origin = { origins: ['https://api.example.com/*'] };
 
 describe('shared chrome stub: permissions that can say no', () => {
   it('T3.13 by default everything is held and every request is granted (unchanged)', async () => {
     const { permissions } = makeChrome();
-    expect(await permissions.contains(debuggerQ)).toBe(true);
+    expect(await permissions.contains(notInManifest)).toBe(true);
     expect(await permissions.contains(origin)).toBe(true);
     expect(await permissions.request(origin)).toBe(true);
   });
@@ -32,7 +32,7 @@ describe('shared chrome stub: permissions that can say no', () => {
     const { permissions } = makeChrome({
       permissions: { held: { permissions: ['storage'] }, answer: 'throw' },
     });
-    await expect(permissions.request(debuggerQ)).rejects.toThrow(NOT_IN_MANIFEST);
+    await expect(permissions.request(notInManifest)).rejects.toThrow(NOT_IN_MANIFEST);
     expect(await permissions.request({ permissions: ['storage'] })).toBe(true);
   });
 

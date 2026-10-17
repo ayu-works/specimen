@@ -49,5 +49,5 @@ as intended.
 - **Drift:** the stub's "throw" message matches Chrome's real text (probed on 156.0.8078.4).
 
 ## Next / how to resume
-- Wait for lens A (pe-b2) and lens B. Fold findings as new commits.
+- Lens A r1 (pe-b2): APPROVED, L1 (debugger wording in the stub) folded in a follow-up commit. Waiting for lens B.
 - SPC-44 builds on this branch and can use `installChrome({permissions:…})` for its own refusal tests.

@@ -31,7 +31,7 @@ function area(name: string, listeners: Set<Listener>) {
   };
 }
 
-/** Chrome's message when a permission the manifest can't grant is requested (e.g. optional `debugger`). */
+/** Chrome's message when a permission not in the manifest is requested. */
 export const NOT_IN_MANIFEST = 'Only permissions specified in the manifest may be requested.';
 
 export interface PermissionOpts {
