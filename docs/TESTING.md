@@ -76,6 +76,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T1.34 | E | Inspector hover streams the element's styles to the panel |
 | T1.35 | 🖐 | Scan linear.app, stripe.com, ramp.com, cal.com: roles and type look right (screenshots in the PR) |
 | T1.36 | 🖐 | Eyedropper pick → nearest token shown |
+| T1.38 | C | Inspect's Port listener (SPC-27): a foreign Port (`council`, unnamed) is disconnected unread (even if `disconnect()` throws); only the overlay's `inspector.hover` payload renders, malformed messages are dropped and the last hover stays; a disconnect mid-stream or a toggle off / unmount removes the listeners (onConnect first, one throwing `disconnect()` doesn't stop the rest), late posts are dropped and the card resets |
 
 ## Phase 2: Outputs
 | ID | Type | Test |

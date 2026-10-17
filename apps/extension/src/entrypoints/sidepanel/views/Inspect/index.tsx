@@ -18,6 +18,73 @@ async function activeTabId(): Promise<number | undefined> {
   return tab?.id;
 }
 
+/** Only what the card reads: anything else on the port is dropped, never rendered. */
+function isHover(m: unknown): m is InspectorHover {
+  if (!m || typeof m !== 'object') return false;
+  const h = m as { type?: unknown } & Partial<Record<keyof InspectorHover, unknown>>;
+  const r = h.rect as Partial<Record<keyof InspectorHover['rect'], unknown>> | undefined;
+  return (
+    h.type === 'inspector.hover' &&
+    !!r &&
+    typeof r === 'object' &&
+    typeof r.w === 'number' &&
+    typeof r.h === 'number' &&
+    typeof h.tag === 'string' &&
+    !!h.styles &&
+    typeof h.styles === 'object' &&
+    Object.values(h.styles).every((v) => typeof v === 'string') &&
+    Array.isArray(h.matchedTokens) &&
+    h.matchedTokens.every((t) => typeof (t as { hex?: unknown })?.hex === 'string')
+  );
+}
+
+/**
+ * Listen for the overlay's `inspector` Ports until the returned detach() runs. Foreign Ports
+ * (`council`, `llm`, …) are disconnected unread; posts after a disconnect or detach are dropped.
+ */
+export function attachInspector(onHover: (h: InspectorHover) => void): () => void {
+  let live = true;
+  const ports = new Map<chrome.runtime.Port, () => void>();
+  const safely = (fn: () => void) => {
+    try {
+      fn();
+    } catch {
+      // the port is already gone
+    }
+  };
+
+  const onConnect = (port: chrome.runtime.Port) => {
+    if (!live) return;
+    if (port.name !== 'inspector') {
+      // Safe: each receiving frame has its own end, so this only closes ours (the council host keeps its).
+      safely(() => port.disconnect());
+      return;
+    }
+    const onMessage = (m: unknown) => {
+      if (live && ports.has(port) && isHover(m)) onHover(m);
+    };
+    const release = () => {
+      ports.delete(port);
+      safely(() => port.onMessage.removeListener(onMessage));
+      safely(() => port.onDisconnect.removeListener(release));
+    };
+    ports.set(port, release);
+    port.onMessage.addListener(onMessage);
+    port.onDisconnect.addListener(release);
+  };
+
+  chrome.runtime.onConnect.addListener(onConnect);
+  return () => {
+    if (!live) return;
+    live = false;
+    safely(() => chrome.runtime.onConnect.removeListener(onConnect));
+    for (const [port, release] of [...ports]) {
+      release();
+      safely(() => port.disconnect());
+    }
+  };
+}
+
 function Toolbar() {
   const scan = useStore((s) => s.scan);
   const [grid, setGrid] = useState(false);
@@ -28,12 +95,11 @@ function Toolbar() {
 
   useEffect(() => {
     if (!inspect || typeof chrome === 'undefined' || !chrome.runtime?.onConnect) return;
-    const onConnect = (port: chrome.runtime.Port) => {
-      if (port.name !== 'inspector') return;
-      port.onMessage.addListener((m: InspectorHover) => setHover(m));
+    const detach = attachInspector(setHover);
+    return () => {
+      detach();
+      setHover(null);
     };
-    chrome.runtime.onConnect.addListener(onConnect);
-    return () => chrome.runtime.onConnect.removeListener(onConnect);
   }, [inspect]);
 
   async function toggle(kind: 'grid' | 'inspector', on: boolean) {
