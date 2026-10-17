@@ -6,7 +6,15 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 ~13:55 (CURRENT STATE)
+## UPDATE 2026-10-17 ~14:35 (CURRENT STATE)
+
+- **Merged today (8, the owner said merge each):** #31 SPC-18, #32 SPC-32, #33 SPC-19 (DesignScan v5), #34 SPC-35, #35 SPC-33, #36 SPC-34 (truncated contract), #37 SPC-20 (css.fetch skipped contract), #38 SPC-39 (visible Library delete, owner-reported). Main b01ea77, CI green. All Done in Linear.
+- **No executors running.** PE **pe-4d** (w1:pS) idle. Orchestrator specimen-6a at ~33% context: restart fresh before starting the next batch.
+- **Next by priority (3 at a time):** SPC-28 (waitForTabLoad race, scanFlow.ts), SPC-21 (deny-capable chrome stubs; SPC-20 is merged, so it's unblocked), SPC-29 (T3.33 flake). Then the Lows: SPC-38 (stale card under a failed scan), SPC-37, SPC-40, SPC-41 (BYOK truncation), SPC-42, SPC-43, SPC-30, SPC-31, SPC-36, SPC-27. SPC-23 held (Netlify). Owner items: SPC-9 (manual checks, incl. a dense-page Gemma Council), SPC-10.
+- Kickoff template: copy the latest one in the scratchpad pattern (ticket, worktree, branch from origin/main, orchestrator + PE names, notes, then brief → setup → plan → Linear → pnpm i → plan → PE → build → gate → PR). Lens B kickoffs: a fresh reviewer per PR in a new `review` tab; close the pane after `herdr agent wait`.
+- Rules that held today: the PE fold check covers a lens-B HIGH re-check (no r2); hold pushes before a merge; merge with `--match-head-commit`; check the combined TESTING.md for duplicate IDs when two PRs merge together.
+
+## UPDATE 2026-10-17 ~13:55
 
 - Merged today (owner said merge each): #31 SPC-18, #32 SPC-32, #34 SPC-35, #33 SPC-19 (DesignScan v5). Main de35272, CI green. All Done in Linear.
 - Running (build tab w1:tP): **spc-33-4f** (w1:p1C, SPC-33, PR #35 in review: pe-8a lens A + lens B pane w1:p1D), **SPC-20** (w1:p1E, lane B, planning), **SPC-34** (w1:p1F, lane C, planning; a protocol CONTRACT → PE ruling → owner OK before building). PE **pe-8a** (w1:pS).
