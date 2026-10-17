@@ -82,4 +82,4 @@ Not touched: `sidepanel/store.ts` (SPC-44), `council.test.tsx` (#41), `test/help
 - Mutation-checked: removing the re-arm, the toast condition or the remount `setErr(lastErr)` each fails a T3.38 test.
 
 ## Next / how to resume
-- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Lens B r1 folded (above); waiting on pe-b2's fold check; never merge.
+- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Lens B r1 folded (above); pe-b2 fold check at 5701c1f APPROVED (2026-10-17). Reviews done; waiting on the owner's "merge all"; never merge.
