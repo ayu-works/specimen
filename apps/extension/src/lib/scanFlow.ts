@@ -20,8 +20,6 @@ export function friendlyScanError(msg: string): string {
     return SITE_ACCESS;
   if (/No tab with id|tab was closed/i.test(msg))
     return 'The tab was closed before the scan finished.';
-  if (/did not open a page/i.test(msg))
-    return "This address didn't open a page (it may be a download). Check the link and try again.";
   if (/took too long to load/i.test(msg))
     return 'The page took too long to load. Check the address or your connection and try again.';
   if (
@@ -104,7 +102,7 @@ async function urlVisible(url: string | undefined): Promise<boolean> {
   }
 }
 
-/** Blank `complete` reads after a pending navigation before it counts as abandoned (~2 s). */
+/** Hidden or blank `complete` reads after a pending navigation before we stop waiting (~2 s). */
 const ABANDONED_READS = 4;
 
 /**
@@ -122,8 +120,9 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
     let visible = false;
     // Events wait for that answer; the read that follows it sees whatever they would have said.
     let ready = false;
-    // A navigation we saw pending that ended with the tab still blank (a download, an empty
-    // response) never loads: after a few such reads, say so instead of waiting for the timeout.
+    // A navigation we saw pending that settled where we can't see the page (a download, an empty
+    // response, a redirect to an origin without host access): after a few such reads, stop waiting
+    // and let the scan say what is really there (not a website, or site access needed).
     let pendingSeen = false;
     let blankReads = 0;
     /** Loaded means `complete` on the real page, never the initial about:blank or a pending navigation. */
@@ -158,7 +157,7 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
           if (t.pendingUrl) pendingSeen = true;
           const abandoned = pendingSeen && t.status === 'complete' && !t.pendingUrl;
           blankReads = abandoned ? blankReads + 1 : 0;
-          if (blankReads >= ABANDONED_READS) done(new Error('The address did not open a page'));
+          if (blankReads >= ABANDONED_READS) done();
           else if (!settled) recheck = setTimeout(check, recheckMs);
         },
         (e: unknown) => {

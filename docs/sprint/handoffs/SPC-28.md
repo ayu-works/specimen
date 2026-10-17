@@ -115,13 +115,19 @@ the event. One check can't close that gap; checking again later does. Also: a `t
     address did not open a page" → "This address didn't open a page (it may be a download). Check the link and try
     again." A blank tab before any pending navigation still waits (it's the M1 case, not abandoned).
   - **L2 out of scope** (it changes what the timeout means: resolve on a committed but still-loading page). It's
-    pre-existing, so it's a follow-up candidate for the orchestrator.
+    pre-existing; the orchestrator added it to SPC-45.
   - **L3** folded: the "during" test is now "event and read race" (the event lands while the read is in flight,
     then the read answers a stale `loading`), plus a test for a `complete` event whose tab still has `pendingUrl`.
-  - T5.12 now has 17 tests; 10 of the 14 before L1 failed on main's `scanFlow.ts`.
+  - T5.12 had 17 tests after this fold; 10 of the 14 before L1 failed on main's `scanFlow.ts`.
+
+- Lens A r2 (pe-b2, `docs/sprint/reviews/SPC-28-a-r2.md`, 1 MEDIUM) folded: the L1 reject wrongly hit a redirect to
+  an origin without host access (a.com → www.a.com), which read as "didn't open a page" instead of SITE_ACCESS. Now,
+  after `ABANDONED_READS` the wait **resolves** and `scanTab` reports the truth (about:blank → "can only scan
+  websites", an origin without access → SITE_ACCESS). The "did not open a page" `friendlyScanError` branch is dropped.
+  New test for the redirect; T5.12 now has 18 tests. Gate green.
 
 ## Next
-- Fold check by the PE (pe-b2) → owner merge decision.
+- Re-check by pe-b2 → #39 done; then idle (orchestrator's instruction). Owner decides the merge.
 
 ## How to resume
 Read this file; branch `exec/spc-28`; plan above is the contract once approved.

@@ -206,19 +206,36 @@ describe('waitForTabLoad (SPC-28)', () => {
     expect(t.get).toHaveBeenCalledTimes(3);
   });
 
-  it('T5.12 a navigation that leaves the tab blank (a download) fails fast, clearly', async () => {
+  it('T5.12 a navigation that leaves the tab blank (a download) stops the wait in ~2 s', async () => {
     const pending: Tab = { id: ID, status: 'loading', pendingUrl: PAGE };
     const t = stubTabs([pending, { id: ID, status: 'complete' }], { hostAccess: true });
     const s = track(waitForTabLoad(ID, { url: PAGE, recheckMs: 500 }));
     await vi.advanceTimersByTimeAsync(1500);
     expect(s.state).toBe('pending');
     await vi.advanceTimersByTimeAsync(500);
-    expect(s.state).toBe('rejected');
+    // Resolved: the scan then reports what is there ("can only scan websites"), not a timeout.
+    expect(s.state).toBe('resolved');
     expect(t.get).toHaveBeenCalledTimes(5);
     expect(t.listeners()).toBe(0);
-    expect(friendlyScanError(s.error?.message ?? '')).toBe(
-      "This address didn't open a page (it may be a download). Check the link and try again.",
+  });
+
+  it('T5.12 a redirect to an origin without host access is handed to the scan, not rejected', async () => {
+    // a.test -> login.other.test: the target is visible, the redirected page is not.
+    const t = stubTabs(
+      [
+        { id: ID, status: 'loading', url: PAGE },
+        { id: ID, status: 'loading', pendingUrl: 'https://login.other.test/' },
+        { id: ID, status: 'complete' },
+      ],
+      { hostAccess: true },
     );
+    const s = track(waitForTabLoad(ID, { url: PAGE, recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('resolved');
+    expect(t.get).toHaveBeenCalledTimes(6);
+    expect(t.listeners()).toBe(0);
   });
 
   it('T5.12 a blank tab before any pending navigation is waited on, not called abandoned', async () => {
