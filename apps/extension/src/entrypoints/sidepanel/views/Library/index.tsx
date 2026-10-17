@@ -12,6 +12,7 @@ import {
   thumbBlobs,
   thumbDataUrl,
 } from '@/lib/db';
+import { onLibraryChanged } from '@/lib/libraryChannel';
 import { buildExport, downloadText, exportFilename, importFile } from '@/lib/libraryIO';
 import { ensureSiteAccess, friendlyScanError, rescanUrl } from '@/lib/scanFlow';
 import { useStore } from '../../store';
@@ -44,9 +45,15 @@ export function Library() {
   /** Index of a card just deleted: focus goes to the card now in its place (or the one before). */
   const refocus = useRef<number | null>(null);
 
+  /** Bumped by each re-list: only the newest one applies, so overlapping re-lists can't land out of order. */
+  const generation = useRef(0);
+
   const reload = useCallback(async () => {
+    const gen = ++generation.current;
     try {
       const [list, blobs] = await Promise.all([listScans(), thumbBlobs()]);
+      // Superseded before any object URL was made, so there is nothing to revoke.
+      if (gen !== generation.current) return;
       setScans(list);
       setThumbs((old) => {
         for (const u of old.values()) URL.revokeObjectURL(u);
@@ -54,6 +61,7 @@ export function Library() {
       });
       setSelected((sel) => new Set([...sel].filter((id) => list.some((s) => s.id === id))));
     } catch {
+      if (gen !== generation.current) return;
       setScans([]);
       setError('The Library is unavailable in this browser profile.');
     }
@@ -64,6 +72,15 @@ export function Library() {
     void (async () => {
       if ((await countScans()) > LIBRARY_SOFT_CAP && !(await capAlreadyAsked())) setOverCap(true);
     })().catch(() => {});
+  }, [reload]);
+
+  // Another panel (another window) wrote to the Library: re-list. Cards keep their own edit state.
+  useEffect(() => {
+    const off = onLibraryChanged(() => void reload());
+    return () => {
+      off();
+      generation.current++; // a re-list still in flight makes no object URLs after unmount
+    };
   }, [reload]);
 
   // Release object URLs on unmount.
