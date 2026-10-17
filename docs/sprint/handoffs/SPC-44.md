@@ -131,6 +131,10 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
   - L1 folded (specimen-75 asked for all LOWs): the `wide` row adds "Turn off Also capture mobile to skip this window
     on later scans." (tested). Skipping the popup for the session after `wide` is left as a possible follow-up.
   - M1 evidence: T5.03 now logs `T5.03 oracle: a 390px popup is NNNpx wide on this host` and adds an annotation.
+  - M1 hit on CI run 39044525249: the oracle read **1280px**. The cause wasn't xvfb: Playwright's persistent context
+    forces a 1280x720 viewport on every page, popups included (locally too, headed or not). Before SPC-44 the
+    debugger's device-metrics override hid this. Fix: a `realWindows` fixture option (`viewport: null`) used only
+    by T5.03. Locally the oracle now reads 390 and the capture branch runs. The CI assert is unchanged.
   - L2 folded: TESTING.md T5.03 says a local green doesn't verify mobile capture; only CI is pinned.
   - L3 folded: `store/listing.md` says dark/light capture is "on sites with a theme switch".
 
