@@ -124,8 +124,11 @@ e2e (Playwright, local servers only):
   only to the background's fetch (`sec-fetch-dest` is not `style`) and a plain sheet to the page.
 - ARCHITECTURE §8 `css.fetch` row updated. `pnpm gate` green.
 
+- PR #37. Lens A r1 (pe-8a): APPROVED, 0C/0H/0M, 1 LOW folded in 292804a (an unsupported page is judged by its
+  scheme only); the fold was approved too. pe-8a handed over, so a fresh PE does any later fold checks.
+
 ## Next
-- Reviews (PE lens A + lens B), fold findings.
+- Lens B review: fold its findings, then send the diff back to the reviewer and to the new PE.
 
 ## How to resume
 Read this file, `git log origin/main..`, the PR, then any `docs/sprint/reviews/SPC-20-*.md`.
