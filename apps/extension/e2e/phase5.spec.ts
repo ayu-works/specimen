@@ -102,6 +102,9 @@ test.describe('Phase 5 capture and fidelity flows (full extension)', () => {
       }
     }, url);
     expect(oracle, 'the oracle measured a width').toBeGreaterThan(0);
+    // In the CI log, so the host's real popup width is on record.
+    console.log(`T5.03 oracle: a 390px popup is ${oracle}px wide on this host`);
+    test.info().annotations.push({ type: 'popup width', description: `${oracle}px` });
     if (process.env.CI) {
       expect(
         oracle,

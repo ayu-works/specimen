@@ -128,8 +128,9 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
 - Lens B r1 (spc-44-93): approve once CI is green. 0 C/H, 1 M, 3 L.
   - M1 (CI must show xvfb keeps a 390px popup ≤ 480): waiting on the `gate` check on #43. If it fails on the oracle
     assert, keep the assert and fix the launch (window size / device scale factor), or ask the PE. Never relax it.
-  - L1 (a host that always keeps popups wide opens a useless popup on every scan): proposed to the orchestrator as a
-    follow-up ticket (a note on the `wide` row, or skip after `wide` for the session). Not in this PR.
+  - L1 folded (specimen-75 asked for all LOWs): the `wide` row adds "Turn off Also capture mobile to skip this window
+    on later scans." (tested). Skipping the popup for the session after `wide` is left as a possible follow-up.
+  - M1 evidence: T5.03 now logs `T5.03 oracle: a 390px popup is NNNpx wide on this host` and adds an annotation.
   - L2 folded: TESTING.md T5.03 says a local green doesn't verify mobile capture; only CI is pinned.
   - L3 folded: `store/listing.md` says dark/light capture is "on sites with a theme switch".
 

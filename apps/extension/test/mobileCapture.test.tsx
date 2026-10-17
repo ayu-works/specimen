@@ -514,6 +514,8 @@ describe('Scan card: mobile too wide', () => {
     expect(screen.queryByText(/Mobile\s*captured/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Capture with permission' })).toBeNull();
     expect(screen.queryByText(/permission|debugging/i)).toBeNull();
+    // The only thing the user can do: stop paying for a popup that can't produce anything.
+    expect(screen.getByText(/Turn off Also capture mobile/)).toBeTruthy();
     expect(useStore.getState().scan?.variants?.mobile).toBeUndefined();
   });
 });

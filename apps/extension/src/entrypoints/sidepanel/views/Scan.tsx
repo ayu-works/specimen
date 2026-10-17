@@ -118,9 +118,14 @@ function Captures({ scan }: { scan: DesignScan }) {
         </Row>
       )}
       {!mobile && mine && extras.mobile === 'wide' && (
-        <Row label="Mobile">
-          <span data-testid="mobile-wide">not captured (Chrome kept the window too wide)</span>
-        </Row>
+        <>
+          <Row label="Mobile">
+            <span data-testid="mobile-wide">not captured (Chrome kept the window too wide)</span>
+          </Row>
+          <p className="text-[11px] text-muted-foreground">
+            Turn off Also capture mobile to skip this window on later scans.
+          </p>
+        </>
       )}
       {!mobile && mine && extras.mobile === 'skipped' && (
         <>
