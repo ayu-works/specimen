@@ -30,7 +30,7 @@ Specimen loads no remote code. All scripts and the local-model runtime (`.wasm`)
 - Delete a scan: Library, the card menu, **Delete**. Export your Library as JSON or import one any time.
 - Remove an API key: Settings, **Remove key**.
 - Delete local model weights: Settings, **Delete downloaded model**.
-- Revoke site access, `debugger` or provider access: `chrome://extensions`, Specimen, Details, Site access.
+- Revoke site access or provider access: `chrome://extensions`, Specimen, Details, Site access.
 - Remove everything: uninstall the extension. Chrome deletes its stored data.
 
 ## Changes

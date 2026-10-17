@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { libraryErrorText, replaceStoredScan } from '@/lib/db';
 import { ensureSiteAccess, friendlyScanError, sameUrl, scanTab } from '@/lib/scanFlow';
-import { loadMobilePref, runMediaCapture, runMobileCapture, saveMobilePref } from '../extras';
+import { loadMobilePref, runMobileCapture, saveMobilePref } from '../extras';
 import { openOffer } from '../restore';
 import { runTabScan } from '../runScan';
 import { useStore } from '../store';
@@ -106,9 +106,7 @@ function Captures({ scan }: { scan: DesignScan }) {
       </label>
       {mine && extras.mobile === 'running' && (
         <p role="status" className="text-[11px] text-muted-foreground">
-          {extras.mobileSkip === 'fullscreen' || extras.mobileSkip === 'attach'
-            ? 'Capturing mobile… this page shows at phone width for a moment.'
-            : 'Capturing mobile… a small window opens for a moment.'}
+          Capturing mobile… a small window opens for a moment.
         </p>
       )}
       {mobile && extras.mobile !== 'running' && (
@@ -124,12 +122,8 @@ function Captures({ scan }: { scan: DesignScan }) {
           <Row label="Mobile">
             <span data-testid="mobile-wide">not captured (Chrome kept the window too wide)</span>
           </Row>
-          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
-            Capture with permission
-          </Button>
           <p className="text-[11px] text-muted-foreground">
-            Capturing needs a one-time permission, and Chrome shows a "debugging this browser" bar
-            for a few seconds.
+            Turn off Also capture mobile to skip this window on later scans.
           </p>
         </>
       )}
@@ -140,17 +134,9 @@ function Captures({ scan }: { scan: DesignScan }) {
               {extras.mobileSkip === 'fullscreen' ? 'skipped in full screen' : 'not captured'}
             </span>
           </Row>
-          {extras.mobileSkip === 'tabbed' ? (
-            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan)}>
-              Try again
-            </Button>
-          ) : (
-            // Emulates in the scanned tab when still in full screen; asks for the one-time
-            // `debugger` permission only if it isn't held yet.
-            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
-              {extras.mobileSkip === 'fullscreen' ? 'Capture in this tab' : 'Try again'}
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan)}>
+            Try again
+          </Button>
         </>
       )}
       {!mobile &&
@@ -170,17 +156,12 @@ function Captures({ scan }: { scan: DesignScan }) {
           {theme === 'measured' && <span>found · captured from the site</span>}
           {theme === 'none' && <span>not found</span>}
           {theme === 'failed' && <span>unavailable</span>}
-          {theme === 'offer' && (
-            <button type="button" className="underline" onClick={() => void runMediaCapture(scan)}>
-              capture
-            </button>
-          )}
+          {theme === 'system' && <span>follows your system setting · not measured</span>}
         </Row>
       )}
-      {theme === 'offer' && (
+      {theme === 'system' && (
         <p className="text-[11px] text-muted-foreground">
-          This site follows your system setting. Capturing needs a one-time permission, and Chrome
-          shows a "debugging this browser" bar for a few seconds.
+          Specimen can't switch your system setting, so this mode is derived from the measured one.
         </p>
       )}
       {scan.host !== 'composed' && (

@@ -24,7 +24,7 @@ jobs:
           const m = JSON.parse(require('fs').readFileSync('apps/extension/.output/chrome-mv3/manifest.json', 'utf8'));
           const bad = [];
           if (m.host_permissions && m.host_permissions.length) bad.push('host_permissions: ' + m.host_permissions.join(', '));
-          if ((m.permissions || []).includes('debugger')) bad.push('required debugger permission');
+          if ([...(m.permissions || []), ...(m.optional_permissions || [])].includes('debugger')) bad.push('debugger permission');
           if (bad.length) { console.error('Manifest check failed: ' + bad.join('; ')); process.exit(1); }
           console.log('Manifest OK');
           "

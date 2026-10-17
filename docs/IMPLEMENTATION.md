@@ -118,14 +118,14 @@ Legend: 🟦 Sonnet builds · 🟪 Opus (design/review) · 👤 needs you
 | ID | Task | AC |
 |---|---|---|
 | 5.1 🟦 | Component specs: detect button/input/card/nav-link/badge clusters; capture states by cloning rules for `:hover/:focus/:active` from the CSSOM | Primary button hover color captured on fixtures |
-| 5.2 🟦 | Responsive capture: re-sample at 390px (via `chrome.debugger` emulation behind an opt-in, or a resized popup window) → `variants.mobile` | Mobile nav/stack detected |
-| 5.3 🟦 | Dark capture: re-sample with `prefers-color-scheme: dark` emulation → `variants.dark` | Sites with dark mode yield both palettes |
+| 5.2 🟦 | Responsive capture: re-sample at 390px in a resized popup window → `variants.mobile` (the `chrome.debugger` emulation was removed in SPC-44, 2026-10-17) | Mobile nav/stack detected |
+| 5.3 🟦 | Dark capture: re-sample with the page's own theme class/attribute switched → `variants.dark` (`prefers-color-scheme` emulation was removed in SPC-44, 2026-10-17) | Sites with dark mode yield both palettes |
 | 5.4 🟦 | a11y pass: contrast matrix + accessible variant suggestions; shown in Inspect + DESIGN.md | Failing pairs flagged with a fix |
 | 5.5 🟦 | **Fidelity Diff**: `core/diff` (per-facet distance → 0–100 score) + Diff view (pick source scan, scan current tab) + "fix prompt" generator | Same site vs itself = 100; obvious deltas listed |
 | 5.6 🟦 | Multi-page merge: queue several URLs/tabs, merge weights, record `meta.pages` | Merged scan is stable |
 | 5.7 🟪 | Review; tag v0.4.0 | — |
 
-> **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass, which shipped in PR #9). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). The only permission addition is `optional_permissions: ["debugger"]`, requested at click time for the dark capture that needs media emulation. Untested in a real browser: the mobile popup window, dark capture through the debugger, states on cross-origin sheets, and Add another page.
+> **Phase 5 status:** 5.1–5.6 implemented (code only; tests deferred to the final testing pass, which shipped in PR #9). `schemaVersion` is now 3 (no-op migration from v2: adds the `measured` theme flag, mobile details, a11y pair roles/fix). Entry points, no new tabs: Scan result card (Also capture mobile, Dark mode line, Add another page), Inspect (Components, Accessibility, Blueprint Desktop/Mobile), Generate ("Built it? Check your build") and Library (card menu "Check a build against this"). Phase 5 added `optional_permissions: ["debugger"]` for media emulation; SPC-44 (2026-10-17) removed it again, because Chrome does not accept `debugger` as optional. Untested in a real browser: the mobile popup window, states on cross-origin sheets, and Add another page.
 
 ## Phase 6: Release (open source + Chrome Web Store) (≈ 1–2 days)
 > **Status:** 6.1–6.3 merged (PR #10), plus the pixel-critter icon, mascot UI and README banner. 6.4: screenshots and promo tiles are done (`store/images/`, PR #12); the store listing fix is PR #14. v1.0.0 is **live on the Chrome Web Store** (2026-10-13). T6.07, the gitleaks scan of the whole history, runs in the gate and CI (PR #18).
@@ -134,7 +134,7 @@ MCP is **dropped from v1** (user decision 2026-10-09), and its tests T6.01–T6.
 | ID | Task | AC |
 |---|---|---|
 | 6.1 🟦 | Open-source docs: README (store + source install, AI setup, permissions table, privacy, FAQ), CONTRIBUTING (adding a generator / provider / extractor), CODE_OF_CONDUCT, SECURITY, issue + PR templates | A new contributor can build, load and test from the README alone |
-| 6.2 🟦 | Release plumbing: version 1.0.0, `homepage_url`, `minimum_chrome_version`, `pnpm zip` (WXT zip), a GitHub Action that builds the zip on a `v*` tag and attaches it to a GitHub Release | `pnpm zip` produces a store-ready zip; no `<all_urls>` host permission, no `debugger` required permission in it |
+| 6.2 🟦 | Release plumbing: version 1.0.0, `homepage_url`, `minimum_chrome_version`, `pnpm zip` (WXT zip), a GitHub Action that builds the zip on a `v*` tag and attaches it to a GitHub Release | `pnpm zip` produces a store-ready zip; no `<all_urls>` host permission, no `debugger` permission in it (required or optional, SPC-44) |
 | 6.3 🟦 | Store listing kit in `store/`: listing copy (name, ≤132-char summary, description), permission justifications, single purpose, data-use disclosures, `PRIVACY.md`, promo tile 440×280, screenshot plan | Every field of the CWS dashboard has ready-to-paste text |
 | 6.4 🟦👤 | Screenshots (1280×800) planned from the user's own usage captures; the user submits with their developer account | Submitted |
 
@@ -166,4 +166,4 @@ v0.1–v0.4 were never released on their own (no git tags); their scope shipped 
 | Large model download (1.5–3 GB) | Explicit opt-in, progress, resumable via WebLLM cache, delete button |
 | Cross-origin CSS blocked | Optional host permission via background fetch; computed styles still work without it |
 | Store review flags "copying sites" | Ethics guardrail, positioning as "design system inspiration", no content scraping |
-| `chrome.debugger` permission scary for responsive/dark capture | Make it an optional permission requested only when the feature is used |
+| `chrome.debugger` permission scary for responsive/dark capture | Not used: Chrome refuses it as optional, so it was removed (SPC-44). Mobile uses a popup window, dark/light the page's own switch |

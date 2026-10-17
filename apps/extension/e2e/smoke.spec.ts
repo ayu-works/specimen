@@ -1,4 +1,13 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test } from './fixtures';
+
+test('T0.03 the e2e build declares no debugger either (SPC-44)', () => {
+  const file = path.resolve(import.meta.dirname, '../.output-e2e/chrome-mv3/manifest.json');
+  const m = JSON.parse(readFileSync(file, 'utf8'));
+  expect(m.permissions).not.toContain('debugger');
+  expect(m.optional_permissions).toBeUndefined();
+});
 
 test('T0.04 service worker registered with no console errors', async ({
   context,

@@ -17,7 +17,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 |---|---|---|
 | T0.01 | U | `packages/core` exports a version string; the Vitest harness runs |
 | T0.02 | U | `packages/ai` builds and exports `LLMProvider` types (type-level test via `expectTypeOf`) |
-| T0.03 | U | Built `manifest.json` has exactly the permissions from ARCHITECTURE §10, no `content_scripts`, has `side_panel`, and CSP includes `wasm-unsafe-eval` |
+| T0.03 | U+E | Built `manifest.json` has exactly the permissions from ARCHITECTURE §10, no `content_scripts`, has `side_panel`, and CSP includes `wasm-unsafe-eval`; no `optional_permissions` and no `debugger` anywhere, in the normal build (U) and the e2e build (E, SPC-44) |
 | T0.04 | E | Extension loads in Chromium with no service-worker errors |
 | T0.05 | E | Side panel page renders the app shell (heading visible) |
 | T0.06 | E | Options page renders |
@@ -158,7 +158,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 |---|---|---|
 | T5.01 | U | Component detection: primary/secondary button, input, card clusters found on `components.html` |
 | T5.02 | E | Hover/focus state styles captured from CSSOM (fixture button hover color) |
-| T5.03 | E | Mobile capture (390px) records `variants.mobile` with a stacked hero |
+| T5.03 | U+E | Mobile capture with no `debugger` (SPC-44). U: a popup ≤ 480px is stored with its real width, a wider one throws `MobileTooWideError` after one sample and closes the popup (480 in, 481 out); the card shows "not captured" with no permission button; nothing reads `chrome.debugger` or asks for a permission. E: an independent oracle opens its own 390×844 popup and reads its width; the scan must match it (≤ 480 → `variants.mobile` with that width and a blueprint, else none and "too wide"); under CI the oracle must be ≤ 480, so CI always drives the capture. The test runs with real window sizes (Playwright's default viewport would make every popup report 1280px). Outside CI the oracle may pick the too-wide branch on a host that keeps popups wide, so a local green there does not verify mobile capture |
 | T5.04 | E | Dark capture records `variants.dark` palette on `dark-mode.html` |
 | T5.05 | U | a11y matrix: correct ratios and AA/AA-large flags; suggests a passing variant for failing pairs |
 | T5.06 | U | **Diff**: scan vs itself = 100; changed accent lowers the color facet score; every delta listed |
@@ -166,8 +166,9 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T5.08 | U | Multi-page merge: weights summed, roles stable, `meta.pages` recorded |
 | T5.09 | E | Diff view: pick a source scan, scan the current tab, show score + deltas |
 | T5.10 | 🖐 | End to end: linear.app → Claude Code build on localhost → Diff ≥ 80 after one fix round |
-| T5.11 | U | Mobile capture in full screen (SPC-25): the scanned tab's window (else the current one) is checked first; full screen opens no window or tab; the automatic capture never touches the user's tab, and only a click emulates a phone there (debugger held, tab still on the page); each skip has its reason and note (full screen, page changed, debugger can't attach, opened as a tab); a desktop scan waits for an emulation to clear; a window or tab Chrome hands back is caught after create and only what was created is closed (the one new tab, never the user's window or other tabs); a closed panel's leftovers (override, popup) are undone on the next start; no second capture while one runs |
+| T5.11 | U | Mobile capture in full screen (SPC-25, SPC-44): the scanned tab's window (else the current one) is checked first; full screen opens no window or tab and never samples the user's tab, automatic or on "Try again"; each skip has its reason and note (full screen, opened as a tab); a window or tab Chrome hands back is caught after create and only what was created is closed (the one new tab, never the user's window or other tabs); a closed panel's popup is closed on the next start and a legacy `mobile.emulatingTab` record is cleared with no debugger call; no second capture while one runs |
 | T5.12 | U | `waitForTabLoad` (SPC-28): resolves whether `complete` arrives before, during or after the listener attaches, or is never delivered (the tab is re-read, one read at a time); the initial about:blank or a pending navigation is not the loaded page, including the hidden url Chrome gives about:blank when we have host access for the target (no `tabs` permission); a navigation that ends where we can't see the page (a download, a redirect to an origin without host access) stops the wait in ~2 s and is left to the scan's own error; rejects with a clear error on timeout or when the tab is closed (event or `No tab with id`); afterwards no listener, timer or read is left |
+| T5.13 | U | Dark/light capture with no permission (SPC-44): a class switch that changes the page is measured and attached; one that didn't apply or left the page the same stores nothing; a page with only `prefers-color-scheme` rules shows "follows your system setting · not measured" with no capture control and samples nothing; only `theme` is ever sent; a stray `emulate` opt sent to the real background `scan.run` handler is ignored (a normal sample, no error, no `chrome.debugger`) |
 
 ## Phase 6: MCP & release
 | ID | Type | Test |
