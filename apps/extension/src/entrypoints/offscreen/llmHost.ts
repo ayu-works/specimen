@@ -116,7 +116,7 @@ function disposeEngine(reason = 'The local model was unloaded. Try again.'): voi
   abandonLoad?.(new Error(reason));
   running?.abandon?.(new Error(reason));
   try {
-    void engine?.unload();
+    void Promise.resolve(engine?.unload()).catch(() => {});
   } catch {
     /* ignore */
   }
@@ -138,6 +138,9 @@ async function load(modelId: string): Promise<void> {
   loadingId = modelId;
   lastP = 0;
   loadPromise = (async () => {
+    // Run the body after `loadPromise` is set: a synchronous throw (say `new Worker`) would
+    // otherwise reach `finally` first and leave a settled `loadPromise` behind for good.
+    await null;
     try {
       disposeEngine();
       const gone = new Promise<never>((_, reject) => {

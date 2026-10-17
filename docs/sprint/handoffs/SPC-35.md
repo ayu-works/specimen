@@ -96,8 +96,26 @@ be triggered by hand; it's the same code path and is unit-tested.)
 - `docs/TESTING.md` T3.11 row extended (no new IDs). Council tests unchanged and green. `pnpm gate` green
   (gitleaks skipped locally, not installed; the one Biome warning is `lib/chatScrub.ts`, already on main).
 
+## Review r1 (lens A pe-8a: APPROVED 0C/0H/0M/2L; lens B spc-35-99: 0C/0H/1M/4L, security none)
+- **A L1 = B L2 (fixed, c023adf):** a delete of the loading/loaded model ends chats and the load with "The local
+  model was deleted. Download it again to use it.", not "unloaded".
+- **B M1 (fixed):** the load IIFE starts with `await null`, so a synchronous throw (`new Worker`, `buildAppConfig`)
+  can't run `finally` before `loadPromise` is assigned; before, that left a settled `loadPromise` for good and the
+  new re-check after `hasGpu()` looped. Test: the fake `Worker` throws once → load `error`, `status.loading` false,
+  `llmBusy()` false, the next load and chat work. Fails without the fix.
+- **B L3 (fixed):** the fake returns a distinct engine per load; the retry test now resolves the dead load *after*
+  the retry is ready and asserts the chat ran on the retry's engine (a mutant that assigns the late result fails it).
+  New test: loads of two different models sent together → `worker, terminate, worker`, each waiter gets its own
+  `ready`, `status.loaded` is the second.
+- **B L4 (fixed, one line):** `disposeEngine` catches a rejected `engine.unload()`.
+- **Not here, proposed as one follow-up to the orchestrator:** A L2 (a load that starts while a delete is clearing
+  the cache re-fills it) and B L1 (an unload/delete sent while a load is still waiting to start, in `hasGpu()` or
+  queued behind another model, is lost). Both are "delete/unload vs a load that hasn't started"; a generation
+  counter or a `deleting` set fixes both.
+- `pnpm gate` green after the folds (168 extension tests).
+
 ## Next
-- PR open, waiting for reviews (PE lens A + a lens B reviewer). Fold findings in new commits.
+- Pushed once after the folds; waiting for pe-8a's fold check and the owner's merge. No more pushes unless asked.
 
 ## How to resume
 Read this file, then `llmHost.ts` (`load`, `disposeEngine`, `delete`) and the tests at the end of

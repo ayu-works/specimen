@@ -25,6 +25,11 @@ const state = vi.hoisted(() => ({
   progress: [] as ((r: { progress: number; text: string }) => void)[],
   /** Worker terminations and cache deletes, in call order. */
   log: [] as string[],
+  /** How many next `new Worker()` calls throw. */
+  workerThrows: 0,
+  /** Loads started in this test, and which load's engine (1, 2, …) ran each chat. */
+  loads: 0,
+  chatEngines: [] as number[],
 }));
 
 vi.mock('@mlc-ai/web-llm', () => {
@@ -81,13 +86,25 @@ vi.mock('@mlc-ai/web-llm', () => {
       opts: { initProgressCallback: (r: { progress: number; text: string }) => void },
     ) => {
       if (state.failCreate) throw state.failCreate;
+      const tag = ++state.loads;
       // This load's own gate: a later test change of `state.loadGate` doesn't release it.
       const gate = state.loadGate;
       state.progress.push(opts.initProgressCallback);
       opts.initProgressCallback({ progress: 0.5, text: 'half' });
       if (gate) await gate;
       opts.initProgressCallback({ progress: 1, text: 'done' });
-      return engine;
+      // Each load gets its own engine, so a test can tell which load's engine a chat ran on.
+      return {
+        ...engine,
+        chat: {
+          completions: {
+            create: (body: { messages: { content: string }[] }) => {
+              state.chatEngines.push(tag);
+              return engine.chat.completions.create(body);
+            },
+          },
+        },
+      };
     },
     hasModelInCache: async () => true,
     deleteModelAllInfoInCache: async () => {
@@ -188,6 +205,9 @@ beforeEach(async () => {
     worker: null,
     progress: [],
     log: [],
+    workerThrows: 0,
+    loads: 0,
+    chatEngines: [],
   });
   vi.stubGlobal(
     'Worker',
@@ -195,6 +215,10 @@ beforeEach(async () => {
     class {
       private ls = new Map<string, Set<() => void>>();
       constructor() {
+        if (state.workerThrows > 0) {
+          state.workerThrows--;
+          throw new Error('Worker could not be created');
+        }
         state.log.push('worker');
         state.worker = {
           fire: (t) => {
@@ -640,15 +664,18 @@ describe('llm Port protocol (host)', () => {
     const before = r.events.length;
     // The crashed load's worker reports late, while the retry is downloading.
     state.progress[0]?.({ progress: 0.1, text: 'stale' });
-    dead.resolve();
     await sleep(20);
     expect(r.events.slice(before).some((e) => e.type === 'progress')).toBe(false);
     r.send({ type: 'status' });
     expect(await r.waitFor((e) => e.type === 'status')).toMatchObject({ loading: true, p: 0.5 });
     gate.resolve();
     await r.waitFor((e) => e.type === 'ready');
+    // …and its engine shows up only after the retry's is loaded: it must not replace it.
+    dead.resolve();
+    await sleep(20);
     r.send({ type: 'chat', id: 'R', req: req('r') });
     expect(await r.waitFor(ended('R'))).toMatchObject({ type: 'done' });
+    expect(state.chatEngines).toEqual([2]);
   });
 
   it('T3.11 a load of another model queued behind a crashed load goes ahead', async () => {
@@ -662,5 +689,32 @@ describe('llm Port protocol (host)', () => {
     await b.waitFor((e) => e.type === 'ready');
     b.send({ type: 'status' });
     expect(await b.waitFor((e) => e.type === 'status')).toMatchObject({ loaded: other });
+  });
+
+  it('T3.11 loads of two models sent together run one after the other, one worker at a time', async () => {
+    const other = GEMMA_MODELS.find((m) => m.id !== DEFAULT_GEMMA)?.id ?? '';
+    const a = open();
+    const b = open();
+    a.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    b.send({ type: 'load', modelId: other });
+    expect(await a.waitFor((e) => e.type === 'ready')).toMatchObject({ modelId: DEFAULT_GEMMA });
+    expect(await b.waitFor((e) => e.type === 'ready')).toMatchObject({ modelId: other });
+    expect(state.log).toEqual(['worker', 'terminate', 'worker']);
+    b.send({ type: 'status' });
+    expect(await b.waitFor((e) => e.type === 'status')).toMatchObject({ loaded: other });
+  });
+
+  it('T3.11 a load that throws before its first await is cleared; the next load works', async () => {
+    state.workerThrows = 1;
+    const c = open();
+    c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    expect((await c.waitFor(loadError)) as { message: string }).toMatchObject({
+      message: expect.stringMatching(/could not be created/),
+    });
+    c.send({ type: 'status' });
+    expect(await c.waitFor((e) => e.type === 'status')).toMatchObject({ loading: false });
+    c.disconnect();
+    expect(host.llmBusy()).toBe(false);
+    await nextChatRuns();
   });
 });
