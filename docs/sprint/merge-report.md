@@ -1,6 +1,6 @@
 # Merge report (Sprint 3, Oct 2026)
 
-Kept up to date as each PR becomes ready; handed to the owner before the final "merge all".
+Short and plain: one or two lines per item.
 
 ## Ready to merge
 _None yet._
