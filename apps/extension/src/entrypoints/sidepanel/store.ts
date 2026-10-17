@@ -47,6 +47,8 @@ interface State {
   favicon: string | null;
   status: Status;
   error: string | null;
+  /** The current tab scan worked but could not be saved to the Library: the reason. */
+  saveError: string | null;
   activeTab: TabId;
   askMode: AskMode;
   setAskMode: (m: AskMode) => void;
@@ -71,7 +73,12 @@ interface State {
   /** Make a Library / composed scan the current one. */
   openScan: (scan: DesignScan, origin: Origin, screenshot?: string | null) => void;
   start: () => void;
-  succeed: (scan: DesignScan, screenshot: string | null, favicon: string | null) => void;
+  succeed: (
+    scan: DesignScan,
+    screenshot: string | null,
+    favicon: string | null,
+    saveError?: string | null,
+  ) => void;
   fail: (message: string) => void;
 }
 
@@ -81,6 +88,7 @@ export const useStore = create<State>((set) => ({
   favicon: null,
   status: 'idle',
   error: null,
+  saveError: null,
   activeTab: 'scan',
   askMode: 'quick',
   setAskMode: (askMode) => set({ askMode }),
@@ -106,11 +114,12 @@ export const useStore = create<State>((set) => ({
       favicon: null,
       status: 'done',
       error: null,
+      saveError: null,
       offer: null,
       extras: { ...NO_EXTRAS, scanId: scan.id },
     }),
   start: () => set({ status: 'scanning', error: null }),
-  succeed: (scan, screenshot, favicon) =>
+  succeed: (scan, screenshot, favicon, saveError = null) =>
     set({
       scan,
       origin: 'tab',
@@ -118,6 +127,7 @@ export const useStore = create<State>((set) => ({
       favicon,
       status: 'done',
       error: null,
+      saveError,
       offer: null,
       extras: { ...NO_EXTRAS, scanId: scan.id },
     }),

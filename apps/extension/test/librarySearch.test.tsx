@@ -59,4 +59,32 @@ describe('Library view (component)', () => {
     type('');
     expect(screen.getAllByTestId('library-card')).toHaveLength(3);
   });
+
+  it('T4.07 a rename that cannot be stored shows an error and keeps the old title (audit M13)', async () => {
+    const fail = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    db.scans.hook('updating', fail);
+    try {
+      render(<Library />);
+      await waitFor(() => expect(screen.getAllByTestId('library-card')).toHaveLength(3));
+      const card = () =>
+        screen.getAllByTestId('library-card').find((c) => c.textContent?.includes('Linear'));
+      fireEvent.click(card()?.querySelector('[aria-label="More actions"]') as Element);
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+      const box = screen.getByLabelText('Title');
+      fireEvent.change(box, { target: { value: 'Renamed' } });
+      fireEvent.keyDown(box, { key: 'Enter' });
+      await waitFor(() =>
+        expect(screen.getByRole('alert').textContent).toMatch(
+          /Could not save that change: your browser is out of storage space/,
+        ),
+      );
+      expect(names()).toContain('Linear');
+      expect(names()).not.toContain('Renamed');
+      expect((await db.scans.get('2'))?.title).toBe('Linear');
+    } finally {
+      db.scans.hook('updating').unsubscribe(fail);
+    }
+  });
 });

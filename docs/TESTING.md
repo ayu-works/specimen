@@ -28,7 +28,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 **Schema & color (U)**
 | ID | Test |
 |---|---|
-| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields; v4 rejects a non-`#rrggbb` hex and a role id outside its palette; v1–v3 rows are repaired (idempotent, input not mutated); every fixture, merge, compose and derived variant passes v4 with no repair |
+| T1.01 | `RawPage` and `DesignScan` zod schemas parse valid fixtures and reject missing required fields; v4 rejects a non-`#rrggbb` hex and a role id outside its palette; v1–v3 rows are repaired (idempotent, input not mutated); every fixture, merge, compose and derived variant passes v5 with no repair or trim; v5 bounds every string, array and record (`BOUNDS`): a v5 scan over a bound is rejected, a v4 one is trimmed once (idempotent, roles kept valid), and merge/compose/extract clamp their output |
 | T1.02 | `parseColor` handles hex/rgb/rgba/hsl/oklch/`color()`/named/`transparent` → normalised value |
 | T1.03 | `contrast('#000','#fff') === 21`, `contrast('#777','#fff') ≈ 4.48` |
 | T1.04 | `deltaE2000` matches reference pairs (Sharma test data subset) within 0.01 |
@@ -39,7 +39,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | ID | Test |
 |---|---|
 | T1.07 | Sampler returns ≤ 4000 samples, skips hidden/zero-area/script/style nodes, completes < 300 ms on `landing-basic.html` |
-| T1.08 | Root CSS custom properties captured (fixture declares `--brand: #5e6ad2`) |
+| T1.08 | Root CSS custom properties captured (fixture declares `--brand: #5e6ad2`); the variable filter (design names, values ≤ 200 chars, ≤ 200 entries) is exported for imports |
 | T1.09 | `@media` breakpoints captured (fixture: 640, 768, 1024, 1280) |
 | T1.10 | Section candidates: `landing-basic.html` yields 8 top-level sections |
 | T1.11 | `scan.run` returns a RawPage + JPEG screenshot data URL for the active tab |
@@ -137,14 +137,14 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 ## Phase 4: Library, Compose, Themes
 | ID | Type | Test |
 |---|---|---|
-| T4.01 | U | Dexie (fake-indexeddb): save/get/list/delete scans; thumbnails stored separately; a stored v3 row with an unreadable color lists repaired and generates |
+| T4.01 | U | Dexie (fake-indexeddb): save/get/list/delete scans; thumbnails stored separately; a stored v3 row with an unreadable color lists repaired and generates; a scan and its thumbnail are saved both or neither; writers store the parsed scan (no unknown keys) |
 | T4.02 | U | Export `.specimen.json` → import round-trips identically; import runs schema migrations |
-| T4.03 | U | Import rejects malformed or oversized files with a clear error; a v4 scan with a non-hex color or a dangling role is skipped, an older one is imported repaired |
+| T4.03 | U | Import rejects malformed or oversized files with a clear error; a v4 scan with a non-hex color or a dangling role is skipped, an older one is imported repaired; only export version 1 is accepted; a failed write mid-import stores nothing, the retry stores each scan once and a re-import adds nothing; imported CSS variables pass the extractor filter |
 | T4.04 | U | Compose: colors from A + type from B → valid DesignScan with A's palette and B's styles |
 | T4.05 | U | Compose contrast fix-up: when accentForeground on the new background fails AA, it's adjusted to pass |
 | T4.06 | U | Theme derivation: dark counterpart passes AA for textPrimary/background and textSecondary/background |
-| T4.07 | C | Library search filters by host/title/tag |
-| T4.08 | E | Scan → appears in Library after a panel reload |
+| T4.07 | C | Library search filters by host/title/tag; a card edit that cannot be stored shows an error and keeps the old value |
+| T4.08 | E | Scan → appears in Library after a panel reload. Unit variant (`scanSave.test.tsx`): a failed Library save keeps the scan and shows "Not saved to Library" |
 | T4.09 | E | Compose two scans → Generate shows the mixed prompt |
 | T4.10 | C | Side panel reopen restores the last scan of the active page (session memo per window, else a Library scan of the same page ≤ 24 h), its tab and its Ask history (a Library or composed scan keeps its origin); a different page, a memo older than 24 h or from another build, a stale scan, an empty or failing Library, a deleted scan, failing session storage, another window and a scan started meanwhile restore nothing stale; an unknown page offers the last scan without applying it |
 | T4.11 | U | One-time scrub of stored Ask history: known keys (verbatim, URL-encoded) leave error and assistant text, key shapes leave error text only, real answers and user text stay; marker set once and a re-run is a no-op; a write failing halfway leaves every row unchanged with no marker; a locked key withholds the marker; a malformed row is skipped; chat reads wait for the scrub; no key is logged. Limit: a rotated key in a format with no known shape is not found |

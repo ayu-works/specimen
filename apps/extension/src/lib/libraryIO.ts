@@ -1,6 +1,7 @@
 /** `.specimen.json` export / import (ARCHITECTURE §9). Thumbnails are never exported. */
-import { type DesignScan, migrate } from '@specimen/core/schema';
-import { db, saveScan } from './db';
+import { filterCssVariables } from '@specimen/core';
+import { BOUNDS, cutText, type DesignScan, migrate } from '@specimen/core/schema';
+import { importScans, libraryErrorText } from './db';
 
 export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 
@@ -11,7 +12,8 @@ export function buildExport(scans: DesignScan[]): string {
       favorite: _f,
       ...rest
     } = s as DesignScan & { tags?: unknown; favorite?: unknown };
-    return rest;
+    // An old over-long id is listed by its stored key; export it as the v5 id it becomes.
+    return { ...rest, id: cutText(rest.id, BOUNDS.text) };
   });
   return JSON.stringify({ format: 'specimen', version: 1, scans: clean }, null, 2);
 }
@@ -33,10 +35,15 @@ export function exportFilename(): string {
 
 export interface ImportResult {
   imported: number;
+  /** Already in the Library (same id and content), so not stored again. */
+  duplicates: number;
   skipped: number;
 }
 
-/** Validate and store an imported file. Throws an Error with a user-readable message. */
+/**
+ * Validate and store an imported file: every valid scan or none. Importing the same file again
+ * (say after a failure) adds nothing twice. Throws an Error with a user-readable message.
+ */
 export async function importFile(file: File): Promise<ImportResult> {
   if (file.size > MAX_IMPORT_BYTES) throw new Error('That file is larger than 20 MB.');
   let json: unknown;
@@ -48,21 +55,33 @@ export async function importFile(file: File): Promise<ImportResult> {
   const doc = json as { format?: unknown; version?: unknown; scans?: unknown } | null;
   if (doc?.format !== 'specimen' || typeof doc.version !== 'number' || !Array.isArray(doc.scans))
     throw new Error('That does not look like a Specimen export.');
+  if (Number.isInteger(doc.version) && doc.version > 1)
+    throw new Error('That file is from a newer Specimen. Update Specimen and try again.');
+  if (doc.version !== 1) throw new Error('That does not look like a Specimen export.');
   const rawScans: unknown[] = doc.scans;
+  if (rawScans.length > BOUNDS.importScans)
+    throw new Error(
+      `That file has ${rawScans.length} scans; Specimen imports at most ${BOUNDS.importScans} at a time.`,
+    );
   const valid: DesignScan[] = [];
   for (const raw of rawScans) {
     try {
-      valid.push(migrate(raw));
+      const scan = migrate(raw);
+      // A shared file carries no more CSS variables than a (merged) live scan would keep.
+      valid.push({
+        ...scan,
+        cssVariables: filterCssVariables(scan.cssVariables, BOUNDS.cssVariables),
+      });
     } catch {
       /* counted as skipped */
     }
   }
   if (valid.length === 0) throw new Error('No valid scans were found in that file.');
-  const existing = new Set(await db.scans.toCollection().primaryKeys());
-  for (const s of valid) {
-    const scan = existing.has(s.id) ? { ...s, id: crypto.randomUUID() } : s;
-    existing.add(scan.id);
-    await saveScan(scan, null);
+  let written: Awaited<ReturnType<typeof importScans>>;
+  try {
+    written = await importScans(valid);
+  } catch (e) {
+    throw new Error(`Import failed, nothing was saved: ${libraryErrorText(e)}.`);
   }
-  return { imported: valid.length, skipped: rawScans.length - valid.length };
+  return { ...written, skipped: rawScans.length - valid.length };
 }

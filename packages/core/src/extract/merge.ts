@@ -1,7 +1,7 @@
 import { computeA11y } from '../a11y';
 import { type ColorEntry, clusterColors, deltaE2000 } from '../color';
 import type { ColorRole, ColorToken, DesignScan, TypeStyle } from '../schema';
-import { DesignScanSchema, SCHEMA_VERSION } from '../schema';
+import { clampToBounds, DesignScanSchema, SCHEMA_VERSION } from '../schema';
 import { densityOf } from './layout';
 
 type Colors = DesignScan['colors'];
@@ -319,5 +319,6 @@ export function mergeScans(scans: DesignScan[]): DesignScan {
   if (variants) out.variants = variants;
   if (first.vibe) out.vibe = first.vibe;
   out.a11y = computeA11y(colors);
-  return DesignScanSchema.parse(out);
+  // Unions of variables, pages and warnings across pages can pass the bounds.
+  return DesignScanSchema.parse(clampToBounds(out));
 }

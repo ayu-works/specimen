@@ -1,15 +1,17 @@
 import 'fake-indexeddb/auto';
-import { generateDesignMd, generatePrompt } from '@specimen/core';
+import { generateDesignMd, generatePrompt, mergeScans } from '@specimen/core';
 import { type DesignScan, migrate, SCHEMA_VERSION } from '@specimen/core/schema';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import {
   db,
   deleteScans,
+  libraryErrorText,
   listScans,
   loadChat,
   replaceStoredScan,
   saveChat,
+  saveCompose,
   saveScan,
   thumbBlobs,
   updateScan,
@@ -27,6 +29,24 @@ const scanOf = (id: string, over: Partial<DesignScan> = {}): DesignScan => ({
 });
 
 const fileOf = (text: string, name = 'lib.specimen.json') => new File([text], name);
+const exportOf = (scans: unknown[], version: unknown = 1) =>
+  fileOf(JSON.stringify({ format: 'specimen', version, scans }));
+
+/** Fail the n-th new row of a table (the real IndexedDB transaction aborts), until `heal()`. */
+function failNth(table: typeof db.scans | typeof db.thumbs, n: number, err: () => Error) {
+  let seen = 0;
+  const hook = () => {
+    if (++seen === n) throw err();
+  };
+  table.hook('creating', hook as never);
+  const heal = () => table.hook('creating').unsubscribe(hook as never);
+  heals.push(heal);
+  return heal;
+}
+const heals: (() => void)[] = [];
+afterEach(() => {
+  for (const heal of heals.splice(0)) heal();
+});
 
 beforeEach(async () => {
   await Promise.all([db.scans.clear(), db.thumbs.clear(), db.chats.clear(), db.composes.clear()]);
@@ -145,32 +165,39 @@ describe('Library import / export', () => {
 
     await Promise.all([db.scans.clear(), db.thumbs.clear()]);
     const res = await importFile(fileOf(exported));
-    expect(res).toEqual({ imported: 2, skipped: 0 });
+    expect(res).toEqual({ imported: 2, duplicates: 0, skipped: 0 });
 
     const back = (await listScans()).map(({ tags: _t, favorite: _f, ...scan }) => scan);
     expect(back).toEqual(originals.map((s) => migrate(s)).reverse());
   });
 
-  it('T4.02 importing an id that already exists keeps both copies', async () => {
-    await saveScan(scanOf('dup'), null);
-    const file = fileOf(buildExport([scanOf('dup')]));
-    expect(await importFile(file)).toEqual({ imported: 1, skipped: 0 });
+  it('T4.02 an existing id with other content keeps both copies; the same content is not stored twice', async () => {
+    await saveScan(scanOf('dup', { scannedAt: 1000 }), null);
+    const same = fileOf(buildExport([scanOf('dup', { scannedAt: 1000 })]));
+    expect(await importFile(same)).toEqual({ imported: 0, duplicates: 1, skipped: 0 });
+    expect(await db.scans.count()).toBe(1);
+
+    const other = fileOf(buildExport([scanOf('dup', { scannedAt: 2000 })]));
+    expect(await importFile(other)).toEqual({ imported: 1, duplicates: 0, skipped: 0 });
     const ids = (await listScans()).map((s) => s.id);
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
+    // Importing that file again finds the copy under its new id instead of adding a third.
+    expect(await importFile(other)).toEqual({ imported: 0, duplicates: 1, skipped: 0 });
+    expect(await db.scans.count()).toBe(2);
   });
 
   it('T4.02 import runs schema migrations on older scans', async () => {
     const old = { ...scanOf('old'), schemaVersion: 1 };
     const file = fileOf(JSON.stringify({ format: 'specimen', version: 1, scans: [old] }));
-    expect(await importFile(file)).toEqual({ imported: 1, skipped: 0 });
+    expect(await importFile(file)).toEqual({ imported: 1, duplicates: 0, skipped: 0 });
     expect((await db.scans.get('old'))?.schemaVersion).toBe(SCHEMA_VERSION);
     // A scan from a newer Specimen is skipped (and reported) rather than half-imported.
     const future = { ...scanOf('future'), schemaVersion: 99 };
     const mixed = fileOf(
       JSON.stringify({ format: 'specimen', version: 1, scans: [scanOf('fine'), future] }),
     );
-    expect(await importFile(mixed)).toEqual({ imported: 1, skipped: 1 });
+    expect(await importFile(mixed)).toEqual({ imported: 1, duplicates: 0, skipped: 1 });
     expect(await db.scans.get('future')).toBeUndefined();
   });
 
@@ -211,7 +238,7 @@ describe('Library import / export', () => {
         scans: [scanOf('fine'), badHex, dangling, oldBad],
       }),
     );
-    expect(await importFile(file)).toEqual({ imported: 2, skipped: 2 });
+    expect(await importFile(file)).toEqual({ imported: 2, duplicates: 0, skipped: 2 });
     expect(await db.scans.get('bad-hex')).toBeUndefined();
     expect(await db.scans.get('dangling')).toBeUndefined();
 
@@ -230,5 +257,241 @@ describe('Library import / export', () => {
   it('T4.03 rejects oversized files before reading them', async () => {
     const big = { size: MAX_IMPORT_BYTES + 1, text: () => Promise.reject(new Error('read')) };
     await expect(importFile(big as unknown as File)).rejects.toThrow(/larger than 20 MB/);
+  });
+});
+
+describe('Library writes are atomic and idempotent (audit H6, M14)', () => {
+  const three = () => [
+    scanOf('i1', { scannedAt: 1 }),
+    scanOf('i2', { scannedAt: 2 }),
+    scanOf('i3', { scannedAt: 3 }),
+  ];
+
+  it('T4.03 a failed 2nd write stores nothing; the retry stores each scan once; a 3rd import adds nothing', async () => {
+    const file = () => fileOf(buildExport(three()));
+    const heal = failNth(db.scans, 2, () => new Error('disk said no'));
+    await expect(importFile(file())).rejects.toThrow(
+      /Import failed, nothing was saved: disk said no/,
+    );
+    expect(await db.scans.count()).toBe(0);
+
+    heal();
+    expect(await importFile(file())).toEqual({ imported: 3, duplicates: 0, skipped: 0 });
+    expect((await listScans()).map((s) => s.id).sort()).toEqual(['i1', 'i2', 'i3']);
+    expect(await importFile(file())).toEqual({ imported: 0, duplicates: 3, skipped: 0 });
+    expect(await db.scans.count()).toBe(3);
+  });
+
+  it('T4.03 a full disk names the cause and stores nothing', async () => {
+    failNth(db.scans, 1, () => new DOMException('quota', 'QuotaExceededError'));
+    await expect(importFile(fileOf(buildExport(three())))).rejects.toThrow(
+      /nothing was saved: your browser is out of storage space/,
+    );
+    expect(await db.scans.count()).toBe(0);
+  });
+
+  it('T4.03 only export format version 1 is accepted', async () => {
+    await expect(importFile(exportOf([scanOf('v')], 2))).rejects.toThrow(/newer Specimen/);
+    for (const v of [0, 1.5, -1, '1']) {
+      await expect(importFile(exportOf([scanOf('v')], v)), String(v)).rejects.toThrow(
+        /does not look like a Specimen/,
+      );
+    }
+    expect(await db.scans.count()).toBe(0);
+  });
+
+  it('T4.03 duplicate ids inside one file: the same scan twice is stored once, different scans both', async () => {
+    const a = scanOf('same', { scannedAt: 5 });
+    expect(await importFile(exportOf([a, a]))).toEqual({ imported: 1, duplicates: 1, skipped: 0 });
+    const b = scanOf('same', { scannedAt: 6 });
+    expect(await importFile(exportOf([b]))).toEqual({ imported: 1, duplicates: 0, skipped: 0 });
+    expect(await db.scans.count()).toBe(2);
+    expect(new Set((await listScans()).map((s) => s.id)).size).toBe(2);
+  });
+
+  it('T4.02 a merged scan with 400 CSS variables restores all of them from a backup (lens B M1)', async () => {
+    const vars = (p: string) =>
+      Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`--color-${p}-${i}`, 'red']));
+    const merged = mergeScans([
+      scanOf('mg', { url: 'https://a.test/1', cssVariables: vars('a') }),
+      scanOf('mg2', { url: 'https://a.test/2', cssVariables: vars('b') }),
+    ]);
+    expect(Object.keys(merged.cssVariables)).toHaveLength(400);
+    const backup = buildExport([merged]);
+    expect(await importFile(fileOf(backup))).toMatchObject({ imported: 1 });
+    expect(Object.keys((await db.scans.get(merged.id))?.cssVariables ?? {})).toHaveLength(400);
+    // Restoring it again finds it.
+    expect(await importFile(fileOf(backup))).toMatchObject({ imported: 0, duplicates: 1 });
+  });
+
+  it('T4.03 a file with more than 500 scans is rejected whole (sec M2)', async () => {
+    const many = Array.from({ length: 501 }, (_, i) => scanOf(`m${i}`, { scannedAt: i }));
+    await expect(importFile(exportOf(many))).rejects.toThrow(/501 scans.*at most 500/);
+    expect(await db.scans.count()).toBe(0);
+    expect(await importFile(exportOf(many.slice(0, 500)))).toMatchObject({ imported: 500 });
+  });
+
+  it('T4.03 an over-bound v5 scan is skipped; a v4 one is imported trimmed (sec M2)', async () => {
+    const huge = scanOf('huge5', { title: 'x'.repeat(5000) });
+    const old = { ...scanOf('huge4', { title: 'x'.repeat(5000) }), schemaVersion: 4 };
+    expect(await importFile(exportOf([huge, old]))).toEqual({
+      imported: 1,
+      duplicates: 0,
+      skipped: 1,
+    });
+    expect((await db.scans.get('huge4'))?.title).toHaveLength(1000);
+    expect(await db.scans.get('huge5')).toBeUndefined();
+  });
+
+  it('T4.03 a row imported before the variable filter still counts as a duplicate (PE r1 L1)', async () => {
+    const s = scanOf('pre', {
+      scannedAt: 9,
+      cssVariables: { '--brand': '#5e6ad2', '--zz-misc': '1' },
+    });
+    await db.scans.put({ ...s, tags: [] });
+    expect(await importFile(exportOf([s]))).toEqual({ imported: 0, duplicates: 1, skipped: 0 });
+    expect(await db.scans.count()).toBe(1);
+  });
+
+  it('T4.03 a clashing id at the length bound still gets a valid id', async () => {
+    const id = 'i'.repeat(1000);
+    await saveScan(scanOf(id, { scannedAt: 1 }), null);
+    expect(await importFile(exportOf([scanOf(id, { scannedAt: 2 })]))).toMatchObject({
+      imported: 1,
+    });
+    expect((await listScans()).map((s) => s.id.length)).toEqual([1000, 1000]);
+  });
+
+  it('T4.03 imported CSS variables go through the extractor filter (sec L2)', async () => {
+    const s = scanOf('vars', {
+      cssVariables: { constructor: 'x', '--brand': '#5e6ad2', '--color-x': '`'.repeat(300) },
+    });
+    await importFile(exportOf([s]));
+    expect((await db.scans.get('vars'))?.cssVariables).toEqual({ '--brand': '#5e6ad2' });
+  });
+
+  it('T4.01 a failed thumbnail write leaves neither the scan nor the thumbnail', async () => {
+    failNth(db.thumbs, 1, () => new Error('thumb write failed'));
+    await expect(saveScan(scanOf('pic'), PIXEL)).rejects.toThrow();
+    expect(await db.scans.get('pic')).toBeUndefined();
+    expect((await thumbBlobs()).size).toBe(0);
+  });
+
+  it('T4.01 an unreadable screenshot saves the scan without a thumbnail', async () => {
+    await saveScan(scanOf('nopic'), 'data:image/jpeg;base64,%%%not-base64');
+    expect(await db.scans.get('nopic')).toBeDefined();
+    expect((await thumbBlobs()).size).toBe(0);
+  });
+});
+
+describe('Library writers store the parsed scan (sec L3)', () => {
+  const junk = (id: string) => ({ ...scanOf(id), payload: 'x'.repeat(10) }) as DesignScan;
+
+  it('T4.01 unknown keys never reach IndexedDB through any writer', async () => {
+    await saveScan(junk('w1'), null);
+    await replaceStoredScan(junk('w2'));
+    await saveCompose(
+      {
+        id: 'c',
+        name: 'c',
+        sources: { colors: 'a', typography: 'a', spacing: 'a', shape: 'a', layout: 'a' },
+        createdAt: 1,
+      },
+      junk('w3'),
+    );
+    await db.scans.put({ ...junk('w4'), tags: [] });
+    await updateScan('w4', { title: 'Renamed' });
+    for (const id of ['w1', 'w2', 'w3', 'w4']) {
+      expect(await db.scans.get(id), id).not.toHaveProperty('payload');
+    }
+    expect((await db.scans.get('w4'))?.title).toBe('Renamed');
+  });
+
+  it('T4.01 a tag or favourite edit keeps the other, and an update of a row that no longer reads fails', async () => {
+    await saveScan(scanOf('t'), null, { tags: ['a'] });
+    await updateScan('t', { favorite: true });
+    expect(await db.scans.get('t')).toMatchObject({ tags: ['a'], favorite: true });
+    await updateScan('t', { tags: ['b'] });
+    expect(await db.scans.get('t')).toMatchObject({ tags: ['b'], favorite: true });
+
+    await db.scans.put({ id: 'broken', scannedAt: 1, tags: [] } as never);
+    await expect(updateScan('broken', { title: 'x' })).rejects.toThrow();
+    expect(await db.scans.get('broken')).not.toHaveProperty('title');
+  });
+});
+
+describe('an old row whose id is over the v5 bound (lens B M2)', () => {
+  const long = 'L'.repeat(1500);
+  const seed = async () => {
+    await db.scans.put({ ...scanOf(long), schemaVersion: 4, tags: ['t'] } as never);
+    await db.thumbs.put({ scanId: long, blob: new Blob(['x']) });
+    await db.chats.put({ scanId: long, messages: [{ role: 'user', content: 'hi' }] });
+  };
+
+  it('T4.01 it lists under its stored key and can be deleted', async () => {
+    await seed();
+    const [listed] = await listScans();
+    expect(listed?.id).toBe(long);
+    await deleteScans([long]);
+    expect(await db.scans.count()).toBe(0);
+  });
+
+  it('T4.01 an edit stores it under its cut id, moving the thumbnail and chat; later writes find it', async () => {
+    await seed();
+    await updateScan(long, { title: 'Renamed' });
+    const cut = long.slice(0, 1000);
+    expect(await db.scans.get(long)).toBeUndefined();
+    expect(await db.scans.get(cut)).toMatchObject({
+      title: 'Renamed',
+      tags: ['t'],
+      schemaVersion: 5,
+    });
+    expect([...(await thumbBlobs()).keys()]).toEqual([cut]);
+    expect((await db.chats.get(cut))?.messages).toHaveLength(1);
+
+    // The panel may still hold the long id: a favourite and a merge-style replace hit the same row.
+    await updateScan(long, { favorite: true });
+    await replaceStoredScan({ ...scanOf(long), title: 'Merged' });
+    expect(await db.scans.count()).toBe(1);
+    expect(await db.scans.get(cut)).toMatchObject({ title: 'Merged', favorite: true, tags: ['t'] });
+  });
+
+  it('T4.02 exporting it writes the cut id, so the backup imports (PE fold L-a)', async () => {
+    await seed();
+    const file = fileOf(buildExport(await listScans()));
+    await db.scans.clear();
+    expect(await importFile(file)).toMatchObject({ imported: 1, skipped: 0 });
+    expect(await db.scans.get(long.slice(0, 1000))).toBeDefined();
+  });
+
+  it('T4.01 a re-key never overwrites another scan already at the cut id (PE fold L-b)', async () => {
+    await seed();
+    const cut = long.slice(0, 1000);
+    await saveScan(scanOf(cut, { title: 'Other' }), null);
+    await expect(updateScan(long, { title: 'Renamed' })).rejects.toThrow(/already has this id/);
+    expect(await db.scans.get(cut)).toMatchObject({ title: 'Other' });
+    expect(await db.scans.get(long)).toBeDefined();
+    expect((await db.chats.get(long))?.messages).toHaveLength(1);
+  });
+
+  it('T4.01 a merge-style replace of the never-edited row re-keys it instead of adding a copy', async () => {
+    await seed();
+    await replaceStoredScan({ ...scanOf(long), title: 'Merged' });
+    expect(await db.scans.count()).toBe(1);
+    expect(await db.scans.get(long.slice(0, 1000))).toMatchObject({ title: 'Merged', tags: ['t'] });
+  });
+});
+
+describe('storage errors read as plain language (lens B L2)', () => {
+  it('T4.03 a quota failure is named whether Dexie wraps it as an abort or a BulkError', () => {
+    const quota = new DOMException('q', 'QuotaExceededError');
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError', inner: quota });
+    const bulk = Object.assign(new Error('scans.bulkAdd(): 3 of 3 operations failed'), {
+      name: 'BulkError',
+      failures: [quota],
+    });
+    for (const e of [quota, abort, bulk]) {
+      expect(libraryErrorText(e)).toBe('your browser is out of storage space');
+    }
   });
 });

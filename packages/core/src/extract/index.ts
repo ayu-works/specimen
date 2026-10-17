@@ -1,5 +1,11 @@
 import { computeA11y } from '../a11y';
-import { type DesignScan, DesignScanSchema, type RawPage, SCHEMA_VERSION } from '../schema';
+import {
+  clampToBounds,
+  type DesignScan,
+  DesignScanSchema,
+  type RawPage,
+  SCHEMA_VERSION,
+} from '../schema';
 import { extractBorders } from './borders';
 import { analyzeColors, type ColorOptions, CSS_VAR_HINT } from './colors';
 import { extractComponents } from './components';
@@ -33,13 +39,21 @@ function hash(s: string): string {
   return (h >>> 0).toString(36);
 }
 
-function designVars(vars: Record<string, string>): Record<string, string> {
+/**
+ * The design-relevant root variables: design-shaped names, values up to 200 chars, at most `max`
+ * (200 per page). Also re-applied to imported scans with the v5 bound as `max`, since a merged
+ * scan legitimately holds more than one page's worth.
+ */
+export function filterCssVariables(
+  vars: Record<string, string>,
+  max = 200,
+): Record<string, string> {
   const out: Record<string, string> = {};
   let n = 0;
   for (const [k, v] of Object.entries(vars).sort(([a], [b]) => a.localeCompare(b))) {
     if (!VAR_NAME.test(k) || v.length > 200) continue;
     out[k] = v;
-    if (++n >= 200) break;
+    if (++n >= max) break;
   }
   return out;
 }
@@ -101,7 +115,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
       blueprint,
     },
     a11y: computeA11y(colors.colors),
-    cssVariables: designVars(raw.rootVars),
+    cssVariables: filterCssVariables(raw.rootVars),
     meta: {
       extractorVersion: EXTRACTOR_VERSION,
       sampleCount: raw.samples.length,
@@ -111,6 +125,8 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
   };
   const components = extractComponents(raw.components);
   if (components.length > 0) scan.components = components;
-  const out = opts.validate === false ? scan : DesignScanSchema.parse(scan);
+  // A page can hand us anything (a 30k-char title, thousands of warnings): stay inside the bounds.
+  const clamped = clampToBounds(scan);
+  const out = opts.validate === false ? clamped : DesignScanSchema.parse(clamped);
   return normalizeZeros(out);
 }

@@ -1,6 +1,6 @@
 import { extract } from '@specimen/core';
 import type { DesignScan, RawPage } from '@specimen/core/schema';
-import { saveScan } from './db';
+import { libraryErrorText, saveScan } from './db';
 import { send } from './messaging';
 import { tabEmulationIdle } from './tabEmulation';
 
@@ -28,6 +28,8 @@ export interface ScanOutcome {
   screenshot: string;
   /** Page facts from the sampler (theme switches, menu button). */
   hints?: RawPage['hints'];
+  /** Why the Library save failed (the scan itself is fine), or null when it was saved or not asked for. */
+  saveError: string | null;
 }
 
 export interface ScanTabOptions {
@@ -37,7 +39,10 @@ export interface ScanTabOptions {
   noScreenshot?: boolean;
 }
 
-/** Scan a tab and save the result (with thumbnail) to the library. Saving never fails the scan. */
+/**
+ * Scan a tab and save the result (with thumbnail) to the library. A failed save never fails the
+ * scan; it comes back as `saveError` so the panel can say so.
+ */
 export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
   // A mobile capture may have a phone override on this tab: never record that as the desktop.
   await tabEmulationIdle();
@@ -46,14 +51,15 @@ export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise
     opts: opts.noScreenshot ? { noScreenshot: true } : undefined,
   });
   const scan = extract(res.raw);
+  let saveError: string | null = null;
   if (opts.save !== false) {
     try {
       await saveScan(scan, res.screenshot);
-    } catch {
-      /* library unavailable (private mode, quota): the scan itself still works */
+    } catch (e) {
+      saveError = libraryErrorText(e);
     }
   }
-  return { scan, screenshot: res.screenshot, hints: res.raw.hints };
+  return { scan, screenshot: res.screenshot, hints: res.raw.hints, saveError };
 }
 
 /** Resolve when the tab finishes loading; reject on timeout or when it is closed. */

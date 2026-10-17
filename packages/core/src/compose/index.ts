@@ -2,6 +2,7 @@ import { contrast, ensureContrast, toOklch } from '../color';
 import {
   type ColorRole,
   type ColorToken,
+  clampToBounds,
   type DesignScan,
   DesignScanSchema,
   SCHEMA_VERSION,
@@ -132,5 +133,6 @@ export function compose(
       ...(colorSrc.variants.light ? { light: clone(colorSrc.variants.light) } : {}),
     };
   }
-  return DesignScanSchema.parse(out);
+  // Five long hosts make a title past its bound.
+  return DesignScanSchema.parse(clampToBounds(out));
 }
