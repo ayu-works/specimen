@@ -268,9 +268,18 @@ export function jsonOut(data: unknown): string {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
 const BREAKS = /\r\n|[\u0000-\u0008\u000A-\u001F\u007F\u2028\u2029]/g;
 
-/** Escape a value for a Markdown table cell. */
+/**
+ * Escape a value for a Markdown table cell. GFM's row scanner pairs a backslash with the next
+ * character, so `a\|b` escaped as `a\\|b` split the cell (SPC-36, measured with
+ * micromark-extension-gfm-table: an odd backslash run before `|` gave an extra column). A run
+ * right before a pipe is doubled, then the pipe escaped. Plain text reads back exactly; inside a
+ * code span (no escapes there; the table strips only the `\` before `|`) the run shows doubled.
+ * No form round-trips there, and a doubled backslash beats a split row.
+ */
 export function cell(s: string | number): string {
-  return String(s).replace(/\|/g, '\\|').replace(BREAKS, ' ');
+  return String(s)
+    .replace(/(\\*)\|/g, (_, run: string) => `${run}${run}\\|`)
+    .replace(BREAKS, ' ');
 }
 
 /**
