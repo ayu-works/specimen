@@ -1,6 +1,6 @@
 # SPC-34: local Gemma reply cut off by the token limit still reports `done`
 
-Executor: spc-34-1f · Branch `exec/spc-34` (from origin/main de35272) · Lane C · Status: **PLAN APPROVED by pe-8a (ruling A, no retry); waiting for the owner's OK on the contract, relayed by specimen-6a**
+Executor: spc-34-1f · Branch `exec/spc-34` (from origin/main de35272) · Lane C · Status: **BUILT, PR open, waiting for reviews (lens A + lens B)**
 
 ## PE ruling (pe-8a, 2026-10-17)
 Approved, contract **A**, **no retry**. Notes folded in:
@@ -115,5 +115,18 @@ further contract change; I'd suggest a ticket.
 `pnpm gate` green before the PR.
 
 ## Done / Next / How to resume
-- Done: read brief/setup/plan/ticket (no comments), `pnpm i`, this plan.
-- Next: PE ruling on the contract → orchestrator confirms owner OK → build tests first in `packages/ai`.
+- Done (2026-10-17): plan approved by pe-8a (ruling A, no retry); the owner OK'd the contract (relayed by
+  specimen-6a, recorded on Linear). Built as planned: `done.truncated?` in `llmProtocol.ts`, host sends it
+  on `finish_reason 'length'` (stop and `'abort'` still win), the client throws `TRUNCATED_TEXT` after the
+  deltas, the council fails with `CRITIQUE_TRUNCATED` (exact-constant match), Ask renders partial text + the
+  error line (history filter unchanged). Tests 1–7 as listed (all red first except the stop-race guard,
+  which already held). ARCHITECTURE Port row and TESTING T3.07/T3.11/T3.12/T3.21 updated.
+  Rebased on origin/main 2bac238 (SPC-33's vibe.ts rework: the throw path is unchanged, vibe test still
+  holds). `pnpm gate` green (gitleaks not installed locally: secrets skipped, CI scans).
+- Side effect: Ask now also shows streamed text above *any* error (it was hidden before). That text was
+  already the sanitized snapshot and is still stored and still excluded from history.
+- Next: fold review findings (files under `docs/sprint/reviews/SPC-34-*`), new commit per fold.
+- Resume: `git log origin/main..exec/spc-34`; tests: `pnpm --filter ./apps/extension exec vitest run
+  test/ai/llmHost.test.ts test/ask.test.tsx` (run `wxt prepare` first) and `pnpm -F @specimen/ai test`.
+- Follow-up suggestion: same `TRUNCATED_TEXT` for the BYOK adapters (openaiCompat `length`, Anthropic
+  `max_tokens`, Gemini `MAX_TOKENS`); no contract change needed.
