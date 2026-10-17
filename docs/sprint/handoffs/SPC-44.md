@@ -121,8 +121,12 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
   deploy, so it's batched with SPC-23 (orchestrator).
 - CWS dashboard: the `debugger` justification should be removed on the next upload (owner).
 
+## Reviews
+- Lens A r1 (pe-b2): APPROVED, 0 C/H/M. The optional L1 is folded: the e2e T5.03 now allows ±2px between the oracle
+  and the capture, and reads the card's px from the text. No re-review needed.
+
 ## Next
-Reviews (PE lens A + lens B). Fold findings as new commits.
+Lens B review. Fold findings as new commits.
 
 ## How to resume
 Read this file, `git log exec/spc-44`, and any `docs/sprint/reviews/SPC-44-*.md`. Worktree `worktrees/spc-44`.
