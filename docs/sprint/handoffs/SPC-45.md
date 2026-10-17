@@ -121,3 +121,6 @@ committed event can't satisfy it, tested). (c) The accepted residuals go in the 
   saved but reported as failed). Fixed: the bound now covers only the `scan.run` answer (`ScanTabOptions.answerWithinMs`,
   replacing the `signal`/`scanWithin` pair). Extract and save after the answer are never cut off. New T5.14 test:
   answer at 19 s, save takes 10 s → success, tab stays (it fails on 360890b).
+- 2026-10-17: pe-b2 re-check at 108249f: APPROVED, lens A done. Lens B r1 folded (H1/M1/L1), M2/L2/L3 → SPC-48.
+  State: waiting on the owner's "merge all" (retarget to main once #43 → #39 merge). CI red only from the spc-41
+  gitleaks hit (byokTest.test.tsx), not this PR.
