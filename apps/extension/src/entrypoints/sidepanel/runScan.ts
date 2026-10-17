@@ -12,7 +12,7 @@ export async function runTabScan(): Promise<void> {
     if (tab?.id === undefined) throw new Error('No active tab');
     if (tab.url && !/^https?:/.test(tab.url)) throw new Error(`Unsupported page: ${tab.url}`);
     const res = await scanTab(tab.id);
-    succeed(res.scan, res.screenshot, tab.favIconUrl ?? null);
+    succeed(res.scan, res.screenshot, tab.favIconUrl ?? null, res.saveError);
     void loadMobilePref().then((withMobile) =>
       runExtras(res.scan, tab.id as number, res.hints, withMobile),
     );

@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { deltaE2000 } from '../src/color';
-import { extract } from '../src/extract';
+import { extract, filterCssVariables } from '../src/extract';
 import { type ColorRole, type DesignScan, DesignScanSchema, RawPageSchema } from '../src/schema';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
@@ -298,5 +298,22 @@ describe('extract() on real-site raw fixtures', () => {
     expect(median, `median ${median.toFixed(1)}ms over ${raw.samples.length} samples`).toBeLessThan(
       200,
     );
+  });
+});
+
+describe('CSS variable filter (sec L2)', () => {
+  it('T1.08 keeps design-named variables with short values, drops the rest, caps at 200', () => {
+    const out = filterCssVariables({
+      '--brand': '#5e6ad2',
+      constructor: 'x',
+      '--zz-unrelated': '1',
+      '--color-long': '`'.repeat(201),
+      '--color-ok': '`'.repeat(200),
+    });
+    expect(out).toEqual({ '--brand': '#5e6ad2', '--color-ok': '`'.repeat(200) });
+    const many = Object.fromEntries(
+      Array.from({ length: 300 }, (_, i) => [`--color-${String(i).padStart(3, '0')}`, 'red']),
+    );
+    expect(Object.keys(filterCssVariables(many))).toHaveLength(200);
   });
 });

@@ -6,7 +6,7 @@ import { Mascot } from '@/components/Mascot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { replaceStoredScan } from '@/lib/db';
+import { libraryErrorText, replaceStoredScan } from '@/lib/db';
 import { ensureSiteAccess, friendlyScanError, sameUrl, scanTab } from '@/lib/scanFlow';
 import { loadMobilePref, runMediaCapture, runMobileCapture, saveMobilePref } from '../extras';
 import { openOffer } from '../restore';
@@ -66,8 +66,14 @@ function Captures({ scan }: { scan: DesignScan }) {
       const out = await scanTab(tab.id, { save: false, noScreenshot: true });
       const merged = mergeScans([scan, out.scan]);
       setScan(merged);
-      await replaceStoredScan(merged).catch(() => {});
-      patchExtras({ page: 'idle', note: `${merged.meta.pages?.length ?? 2} pages merged` });
+      const unsaved = await replaceStoredScan(merged).then(
+        () => '',
+        (e) => ` (not saved to Library: ${libraryErrorText(e)})`,
+      );
+      patchExtras({
+        page: 'idle',
+        note: `${merged.meta.pages?.length ?? 2} pages merged${unsaved}`,
+      });
     } catch (e) {
       patchExtras({
         page: 'idle',
@@ -210,7 +216,7 @@ function Captures({ scan }: { scan: DesignScan }) {
 }
 
 export function Scan() {
-  const { scan, screenshot, favicon, status, error, setTab, offer } = useStore();
+  const { scan, screenshot, favicon, status, error, saveError, setTab, offer } = useStore();
 
   const run = runTabScan;
 
@@ -289,6 +295,12 @@ export function Scan() {
               </div>
             </div>
           </div>
+          {saveError && (
+            <p role="status" data-testid="save-error" className="text-xs text-destructive">
+              Not saved to Library: {saveError}. The scan works here, but it won't be in the Library
+              after you close the panel.
+            </p>
+          )}
           {screenshot && (
             <img
               src={screenshot}

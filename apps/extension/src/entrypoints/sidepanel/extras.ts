@@ -8,7 +8,7 @@ import {
   MobileTooWideError,
   requestDebugger,
 } from '@/lib/captureFlow';
-import { updateScan } from '@/lib/db';
+import { libraryErrorText, updateScan } from '@/lib/db';
 import { sameUrl } from '@/lib/scanFlow';
 import { useStore } from './store';
 
@@ -39,8 +39,12 @@ async function attach(scan: DesignScan, variants: NonNullable<DesignScan['varian
   useStore.getState().setScan(next);
   try {
     await updateScan(scan.id, { variants: next.variants });
-  } catch {
-    /* library unavailable: the capture still shows for this session */
+  } catch (e) {
+    // The capture still shows for this session; say it won't be in the Library.
+    if (live(scan.id))
+      useStore
+        .getState()
+        .patchExtras({ note: `Captured, but not saved to Library: ${libraryErrorText(e)}.` });
   }
   return next;
 }

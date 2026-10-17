@@ -2,7 +2,7 @@ import { firstHex } from '@specimen/core';
 import type { ColorRole } from '@specimen/core/schema';
 import { MoreHorizontal, Star } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { deleteScans, type StoredScan, updateScan } from '@/lib/db';
+import { deleteScans, libraryErrorText, type StoredScan, updateScan } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
 const SWATCH_ROLES: ColorRole[] = ['background', 'surface', 'textPrimary', 'accent', 'border'];
@@ -34,6 +34,8 @@ interface Props {
   onRescan: () => void;
   onCheck: () => void;
   onChanged: () => void;
+  /** A rename, tag, favourite or delete that could not be stored. */
+  onError: (message: string) => void;
 }
 
 export function ScanCard({
@@ -45,6 +47,7 @@ export function ScanCard({
   onRescan,
   onCheck,
   onChanged,
+  onError,
 }: Props) {
   const [menu, setMenu] = useState(false);
   const [edit, setEdit] = useState<'title' | 'tags' | null>(null);
@@ -66,9 +69,23 @@ export function ScanCard({
     setEdit(kind);
   }
 
+  /** Run a Library write; a failure is shown, and the reload drops the edit that wasn't stored. */
+  async function write(what: string, work: () => Promise<void>) {
+    try {
+      await work();
+    } catch (e) {
+      onError(`Could not ${what}: ${libraryErrorText(e)}.`);
+    }
+    onChanged();
+  }
+
   async function commit() {
     const kind = edit;
     setEdit(null);
+    await write('save that change', () => store(kind));
+  }
+
+  async function store(kind: 'title' | 'tags' | null) {
     if (kind === 'title') {
       const title = draft.trim();
       if (title && title !== scan.title) await updateScan(scan.id, { title });
@@ -83,20 +100,17 @@ export function ScanCard({
       ];
       await updateScan(scan.id, { tags });
     }
-    onChanged();
   }
 
   async function toggleFavorite() {
     setMenu(false);
-    await updateScan(scan.id, { favorite: !scan.favorite });
-    onChanged();
+    await write('save that change', () => updateScan(scan.id, { favorite: !scan.favorite }));
   }
 
   async function remove() {
     setMenu(false);
     if (!window.confirm(`Delete "${scan.title || scan.host}" from your Library?`)) return;
-    await deleteScans([scan.id]);
-    onChanged();
+    await write('delete that scan', () => deleteScans([scan.id]));
   }
 
   const itemCls = 'block w-full px-3 py-1.5 text-left text-xs hover:bg-muted';

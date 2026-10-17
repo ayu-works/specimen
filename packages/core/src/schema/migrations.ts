@@ -46,29 +46,37 @@ function repairColors(scan: Rec): Rec {
     return Object.fromEntries(Object.entries(r).filter(([k]) => !bad.has(k)));
   };
 
-  const out = structuredClone(scan);
-  const colors = out.colors;
-  if (isRec(colors)) {
+  // Shallow copies of only the parts repaired below; the rest is untrusted and left for zod to strip.
+  const out: Rec = { ...scan };
+  const colors = isRec(scan.colors) ? { ...scan.colors } : undefined;
+  if (colors) {
     colors.palette = fixPalette(colors.palette);
     colors.roles = fixRoles(colors.roles, colors.palette);
+    out.colors = colors;
   }
-  const variants = out.variants;
-  if (isRec(variants)) {
+  if (isRec(scan.variants)) {
+    const variants: Rec = { ...scan.variants };
     for (const key of ['dark', 'light']) {
-      const v = variants[key];
-      if (!isRec(v)) continue;
+      const src = variants[key];
+      if (!isRec(src)) continue;
+      const v = { ...src };
       if (v.palette !== undefined) v.palette = fixPalette(v.palette);
-      v.roles = fixRoles(v.roles, v.palette ?? (isRec(colors) ? colors.palette : undefined));
+      v.roles = fixRoles(v.roles, v.palette ?? colors?.palette);
+      variants[key] = v;
     }
+    out.variants = variants;
   }
   const parts = [
     fixed > 0 && `normalised ${plural(fixed, 'color')}`,
     dropped > 0 && `dropped ${plural(dropped, 'unreadable color')}`,
     roles > 0 && `dropped ${plural(roles, 'role')} pointing at a missing color`,
   ].filter(Boolean);
-  const meta = out.meta;
+  const meta = scan.meta;
   if (parts.length > 0 && isRec(meta) && Array.isArray(meta.warnings)) {
-    meta.warnings = [...meta.warnings, `Repaired on upgrade: ${parts.join(', ')}.`];
+    out.meta = {
+      ...meta,
+      warnings: [...meta.warnings, `Repaired on upgrade: ${parts.join(', ')}.`],
+    };
   }
   return out;
 }

@@ -155,6 +155,19 @@ describe('schema integrity (audit H4)', () => {
     expect(half?.alpha).toBe(0.5);
   });
 
+  it('T1.01 repair copies only what it changes: a deeply nested junk key is dropped, not cloned (sec L1)', () => {
+    let deep: Record<string, unknown> = {};
+    for (let i = 0; i < 100_000; i++) deep = { d: deep };
+    const old = { ...v4(), schemaVersion: 3, junk: deep } as unknown as Scan;
+    old.colors.palette.push(tok('c3', '#ABC'));
+    const out = migrate(old);
+    expect(out).not.toHaveProperty('junk');
+    expect(out.colors.palette.find((t) => t.id === 'c3')?.hex).toBe('#aabbcc');
+    // The parts it repaired are copies: the input keeps its own palette, variants and warnings.
+    expect(old.colors.palette.find((t) => t.id === 'c3')?.hex).toBe('#ABC');
+    expect(old.meta.warnings.some((w) => REPAIR_WARNING.test(w))).toBe(false);
+  });
+
   it('T1.01 clean v1–v3 rows upgrade unchanged, with no repair warning', () => {
     for (const v of [1, 2, 3]) {
       const out = migrate({ ...v4(), schemaVersion: v });

@@ -33,7 +33,11 @@ function hash(s: string): string {
   return (h >>> 0).toString(36);
 }
 
-function designVars(vars: Record<string, string>): Record<string, string> {
+/**
+ * The design-relevant root variables: design-shaped names, values up to 200 chars, at most 200.
+ * Also re-applied to imported scans, so a shared file can't carry more than a live scan would.
+ */
+export function filterCssVariables(vars: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   let n = 0;
   for (const [k, v] of Object.entries(vars).sort(([a], [b]) => a.localeCompare(b))) {
@@ -101,7 +105,7 @@ export function extract(raw: RawPage, opts: ExtractOptions = {}): DesignScan {
       blueprint,
     },
     a11y: computeA11y(colors.colors),
-    cssVariables: designVars(raw.rootVars),
+    cssVariables: filterCssVariables(raw.rootVars),
     meta: {
       extractorVersion: EXTRACTOR_VERSION,
       sampleCount: raw.samples.length,

@@ -68,18 +68,40 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
   return new Blob([bytes], { type: mime });
 }
 
-/** Save a scan (new row every time) and its thumbnail. Returns the stored row. */
+/** Save a scan (new row every time) and its thumbnail, both or neither. Returns the stored row. */
 export async function saveScan(
   scan: DesignScan,
   screenshot: string | null,
   extra: { tags?: string[] } = {},
 ): Promise<StoredScan> {
-  DesignScanSchema.parse(scan);
-  const row: StoredScan = { ...scan, tags: extra.tags ?? [] };
-  await db.scans.put(row);
-  const blob = screenshot ? dataUrlToBlob(screenshot) : null;
-  if (blob) await db.thumbs.put({ scanId: scan.id, blob });
+  const row: StoredScan = { ...DesignScanSchema.parse(scan), tags: extra.tags ?? [] };
+  // Decode before the transaction: awaiting anything but Dexie inside it would commit it early.
+  let blob: Blob | null = null;
+  try {
+    blob = screenshot ? dataUrlToBlob(screenshot) : null;
+  } catch {
+    /* an unreadable screenshot just means no thumbnail */
+  }
+  await db.transaction('rw', db.scans, db.thumbs, async () => {
+    await db.scans.put(row);
+    if (blob) await db.thumbs.put({ scanId: row.id, blob });
+  });
   return row;
+}
+
+/** A Library write error as a short, user-readable reason. */
+export function libraryErrorText(e: unknown): string {
+  const err = e as { name?: string; message?: string; inner?: { name?: string } } | null;
+  const names = [err?.name, err?.inner?.name];
+  if (names.includes('QuotaExceededError')) return 'your browser is out of storage space';
+  if (err?.name === 'ZodError') return "the scan didn't pass validation";
+  if (
+    names.some(
+      (n) => n === 'InvalidStateError' || n === 'DatabaseClosedError' || n === 'OpenFailedError',
+    )
+  )
+    return 'browser storage is unavailable here (a private window?)';
+  return err?.message || 'browser storage failed';
 }
 
 function toStored(row: StoredScan): StoredScan | null {
@@ -130,30 +152,110 @@ export async function countScans(): Promise<number> {
   return db.scans.count();
 }
 
+/** Patch a stored scan. The merged row must meet the current schema, or nothing is written. */
 export async function updateScan(
   id: string,
   patch: Partial<Pick<StoredScan, 'title' | 'tags' | 'favorite' | 'vibe' | 'variants'>>,
 ): Promise<void> {
-  if (!patch.variants) {
-    await db.scans.update(id, patch);
-    return;
-  }
-  // Variants carry palettes and role ids: check the merged row, so a bad patch fails here and
-  // not later as a scan that no longer reads back.
+  const { tags, favorite, ...data } = patch;
   await db.transaction('rw', db.scans, async () => {
     const row = await db.scans.get(id);
     if (!row) return;
-    // The stored row may be older (repaired on read); the patch itself must meet the current schema.
-    DesignScanSchema.parse({ ...migrate(row), ...patch });
-    await db.scans.put({ ...row, ...patch });
+    // The stored row may be older (repaired on read); the patched result must meet the current schema.
+    const clean = DesignScanSchema.parse({ ...migrate(row), ...data });
+    await db.scans.put({
+      ...clean,
+      tags: tags ?? (Array.isArray(row.tags) ? row.tags : []),
+      favorite: 'favorite' in patch ? favorite : row.favorite,
+    });
   });
 }
 
 /** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
 export async function replaceStoredScan(scan: DesignScan): Promise<void> {
-  DesignScanSchema.parse(scan);
-  const old = await db.scans.get(scan.id);
-  await db.scans.put({ ...scan, tags: old?.tags ?? [], favorite: old?.favorite });
+  const clean = DesignScanSchema.parse(scan);
+  await db.transaction('rw', db.scans, async () => {
+    const old = await db.scans.get(clean.id);
+    await db.scans.put({ ...clean, tags: old?.tags ?? [], favorite: old?.favorite });
+  });
+}
+
+/** JSON with sorted keys, so equal scans compare equal whatever their key order. */
+function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map((k) => [k, (x as Record<string, unknown>)[k]]),
+        )
+      : x,
+  );
+}
+
+/** A scan's content (everything but its id) as a comparable string. */
+function contentKey(scan: DesignScan): string {
+  const { id: _id, ...rest } = scan;
+  return stableJson(rest);
+}
+
+async function shortHash(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest).slice(0, 6), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
+export interface ImportWrite {
+  imported: number;
+  /** Scans already in the Library with the same id and content (or repeated in the file). */
+  duplicates: number;
+}
+
+/**
+ * Store imported scans in one transaction: all of them or none. Idempotent: a scan whose id and
+ * content are already stored is not written again. A clashing id with other content is stored
+ * under an id derived from its content, so a retry finds it there instead of adding a copy.
+ */
+export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
+  const items = await Promise.all(
+    scans.map(async (s) => {
+      const clean = DesignScanSchema.parse(s);
+      const key = contentKey(clean);
+      return { clean, key, altId: `${clean.id}-${await shortHash(key)}` };
+    }),
+  );
+  return db.transaction('rw', db.scans, async () => {
+    const ids = [...new Set(items.flatMap((i) => [i.clean.id, i.altId]))];
+    const stored = await db.scans.bulkGet(ids);
+    /** id → content key (null = a stored row that no longer reads), for rows stored or about to be. */
+    const taken = new Map<string, string | null>();
+    for (const row of stored) {
+      if (!row) continue;
+      let key: string | null = null;
+      try {
+        key = contentKey(migrate(row));
+      } catch {
+        /* unreadable: its id is taken, its content matches nothing */
+      }
+      taken.set(row.id, key);
+    }
+    const rows: StoredScan[] = [];
+    let duplicates = 0;
+    for (const { clean, key, altId } of items) {
+      const candidates = [clean.id, altId];
+      if (candidates.some((c) => taken.get(c) === key)) {
+        duplicates++;
+        continue;
+      }
+      const id = candidates.find((c) => !taken.has(c)) ?? crypto.randomUUID();
+      const row = { ...clean, id, tags: [] };
+      taken.set(row.id, key);
+      rows.push(row);
+    }
+    await db.scans.bulkAdd(rows);
+    return { imported: rows.length, duplicates };
+  });
 }
 
 export async function deleteScans(ids: string[]): Promise<void> {
@@ -210,9 +312,9 @@ export async function saveChat(scanId: string, messages: ChatMessage[]): Promise
 }
 
 export async function saveCompose(row: ComposeRow, composed: DesignScan): Promise<void> {
-  DesignScanSchema.parse(composed);
+  const clean = DesignScanSchema.parse(composed);
   await db.transaction('rw', db.scans, db.composes, async () => {
     await db.composes.put(row);
-    await db.scans.put({ ...composed, tags: ['composed'] });
+    await db.scans.put({ ...clean, tags: ['composed'] });
   });
 }

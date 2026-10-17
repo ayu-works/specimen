@@ -118,7 +118,12 @@ export function Library() {
     setError(null);
     try {
       const r = await importFile(file);
-      toast(`Imported ${r.imported}${r.skipped ? `, skipped ${r.skipped}` : ''}`);
+      const parts = [
+        `Imported ${r.imported}`,
+        r.duplicates > 0 && `${r.duplicates} already in your Library`,
+        r.skipped > 0 && `skipped ${r.skipped}`,
+      ].filter(Boolean);
+      toast(parts.join(', '));
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed.');
@@ -278,6 +283,7 @@ export function Library() {
             onRescan={() => void rescan(s)}
             onCheck={() => void checkBuild(s)}
             onChanged={() => void reload()}
+            onError={setError}
           />
         ))}
       </div>
