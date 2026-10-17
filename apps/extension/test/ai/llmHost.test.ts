@@ -21,6 +21,15 @@ const state = vi.hoisted(() => ({
   interrupts: 0,
   /** The last fake Worker created: tests fire its `error` to simulate a crash. */
   worker: null as null | { fire: (type: string) => void },
+  /** Each load's progress callback, in order: a dead load's can be fired late. */
+  progress: [] as ((r: { progress: number; text: string }) => void)[],
+  /** Worker terminations and cache deletes, in call order. */
+  log: [] as string[],
+  /** How many next `new Worker()` calls throw. */
+  workerThrows: 0,
+  /** Loads started in this test, and which load's engine (1, 2, …) ran each chat. */
+  loads: 0,
+  chatEngines: [] as number[],
 }));
 
 vi.mock('@mlc-ai/web-llm', () => {
@@ -77,13 +86,29 @@ vi.mock('@mlc-ai/web-llm', () => {
       opts: { initProgressCallback: (r: { progress: number; text: string }) => void },
     ) => {
       if (state.failCreate) throw state.failCreate;
+      const tag = ++state.loads;
+      // This load's own gate: a later test change of `state.loadGate` doesn't release it.
+      const gate = state.loadGate;
+      state.progress.push(opts.initProgressCallback);
       opts.initProgressCallback({ progress: 0.5, text: 'half' });
-      if (state.loadGate) await state.loadGate;
+      if (gate) await gate;
       opts.initProgressCallback({ progress: 1, text: 'done' });
-      return engine;
+      // Each load gets its own engine, so a test can tell which load's engine a chat ran on.
+      return {
+        ...engine,
+        chat: {
+          completions: {
+            create: (body: { messages: { content: string }[] }) => {
+              state.chatEngines.push(tag);
+              return engine.chat.completions.create(body);
+            },
+          },
+        },
+      };
     },
     hasModelInCache: async () => true,
     deleteModelAllInfoInCache: async () => {
+      state.log.push('delete');
       if (state.failDelete) throw state.failDelete;
     },
   };
@@ -178,6 +203,11 @@ beforeEach(async () => {
     failDelete: undefined,
     interrupts: 0,
     worker: null,
+    progress: [],
+    log: [],
+    workerThrows: 0,
+    loads: 0,
+    chatEngines: [],
   });
   vi.stubGlobal(
     'Worker',
@@ -185,6 +215,11 @@ beforeEach(async () => {
     class {
       private ls = new Map<string, Set<() => void>>();
       constructor() {
+        if (state.workerThrows > 0) {
+          state.workerThrows--;
+          throw new Error('Worker could not be created');
+        }
+        state.log.push('worker');
         state.worker = {
           fire: (t) => {
             for (const cb of this.ls.get(t) ?? []) cb();
@@ -195,7 +230,9 @@ beforeEach(async () => {
         if (!this.ls.has(t)) this.ls.set(t, new Set());
         this.ls.get(t)?.add(cb);
       }
-      terminate() {}
+      terminate() {
+        state.log.push('terminate');
+      }
     },
   );
   vi.stubGlobal('navigator', { gpu: { requestAdapter: async () => ({}) } });
@@ -480,16 +517,16 @@ describe('llm Port protocol (host)', () => {
   }
 
   it('T3.11 unload or delete mid-stream ends that chat in error and frees the queue', async () => {
-    for (const msg of [
-      { type: 'unload' } as const,
-      { type: 'delete', modelId: DEFAULT_GEMMA } as const,
-    ]) {
+    for (const [msg, reason] of [
+      [{ type: 'unload' } as const, /unloaded/],
+      [{ type: 'delete', modelId: DEFAULT_GEMMA } as const, /deleted/],
+    ] as const) {
       const a = await loaded();
       await hung(a, 'A');
       open().send(msg);
       const end = await a.waitFor(ended('A'));
       expect(end).toMatchObject({ type: 'error', kind: 'other' });
-      expect((end as { message: string }).message).toMatch(/unloaded/);
+      expect((end as { message: string }).message).toMatch(reason);
       expect(a.of('A').some((e) => e.type === 'done')).toBe(false);
       await nextChatRuns();
     }
@@ -542,5 +579,142 @@ describe('llm Port protocol (host)', () => {
     const ext = open('chrome-extension://specimen/options.html');
     ext.send({ type: 'status' });
     expect(await ext.waitFor((e) => e.type === 'status')).toMatchObject({ gpu: true });
+  });
+
+  /** Start a load that only finishes when the test says so; resolves once it is downloading. */
+  async function hungLoad(modelId: string = DEFAULT_GEMMA) {
+    const gate = deferred();
+    state.loadGate = gate.promise;
+    const c = open();
+    c.send({ type: 'load', modelId });
+    await c.waitFor((e) => e.type === 'progress');
+    state.loadGate = null;
+    return { c, gate };
+  }
+  const loadError = (e: LlmEvent) => e.type === 'error' && !('id' in e && e.id);
+
+  it('T3.11 a worker crash during a load rejects it, unloads, and frees the host', async () => {
+    for (const type of ['error', 'messageerror']) {
+      const { c } = await hungLoad();
+      state.worker?.fire(type);
+      const err = await c.waitFor(loadError);
+      expect(err).toMatchObject({ kind: 'other' });
+      expect((err as { message: string }).message).toMatch(/stopped unexpectedly/);
+      expect(c.events.some((e) => e.type === 'ready')).toBe(false);
+      c.send({ type: 'status' });
+      expect(await c.waitFor((e) => e.type === 'status')).toMatchObject({ loading: false });
+      expect((c.events.at(-1) as { loaded?: string }).loaded).toBeUndefined();
+      c.disconnect();
+      expect(host.llmBusy()).toBe(false);
+    }
+  });
+
+  it('T3.11 an unload during a load rejects it', async () => {
+    const { c } = await hungLoad();
+    open().send({ type: 'unload' });
+    const err = await c.waitFor(loadError);
+    expect((err as { message: string }).message).toMatch(/unloaded/);
+    expect(c.events.some((e) => e.type === 'ready')).toBe(false);
+  });
+
+  it('T3.11 deleting the model that is loading stops the load before the cache is cleared', async () => {
+    const { c } = await hungLoad();
+    state.log = [];
+    const d = open();
+    d.send({ type: 'delete', modelId: DEFAULT_GEMMA });
+    await d.waitFor((e) => e.type === 'deleted');
+    expect(state.log).toEqual(['terminate', 'delete']);
+    expect((await c.waitFor(loadError)) as { message: string }).toMatchObject({
+      message: expect.stringMatching(/deleted/),
+    });
+    expect(c.events.some((e) => e.type === 'ready')).toBe(false);
+  });
+
+  it('T3.11 two loads sent together share one worker and both get ready', async () => {
+    const a = open();
+    const b = open();
+    a.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    b.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await a.waitFor((e) => e.type === 'ready');
+    await b.waitFor((e) => e.type === 'ready');
+    expect(state.log.filter((x) => x === 'worker')).toHaveLength(1);
+  });
+
+  it('T3.11 two waiters on one load both get the error, once each', async () => {
+    const { c: a } = await hungLoad();
+    const b = open();
+    b.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await sleep(20);
+    state.worker?.fire('error');
+    await a.waitFor(loadError);
+    await b.waitFor(loadError);
+    await sleep(20);
+    for (const p of [a, b]) {
+      expect(p.events.filter(loadError)).toHaveLength(1);
+      expect(p.events.some((e) => e.type === 'ready')).toBe(false);
+    }
+  });
+
+  it("T3.11 a retry after a crashed load works; the dead load's late progress and result are ignored", async () => {
+    const { c, gate: dead } = await hungLoad();
+    state.worker?.fire('error');
+    await c.waitFor(loadError);
+
+    const { c: r, gate } = await hungLoad();
+    const before = r.events.length;
+    // The crashed load's worker reports late, while the retry is downloading.
+    state.progress[0]?.({ progress: 0.1, text: 'stale' });
+    await sleep(20);
+    expect(r.events.slice(before).some((e) => e.type === 'progress')).toBe(false);
+    r.send({ type: 'status' });
+    expect(await r.waitFor((e) => e.type === 'status')).toMatchObject({ loading: true, p: 0.5 });
+    gate.resolve();
+    await r.waitFor((e) => e.type === 'ready');
+    // …and its engine shows up only after the retry's is loaded: it must not replace it.
+    dead.resolve();
+    await sleep(20);
+    r.send({ type: 'chat', id: 'R', req: req('r') });
+    expect(await r.waitFor(ended('R'))).toMatchObject({ type: 'done' });
+    expect(state.chatEngines).toEqual([2]);
+  });
+
+  it('T3.11 a load of another model queued behind a crashed load goes ahead', async () => {
+    const other = GEMMA_MODELS.find((m) => m.id !== DEFAULT_GEMMA)?.id ?? '';
+    const { c: a } = await hungLoad();
+    const b = open();
+    b.send({ type: 'load', modelId: other });
+    await sleep(20);
+    state.worker?.fire('error');
+    await a.waitFor(loadError);
+    await b.waitFor((e) => e.type === 'ready');
+    b.send({ type: 'status' });
+    expect(await b.waitFor((e) => e.type === 'status')).toMatchObject({ loaded: other });
+  });
+
+  it('T3.11 loads of two models sent together run one after the other, one worker at a time', async () => {
+    const other = GEMMA_MODELS.find((m) => m.id !== DEFAULT_GEMMA)?.id ?? '';
+    const a = open();
+    const b = open();
+    a.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    b.send({ type: 'load', modelId: other });
+    expect(await a.waitFor((e) => e.type === 'ready')).toMatchObject({ modelId: DEFAULT_GEMMA });
+    expect(await b.waitFor((e) => e.type === 'ready')).toMatchObject({ modelId: other });
+    expect(state.log).toEqual(['worker', 'terminate', 'worker']);
+    b.send({ type: 'status' });
+    expect(await b.waitFor((e) => e.type === 'status')).toMatchObject({ loaded: other });
+  });
+
+  it('T3.11 a load that throws before its first await is cleared; the next load works', async () => {
+    state.workerThrows = 1;
+    const c = open();
+    c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    expect((await c.waitFor(loadError)) as { message: string }).toMatchObject({
+      message: expect.stringMatching(/could not be created/),
+    });
+    c.send({ type: 'status' });
+    expect(await c.waitFor((e) => e.type === 'status')).toMatchObject({ loading: false });
+    c.disconnect();
+    expect(host.llmBusy()).toBe(false);
+    await nextChatRuns();
   });
 });

@@ -26,6 +26,8 @@ let worker: Worker | null = null;
 let loadedId: string | undefined;
 let loadingId: string | undefined;
 let loadPromise: Promise<void> | null = null;
+/** Ends the pending load when the engine goes away (unload, delete, worker crash): like `Job.abandon`. */
+let abandonLoad: ((e: Error) => void) | null = null;
 let lastP = 0;
 /** WebLLM runs one generation at a time; chain requests. */
 let chatChain: Promise<void> = Promise.resolve();
@@ -107,12 +109,14 @@ function dropPort(port: chrome.runtime.Port): void {
 
 /**
  * The WebWorkerMLCEngine client settles a call only from the worker's replies: a terminated or
- * crashed worker leaves the running chat's `create()`/`next()` pending for ever. Abandon it first.
+ * crashed worker leaves the pending load and the running chat's `create()`/`next()` pending for
+ * ever. Abandon them first.
  */
 function disposeEngine(reason = 'The local model was unloaded. Try again.'): void {
+  abandonLoad?.(new Error(reason));
   running?.abandon?.(new Error(reason));
   try {
-    void engine?.unload();
+    void Promise.resolve(engine?.unload()).catch(() => {});
   } catch {
     /* ignore */
   }
@@ -128,12 +132,21 @@ async function load(modelId: string): Promise<void> {
   if (loadPromise && loadingId === modelId) return loadPromise;
   if (loadPromise) await loadPromise.catch(() => {});
   if (!(await hasGpu())) throw new Error('WebGPU is not available (navigator.gpu)');
+  // Another load may have started during the await: join or wait for it instead of starting a second.
+  if (loadPromise || (loadedId === modelId && engine)) return load(modelId);
 
   loadingId = modelId;
   lastP = 0;
   loadPromise = (async () => {
+    // Run the body after `loadPromise` is set: a synchronous throw (say `new Worker`) would
+    // otherwise reach `finally` first and leave a settled `loadPromise` behind for good.
+    await null;
     try {
       disposeEngine();
+      const gone = new Promise<never>((_, reject) => {
+        abandonLoad = reject;
+      });
+      gone.catch(() => {});
       const w = new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' });
       worker = w;
       const crashed = () => {
@@ -141,18 +154,24 @@ async function load(modelId: string): Promise<void> {
       };
       w.addEventListener('error', crashed);
       w.addEventListener('messageerror', crashed);
-      engine = await CreateWebWorkerMLCEngine(worker, modelId, {
-        appConfig: buildAppConfig(),
-        initProgressCallback: (r) => {
-          lastP = r.progress;
-          broadcast({ type: 'progress', p: r.progress, text: r.text });
-        },
-      });
+      engine = await Promise.race([
+        CreateWebWorkerMLCEngine(w, modelId, {
+          appConfig: buildAppConfig(),
+          initProgressCallback: (r) => {
+            // A dead load's worker can still report: only the current one moves the bar.
+            if (worker !== w) return;
+            lastP = r.progress;
+            broadcast({ type: 'progress', p: r.progress, text: r.text });
+          },
+        }),
+        gone,
+      ]);
       loadedId = modelId;
     } catch (e) {
       disposeEngine();
       throw e;
     } finally {
+      abandonLoad = null;
       loadingId = undefined;
       loadPromise = null;
     }
@@ -294,7 +313,10 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
       return;
     case 'delete':
       try {
-        if (loadedId === msg.modelId) disposeEngine();
+        // A load still running would write the shards back after the delete: stop it first.
+        if (loadedId === msg.modelId || loadingId === msg.modelId) {
+          disposeEngine('The local model was deleted. Download it again to use it.');
+        }
         await deleteModelAllInfoInCache(msg.modelId, buildAppConfig());
         send(port, { type: 'deleted', modelId: msg.modelId });
       } catch (e) {
