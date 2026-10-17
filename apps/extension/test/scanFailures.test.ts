@@ -228,6 +228,12 @@ describe('a failed screenshot leaves a working, saved scan (audit H9)', () => {
     await expectSavedWithoutThumb(/^screenshot unavailable: no site access$/);
   });
 
+  it('T1.11 a tab whose url is hidden is never captured (fails closed)', async () => {
+    if (tabState) tabState.url = undefined as never;
+    await expectSavedWithoutThumb(/^screenshot unavailable: no site access$/);
+    expect(chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+  });
+
   it('T1.11 a tab that navigates during the capture drops the shot (lens B M1)', async () => {
     chrome.tabs.captureVisibleTab.mockImplementation(async () => {
       if (tabState) tabState.url = 'https://stripe.com/pricing'; // a link click or redirect

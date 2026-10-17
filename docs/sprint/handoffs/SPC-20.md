@@ -141,8 +141,11 @@ e2e (Playwright, local servers only):
     during the scan`, `the tab was closed`, `no site access`, `capture failed`). **L4** was already folded in
     292804a, plus a row for a `/webstore/` path in a permission error. **L5** adds a chrome:// tab with no visible url.
 
+- pe-4d fold check APPROVED @ 64a0ee9, with 1 optional LOW, taken: `inFront` fails closed when `tab.url` is hidden
+  (`screenshot unavailable: no site access`, with a test). No re-review is needed for that.
+
 ## Next
-- Send the head to pe-4d and specimen-6a for fold checks.
+- Done unless the owner's manual test finds something. Merge is the owner's call.
 
 ## How to resume
 Read this file, `git log origin/main..`, the PR, then any `docs/sprint/reviews/SPC-20-*.md`.

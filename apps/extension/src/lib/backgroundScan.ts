@@ -90,7 +90,9 @@ async function inFront(tabId: number, url: string): Promise<chrome.tabs.Tab> {
   });
   if (!tab.active) throw new NoShot('the tab was not in front');
   // A link or redirect after the sample: the shot would show another page than the scan.
-  if (tab.url && !sameUrl(tab.url, url)) throw new NoShot('the page changed during the scan');
+  // No visible url means no host access: fail closed rather than shoot an unknown page.
+  if (!tab.url) throw new NoShot('no site access');
+  if (!sameUrl(tab.url, url)) throw new NoShot('the page changed during the scan');
   return tab;
 }
 
