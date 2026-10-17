@@ -126,8 +126,12 @@ the event. One check can't close that gap; checking again later does. Also: a `t
   websites", an origin without access → SITE_ACCESS). The "did not open a page" `friendlyScanError` branch is dropped.
   New test for the redirect; T5.12 now has 18 tests. Gate green.
 
-## Next
-- Re-check by pe-b2 → #39 done; then idle (orchestrator's instruction). Owner decides the merge.
+- pe-b2 re-check at 2ff4dc4: **APPROVED** (2026-10-17). Lens A and lens B are both done for #39.
 
-## How to resume
-Read this file; branch `exec/spc-28`; plan above is the contract once approved.
+## Next
+- Nothing for the executor. #39 is waiting on the owner's merge decision. Executor idle.
+
+## How to resume (if more findings arrive)
+Branch `exec/spc-28` and PR #39. Fold any new review the same way: a new commit, a handoff note, a gate run, then
+message the reviewer and specimen-75.
+
