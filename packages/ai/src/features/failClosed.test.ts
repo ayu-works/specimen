@@ -1,7 +1,9 @@
+import { sanitize } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan } from '../testing/testUtils';
+import { ProviderError } from '../types';
 import { ask } from './ask';
 import { runCritique } from './critique';
 import { polishPrompt } from './polishPrompt';
@@ -86,6 +88,23 @@ describe('a sanitizer error fails closed: never the raw text (SPC-17 sec M1)', (
     broken.on = true;
     const p = createMockProvider({ text: '{"summary":"Zentrix calm","keywords":["calm"]}' });
     await expect(vibe(p, scan, null)).rejects.toMatchObject({ kind: 'other' });
+  });
+});
+
+describe('council exits keep the full sanitized text (SPC-32 lens B L6)', () => {
+  it('T3.22 a turn that fails mid-way on one long line keeps every sanitized character, not a lagging snapshot', async () => {
+    const line = 'Zentrix uses #1a2b3c at 16px and calm spacing. '.repeat(40);
+    const chunks = line.match(/.{1,7}/g) ?? [];
+    const p = createMockProvider({
+      chunks,
+      error: new ProviderError('other', 'boom'),
+      errorAfter: chunks.length,
+    });
+    const r = await runCritique(p, scan, { retryDelaysMs: [] });
+    const turn = r.turns[0];
+    expect(turn?.status).toBe('error');
+    expect(turn?.content).toBe(sanitize(line, scan));
+    expect(turn?.content.toLowerCase()).not.toContain('zentrix');
   });
 });
 

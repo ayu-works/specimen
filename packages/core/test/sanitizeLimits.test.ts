@@ -118,6 +118,47 @@ describe('ethics guardrail: hostile page titles (SPC-17 sec H1, M1)', () => {
     expect(brandTokens(cut)).not.toContain('xyzz');
   });
 
+  it('T2.03 a brand at the end of a long descriptive title is still stripped (SPC-32 lens B H1)', () => {
+    const seo =
+      'Wireless earbuds, headphones, speakers, chargers, cables, adapters, cases, stands, docks, hubs, mounts, batteries - Ankora Official Store';
+    const short = on('shop.example.io', seo);
+    expect(brandTokens(short)).toContain('ankora');
+    expect(sanitize('Feels like Quillbooks or Ankora. Ankora-style.', short)).not.toMatch(
+      /ankora/i,
+    );
+    // Past the scan window too, with the brand at either end.
+    const long = on('shop.example.io', `${titleOf(5_000)} | Ankora`);
+    expect(sanitize('Ankora vibes', long)).not.toMatch(/ankora/i);
+    const first = on('shop.example.io', `Ankora | ${titleOf(5_000)}`);
+    expect(sanitize('Ankora vibes', first)).not.toMatch(/ankora/i);
+    expect(brandTokens(long).length).toBeLessThanOrEqual(MAX_TITLE_TOKENS + 1);
+    // A word cut where the end window starts is a fragment, not a token.
+    const cut = on(
+      'example.org',
+      `${'a '.repeat(600)}${'x'.repeat(10)}${' b'.repeat(TITLE_SCAN / 2 - 3)}`,
+    );
+    expect(brandTokens(cut).some((t) => t.startsWith('x'))).toBe(false);
+  });
+
+  it('T2.03 a title or headline phrase is removed only as whole words, never inside a value (lens B M3)', () => {
+    expect(sanitize('primary #cafe00 and #CAFE12', on('example.org', 'Cafe'))).toBe(
+      'primary #cafe00 and #CAFE12',
+    );
+    expect(sanitize('box-shadow: 0 1px; display:flexbox; .boxed', on('example.org', 'Box'))).toBe(
+      'box-shadow: 0 1px; display:flexbox; .boxed',
+    );
+    expect(sanitize('the zentrix-shadow look', on('zentrix.com', 'Untitled'))).not.toMatch(
+      /zentrix/i,
+    );
+    const sampled = on('example.org', 'Untitled');
+    const style = sampled.typography.styles[0];
+    if (!style) throw new Error('fixture has no style');
+    style.sample = 'Build faster';
+    expect(sanitize('We build faster. Rebuild fasteners.', sampled)).toBe(
+      'We . Rebuild fasteners.',
+    );
+  });
+
   it('T2.03 cached patterns stay per brand set and keep no state between calls', () => {
     const a = on('zentrix.com', 'Quorvane');
     const b = on('example.org', 'Plinthor');

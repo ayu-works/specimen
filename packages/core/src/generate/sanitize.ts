@@ -43,9 +43,13 @@ function secondLevel(host: string): string {
 // Caps on hostile input (SPC-17 sec H1, M1). A page title or an imported scan can be any length, and
 // every token and phrase becomes a regex: uncapped, a 30k-char title took seconds per call and a
 // 32k+ one made V8 reject the pattern.
-/** Only the start of the title is read for brand tokens. */
+/** Only the first and the last this-many title characters are read for brand tokens. */
 export const TITLE_SCAN = 300;
-/** At most this many title tokens (the domain's own tokens are always kept). */
+/**
+ * At most this many title tokens: half from the start of the title, half from the end, since a
+ * brand sits at one end ("Zentrix | …", "… - Zentrix Official Store"). The domain's tokens are
+ * always kept on top.
+ */
 export const MAX_TITLE_TOKENS = 12;
 /** Longer tokens are dropped: a DNS label is at most 63 characters, so no real domain is lost. */
 export const MAX_TOKEN = 64;
@@ -55,6 +59,15 @@ export const MAX_PHRASE = 1000;
 export const MAX_SAMPLES = 50;
 
 const isToken = (w: string) => w.length >= 3 && w.length <= MAX_TOKEN && !isStopWord(w);
+const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
+
+/** Distinct tokens of one title window, in order. A word cut at a window edge is a fragment: dropped. */
+function titleTokens(win: string, cutStart: boolean, cutEnd: boolean): string[] {
+  const words = win.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  if (cutStart) words.shift();
+  if (cutEnd) words.pop();
+  return [...new Set(words.filter(isToken))];
+}
 
 /** Lower-cased brand tokens derived from the host and the page title. */
 export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] {
@@ -64,20 +77,12 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
   for (const piece of sld.split(/[^\p{L}\p{N}]+/u)) {
     if (isToken(piece)) set.add(piece);
   }
-  const words = scan.title
-    .slice(0, TITLE_SCAN)
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u);
-  // A word cut by the window is a fragment, not a word.
-  if (/[\p{L}\p{N}]/u.test(scan.title[TITLE_SCAN] ?? '')) words.pop();
-  let n = 0;
-  for (const w of words) {
-    if (n >= MAX_TITLE_TOKENS) break;
-    if (isToken(w) && !set.has(w)) {
-      set.add(w);
-      n++;
-    }
-  }
+  const half = MAX_TITLE_TOKENS / 2;
+  const t = scan.title;
+  const head = titleTokens(t.slice(0, TITLE_SCAN), false, isWordChar(t[TITLE_SCAN]));
+  const from = Math.max(0, t.length - TITLE_SCAN);
+  const tail = titleTokens(t.slice(from), isWordChar(t[from - 1]), false);
+  for (const w of [...head.slice(0, half), ...tail.slice(-half)]) set.add(w);
   return [...set].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
@@ -112,6 +117,11 @@ const BOUND_R = [
 // CSS units (100vw, 150ms).
 const DIGIT_L = '(?<=\\p{N})(?=\\p{L})';
 const DIGIT_R = '(?<=\\p{L})(?=\\p{N})';
+
+// CSS words a brand token must not be cut out of: `linear-gradient` (any token), and the `box-*`
+// properties (only the token `box`, so `zentrix-shadow` in prose still loses the brand).
+const KEEP_AFTER = '-gradient';
+const KEEP_AFTER_BOX = '-(?:gradient|shadow|sizing|decoration-break)';
 
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -151,7 +161,7 @@ function wordRegex(w: string): WordRegex {
   ];
   // A token spelled only with hex digits (abc, cafe) must never match inside a color literal.
   const notInHex = /^[0-9a-f]+$/i.test(w) ? '(?<!#[0-9a-fA-F]*)' : '';
-  const src = `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!-gradient)`;
+  const src = `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!${w.toLowerCase() === 'box' ? KEEP_AFTER_BOX : KEEP_AFTER})`;
   const re = { all: new RegExp(src, 'gu'), once: new RegExp(src, 'u') };
   if (WORDS.size >= WORDS_MAX) WORDS.clear();
   WORDS.set(w, re);
@@ -165,14 +175,23 @@ function devMode(): boolean {
   return mode === 'development' || mode === 'test';
 }
 
-/** Phrases removed as literal text (case-insensitive): host forms, the title, headline samples. */
-function phrasesOf(scan: DesignScan, host: string): string[] {
-  const phrases: string[] = [scan.host, host, scan.title];
+/** Host forms, removed as literal text (case-insensitive) wherever they appear. */
+function hostPhrasesOf(scan: DesignScan, host: string): string[] {
+  const phrases: string[] = [scan.host, host];
   try {
     phrases.push(new URL(scan.url).origin);
   } catch {
     /* url not parseable: skip */
   }
+  return capPhrases(phrases);
+}
+
+/**
+ * The title and headline samples, removed only as whole words: a title "Cafe" must not turn
+ * `#cafe00` into `#00`, nor a sample "Box" eat `box-shadow`.
+ */
+function textPhrasesOf(scan: DesignScan): string[] {
+  const phrases: string[] = [scan.title];
   let samples = 0;
   for (const s of scan.typography.styles) {
     if (samples >= MAX_SAMPLES) break;
@@ -185,10 +204,23 @@ function phrasesOf(scan: DesignScan, host: string): string[] {
       samples++;
     }
   }
+  return capPhrases(phrases);
+}
+
+function capPhrases(phrases: string[]): string[] {
   return phrases
     .map((p) => p.trim())
     .filter((p) => p.length >= 3 && p.length <= MAX_PHRASE)
     .sort((a, b) => b.length - a.length);
+}
+
+/**
+ * A whole-word phrase. One word gets the token rules (case and digit humps, the hex guard); a
+ * multi-word phrase needs a non-letter on both sides.
+ */
+function phraseRegex(p: string): RegExp {
+  if (!/\s/.test(p)) return wordRegex(p).all;
+  return new RegExp(`(?<![\\p{L}\\p{N}])${esc(p)}(?![\\p{L}\\p{N}])`, 'giu');
 }
 
 const COMPILED = new Map<string, RegExp[]>();
@@ -199,15 +231,23 @@ const COMPILED_MAX = 8;
  * phrases and tokens the patterns are made of, so an edited scan can never hit a stale entry.
  */
 function patternsFor(scan: DesignScan, host: string): RegExp[] {
-  const phrases = phrasesOf(scan, host);
+  const hosts = hostPhrasesOf(scan, host);
+  const texts = textPhrasesOf(scan);
   const tokens = brandTokens(scan);
-  const key = JSON.stringify([phrases, tokens]);
+  const key = JSON.stringify([hosts, texts, tokens]);
   const hit = COMPILED.get(key);
-  if (hit) return hit;
-  const patterns = [
-    ...phrases.map((p) => new RegExp(esc(p), 'giu')),
-    ...tokens.map((t) => wordRegex(t).all),
-  ];
+  if (hit) {
+    // Most recently used goes last, so eviction drops the least recently used.
+    COMPILED.delete(key);
+    COMPILED.set(key, hit);
+    return hit;
+  }
+  // Longest first across both kinds, as before: a phrase goes before the words inside it.
+  const phrases = [
+    ...hosts.map((p) => ({ p, re: new RegExp(esc(p), 'giu') })),
+    ...texts.map((p) => ({ p, re: phraseRegex(p) })),
+  ].sort((a, b) => b.p.length - a.p.length);
+  const patterns = [...phrases.map((x) => x.re), ...tokens.map((t) => wordRegex(t).all)];
   if (COMPILED.size >= COMPILED_MAX) {
     const oldest = COMPILED.keys().next().value;
     if (oldest !== undefined) COMPILED.delete(oldest);
@@ -225,9 +265,13 @@ function patternsFor(scan: DesignScan, host: string): RegExp[] {
  * never swallowed into unsanitized text; callers fail closed.
  */
 export function sanitize(text: string, scan: DesignScan): string {
-  const host = scan.host.toLowerCase().replace(/^www\./, '');
-  const patterns = patternsFor(scan, host);
+  const host = hostOf(scan);
+  return sanitizeWith(text, host, patternsFor(scan, host));
+}
 
+const hostOf = (scan: DesignScan) => scan.host.toLowerCase().replace(/^www\./, '');
+
+function sanitizeWith(text: string, host: string, patterns: RegExp[]): string {
   const out = text.split('\n').map((line) => {
     let cur = line;
     let hit = false;
@@ -259,6 +303,10 @@ const LONG_STEP = 256;
  * full `sanitize` on the final text. Throws like `sanitize`.
  */
 export function createStreamSanitizer(scan: DesignScan): (raw: string) => string {
+  // Patterns are looked up once per stream, not per delta (building the cache key isn't free).
+  const host = hostOf(scan);
+  const patterns = patternsFor(scan, host);
+  const run = (text: string) => sanitizeWith(text, host, patterns);
   let cut = 0; // raw index just past the last newline already sanitized
   let head = ''; // sanitize(raw.slice(0, cut))
   let tailLen = -1; // length of the open line when it was last sanitized
@@ -272,13 +320,13 @@ export function createStreamSanitizer(scan: DesignScan): (raw: string) => string
     }
     const nl = raw.lastIndexOf('\n');
     if (nl + 1 > cut) {
-      head += sanitize(raw.slice(cut, nl + 1), scan);
+      head += run(raw.slice(cut, nl + 1));
       cut = nl + 1;
       tailLen = -1;
     }
     const tail = raw.length - cut;
     if (tail <= LONG_LINE || tailLen < 0 || tail - tailLen >= LONG_STEP) {
-      tailOut = sanitize(raw.slice(cut), scan);
+      tailOut = run(raw.slice(cut));
       tailLen = tail;
     }
     return head + tailOut;

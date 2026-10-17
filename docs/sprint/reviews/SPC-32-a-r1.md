@@ -54,3 +54,11 @@ needed; noting it for the security reviewer.
 `words.pop()` runs whenever `title.length > 300`, including when char 300 is a separator, so a whole word is
 dropped. The effect is minor: one fewer token, and the phrase pass still covers titles ≤ 1000. **Fix
 (optional):** pop only when `/[\p{L}\p{N}]/u.test(title[TITLE_SCAN])`.
+
+## Fold check (fd082e6, on top of f413b5b): APPROVED
+- M1 fixed: `code()` is used at all four sites. The only remaining hand-written backtick span with an
+  interpolated value is `designmd.ts:103` (`variant.scheme`, a `'dark' | 'light'` enum), which is safe. The new
+  T2.05 test puts a backtick payload in the stacks, shadows and the component box-shadow, checks every prompt
+  target and DESIGN.md, and requires the payload to appear only inside code spans.
+- L2 fixed: the pop happens only when `title[TITLE_SCAN]` is a letter or digit. L1 accepted (closed by SPC-19's
+  v5 title bound).

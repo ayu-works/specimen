@@ -260,17 +260,28 @@ export function jsonOut(data: unknown): string {
   return `${JSON.stringify(data, null, 2)}\n`;
 }
 
+/**
+ * Line breaks and control characters (`\r` too: markdown reads a bare one as a line end; and the
+ * Unicode line/paragraph separators) become spaces, so page or imported text can't end a table row
+ * or a code span and start its own markdown (SPC-32 lens B M1, M2). Tab is kept.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+const BREAKS = /\r\n|[\u0000-\u0008\u000A-\u001F\u007F\u2028\u2029]/g;
+
 /** Escape a value for a Markdown table cell. */
 export function cell(s: string | number): string {
-  return String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return String(s).replace(/\|/g, '\\|').replace(BREAKS, ' ');
 }
 
 /**
- * Inline code. Backticks are dropped (never valid in a CSS name, value or font stack), so text from
- * a page or an imported scan can't close the span and inject markdown (SPC-17 sec L2).
+ * Inline code. Backticks are dropped (never valid in a CSS name, value or font stack) and line
+ * breaks become spaces, so text from a page or an imported scan can't close the span or leave the
+ * line and inject markdown (SPC-17 sec L2). Empty when nothing is left.
  */
 export function code(s: string | number): string {
-  return `\`${String(s).replace(/`/g, '')}\``;
+  const text = String(s).replace(/`/g, '').replace(BREAKS, ' ');
+  // Two backticks alone would open a double-backtick span that pairs with a later one.
+  return text ? `\`${text}\`` : '';
 }
 
 export function table(head: string[], rows: (string | number)[][]): string {

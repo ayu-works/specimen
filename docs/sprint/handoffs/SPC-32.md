@@ -136,7 +136,27 @@ title bound stays with SPC-19; (5) Vibe keywords are pinned as dropped when the 
   when the 300-char window really cuts it. L1 is accepted (it goes away with SPC-19's v5 title bound).
 
 ## Next
-- Lens B + security review still running: fold as new commits.
+- Lens A APPROVED on fd082e6 (fold check appended to SPC-32-a-r1.md, uncommitted; ships with the next fold).
+- Lens B + security r1 (`docs/sprint/reviews/SPC-32-b-r1.md`, 0C/1H/3M/6L, on f413b5b) folded in one round:
+  - **H1** (brand at the end of a long title leaked): title tokens now come from both ends, the first 6 of the
+    first 300 chars plus the last 6 of the last 300 (`MAX_TITLE_TOKENS` 12 split in half, cut fragments dropped at
+    both window edges). Still bounded at 12. Tests: the reviewer's Ankora title, and 5k-char titles with the
+    brand first and last.
+  - **M1/M2**: `cell()` and `code()` turn `\r\n`, every C0 control except tab, DEL, U+2028 and U+2029 into
+    spaces. The prompt sites were already on `code()` (lens A M1, fd082e6). Test: `\r`/`\n`/U+2028/NUL in a
+    CSS var, stacks, shadows and a component shadow; no heading or row break in any prompt target or DESIGN.md.
+  - **M3** (small, folded): host forms stay literal. The title and headline samples now match only as whole
+    words (one word: the token rules incl. the hex guard; several words: a non-letter on both sides). Also found
+    while testing: the *token* `box` (title "Box") ate `box-shadow`; the existing `(?!-gradient)` guard now also
+    keeps `box-shadow|sizing|decoration-break`, for the token `box` only (so `zentrix-shadow` in prose still
+    loses the brand).
+  - **L1**: the stream sanitizer looks up its patterns once per stream, not per delta. **L2**: LRU on cache
+    hit. **L4**: `code()` of nothing is `''`. **L6**: every council exit (stop, stall, error, done) sets the full
+    `safe(raw)`; test fails on the old code.
+  - **Skipped, follow-ups:** **L3** (Unicode case/NFKC: `İstanbul`, `ß`) predates this PR and needs its own
+    design (`\p{M}` in boundaries, normalization); **L5** (`\` before `|` in cells) is not parser-verified, and
+    doubling backslashes would visibly change values inside code spans, where escapes aren't processed. Both are
+    for the orchestrator to file.
 
 ## How to resume
 Read this file, `git log origin/main..`, and the review file above. `pnpm i` then `pnpm gate`.

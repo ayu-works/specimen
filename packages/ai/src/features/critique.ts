@@ -613,6 +613,8 @@ async function runTurn(
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
     }
+    // Every exit keeps the full sanitized text: the last snapshot can lag on a long line.
+    turn.content = safe(raw, scan);
     // Stop wins; some hosts end the stream quietly on abort instead of throwing.
     if (signal?.aborted) return stop();
     if (stalled) return fail(STALLED_ERROR);
@@ -636,7 +638,6 @@ async function runTurn(
       }
       return fail(CRITIQUE_ERRORS[err.kind]);
     }
-    turn.content = safe(raw, scan);
     turn.status = !raw.trim() ? 'empty' : !turn.content.trim() ? 'filtered' : 'done';
     emit();
     return { status: 'done' };
