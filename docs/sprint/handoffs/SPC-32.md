@@ -157,6 +157,17 @@ title bound stays with SPC-19; (5) Vibe keywords are pinned as dropped when the 
     design (`\p{M}` in boundaries, normalization); **L5** (`\` before `|` in cells) is not parser-verified, and
     doubling backslashes would visibly change values inside code spans, where escapes aren't processed. Both are
     for the orchestrator to file.
+- Lens A r2 M2 (a brand mid-title on a host without it) folded:
+  - Tokens: the first `MAX_TITLE_TOKENS` = 32 of the first 300 chars, plus the last `MAX_TAIL_TOKENS` = 6 of the last
+    300 chars (titles over 300), plus every token of a segment of at most `SEGMENT_WORDS` = 3 words (split on
+    `| – — · : •` or a spaced hyphen) in either window, at most `MAX_SEGMENT_TOKENS` = 16. That is 54 at most.
+  - Perf: with 4× the tokens the per-token regexes broke the bar (cold DESIGN.md ~141 ms, sanitize ~82 ms).
+    Compiling was the cost, not running: each regex's `\p{…}` classes cost ~1.5 ms to compile. So words now share
+    regexes: one alternation per rule group (4+ chars, hex-only, `box`); multi-word phrases share one too.
+    Re-measured on a cache miss: **DESIGN.md ~5–7 ms, sanitize 10 KB ~2 ms, 3,000-delta stream ~12 ms.**
+  - Groups are chunked at 8k chars of source. V8's real limit is a ~32k single literal run (which `MAX_PHRASE`
+    already avoids); a 150k-char alternation of 1000-char words compiled fine in a probe.
+  - Accepted gap: a brand deep inside a title over 300 chars that sits outside both windows (pinned in a test).
 
 ## How to resume
 Read this file, `git log origin/main..`, and the review file above. `pnpm i` then `pnpm gate`.

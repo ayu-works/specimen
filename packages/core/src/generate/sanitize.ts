@@ -45,12 +45,17 @@ function secondLevel(host: string): string {
 // 32k+ one made V8 reject the pattern.
 /** Only the first and the last this-many title characters are read for brand tokens. */
 export const TITLE_SCAN = 300;
+/** Tokens kept from the start of the title (patterns are compiled once, so this can be generous). */
+export const MAX_TITLE_TOKENS = 32;
+/** Tokens kept from the end of a title longer than `TITLE_SCAN` ("… - Zentrix Official Store"). */
+export const MAX_TAIL_TOKENS = 6;
 /**
- * At most this many title tokens: half from the start of the title, half from the end, since a
- * brand sits at one end ("Zentrix | …", "… - Zentrix Official Store"). The domain's tokens are
- * always kept on top.
+ * A title segment (split on `|`, `–`, `—`, `·`, `:`, `•` or a spaced hyphen) of at most this many
+ * words is usually a name ("… | Zentrix | …"): all its tokens are kept, wherever it sits.
  */
-export const MAX_TITLE_TOKENS = 12;
+export const SEGMENT_WORDS = 3;
+/** At most this many tokens from short segments. */
+export const MAX_SEGMENT_TOKENS = 16;
 /** Longer tokens are dropped: a DNS label is at most 63 characters, so no real domain is lost. */
 export const MAX_TOKEN = 64;
 /** Longer phrases (title, headline samples) are skipped; their words are still tokens. */
@@ -61,12 +66,24 @@ export const MAX_SAMPLES = 50;
 const isToken = (w: string) => w.length >= 3 && w.length <= MAX_TOKEN && !isStopWord(w);
 const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
 
-/** Distinct tokens of one title window, in order. A word cut at a window edge is a fragment: dropped. */
-function titleTokens(win: string, cutStart: boolean, cutEnd: boolean): string[] {
-  const words = win.toLowerCase().split(/[^\p{L}\p{N}]+/u);
-  if (cutStart) words.shift();
-  if (cutEnd) words.pop();
-  return [...new Set(words.filter(isToken))];
+const words = (s: string) =>
+  s
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+const SEGMENT = /\s[-–—]\s|[|–—·:•]/u;
+
+/** Distinct tokens of a title window, in order. */
+function titleTokens(win: string): string[] {
+  return [...new Set(words(win).filter(isToken))];
+}
+
+/** Tokens of the window's short segments (likely names), in order. */
+function segmentTokens(win: string): string[] {
+  return win.split(SEGMENT).flatMap((seg) => {
+    const ws = words(seg);
+    return ws.length <= SEGMENT_WORDS ? ws.filter(isToken) : [];
+  });
 }
 
 /** Lower-cased brand tokens derived from the host and the page title. */
@@ -77,18 +94,26 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
   for (const piece of sld.split(/[^\p{L}\p{N}]+/u)) {
     if (isToken(piece)) set.add(piece);
   }
-  const half = MAX_TITLE_TOKENS / 2;
   const t = scan.title;
-  const head = titleTokens(t.slice(0, TITLE_SCAN), false, isWordChar(t[TITLE_SCAN]));
+  // The two windows; a word cut at a window edge is a fragment, so it is trimmed off.
+  let head = t.slice(0, TITLE_SCAN);
+  if (isWordChar(t[TITLE_SCAN])) head = head.replace(/[\p{L}\p{N}]+$/u, '');
   const from = Math.max(0, t.length - TITLE_SCAN);
-  const tail = titleTokens(t.slice(from), isWordChar(t[from - 1]), false);
-  for (const w of [...head.slice(0, half), ...tail.slice(-half)]) set.add(w);
+  let tail = t.slice(from);
+  if (isWordChar(t[from - 1])) tail = tail.replace(/^[\p{L}\p{N}]+/u, '');
+  for (const w of titleTokens(head).slice(0, MAX_TITLE_TOKENS)) set.add(w);
+  if (from > 0) for (const w of titleTokens(tail).slice(-MAX_TAIL_TOKENS)) set.add(w);
+  const segs = [...segmentTokens(head), ...(from > 0 ? segmentTokens(tail) : [])];
+  for (const w of [...new Set(segs)].slice(0, MAX_SEGMENT_TOKENS)) set.add(w);
   return [...set].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
 /** Case is kept: a camelCase hump (`zentrixBlue`) is a boundary, so lower-casing would hide it. */
 export function containsBrand(text: string, tokens: string[]): boolean {
-  return tokens.some((b) => wordRegex(b).once.test(text));
+  return wordRegexes(tokens).some((re) => {
+    re.lastIndex = 0; // global regexes, shared through the cache
+    return re.test(text);
+  });
 }
 
 /**
@@ -98,7 +123,7 @@ export function containsBrand(text: string, tokens: string[]): boolean {
  */
 export function nameHasBrand(name: string, tokens: string[]): boolean {
   const lower = name.toLowerCase();
-  return tokens.some((b) => (b.length >= 4 && lower.includes(b)) || wordRegex(b).once.test(name));
+  return tokens.some((b) => b.length >= 4 && lower.includes(b)) || containsBrand(name, tokens);
 }
 
 // Boundaries are case-sensitive (a hump is lower→upper), so the regex can't use the `i` flag:
@@ -140,32 +165,49 @@ function anyCase(w: string): string {
     .join('');
 }
 
-/** A token's patterns: `all` (global) for `replace`, `once` for `.test`, so no `lastIndex` state leaks. */
-interface WordRegex {
-  all: RegExp;
-  once: RegExp;
-}
-const WORDS = new Map<string, WordRegex>();
-const WORDS_MAX = 1024;
+// Unicode property classes (\p{L}, \p{Lu}, …) make a regex cost ~1.5 ms to compile, so words are
+// not compiled one regex each: all words that share the same rules go into one alternation.
+const LU = /^\p{Lu}+$/u;
 
-function wordRegex(w: string): WordRegex {
-  const hit = WORDS.get(w);
-  if (hit) return hit;
-  const long = w.length >= 4;
+/** One regex for a group of words that share the rules (`long`: 4+ chars; `hex`: only hex digits). */
+function groupRegex(ws: string[], long: boolean, hex: boolean, box: boolean): RegExp {
   const left = [...BOUND_L, ...(long ? [DIGIT_L] : [])];
-  const right = [
-    ...BOUND_R,
-    // An all-caps brand before a lowercase run: ZENTRIXapi.
-    `(?<=\\p{Lu}{${[...w].length}})(?=\\p{Ll})`,
-    ...(long ? [DIGIT_R] : []),
-  ];
-  // A token spelled only with hex digits (abc, cafe) must never match inside a color literal.
-  const notInHex = /^[0-9a-f]+$/i.test(w) ? '(?<!#[0-9a-fA-F]*)' : '';
-  const src = `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!${w.toLowerCase() === 'box' ? KEEP_AFTER_BOX : KEEP_AFTER})`;
-  const re = { all: new RegExp(src, 'gu'), once: new RegExp(src, 'u') };
-  if (WORDS.size >= WORDS_MAX) WORDS.clear();
-  WORDS.set(w, re);
-  return re;
+  const right = [...BOUND_R, ...(long ? [DIGIT_R] : [])];
+  // An all-caps brand before a lowercase run: ZENTRIXapi.
+  const caps = ws.map((w) => w.toUpperCase()).filter((u) => LU.test(u));
+  const capsBranch = caps.length ? `(?:${caps.map(esc).join('|')})(?=\\p{Ll})|` : '';
+  // A word spelled only with hex digits (abc, cafe) must never match inside a color literal.
+  const notInHex = hex ? '(?<!#[0-9a-fA-F]*)' : '';
+  const src = `${notInHex}(?:${left.join('|')})(?:${capsBranch}(?:${ws.map(anyCase).join('|')})(?:${right.join('|')}))(?!${box ? KEEP_AFTER_BOX : KEEP_AFTER})`;
+  return new RegExp(src, 'gu');
+}
+
+const GROUPS = new Map<string, RegExp[]>();
+const GROUPS_MAX = 64;
+
+/**
+ * Whole-word patterns for a word list (brand tokens, one-word phrases), any case, at word, case or
+ * digit boundaries. At most four regexes whatever the list's length. Cached by the list; the
+ * regexes are global, so callers that `.test` reset `lastIndex` first.
+ */
+function wordRegexes(list: string[]): RegExp[] {
+  const ws = [...new Set(list)].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  const key = ws.join('\u0000');
+  const hit = GROUPS.get(key);
+  if (hit) return hit;
+  const groups = new Map<string, string[]>();
+  for (const w of ws) {
+    const k = `${w.length >= 4 ? 'L' : 's'}${/^[0-9a-f]+$/i.test(w) ? 'h' : ''}${w.toLowerCase() === 'box' ? 'b' : ''}`;
+    groups.set(k, [...(groups.get(k) ?? []), w]);
+  }
+  const res = [...groups].flatMap(([k, g]) =>
+    chunks(g, (w) => anyCase(w).length).map((c) =>
+      groupRegex(c, k[0] === 'L', k.includes('h'), k.includes('b')),
+    ),
+  );
+  if (GROUPS.size >= GROUPS_MAX) GROUPS.clear();
+  GROUPS.set(key, res);
+  return res;
 }
 
 function devMode(): boolean {
@@ -214,13 +256,37 @@ function capPhrases(phrases: string[]): string[] {
     .sort((a, b) => b.length - a.length);
 }
 
+/** Multi-word phrases, longest first, a non-letter on both sides: one regex per chunk. */
+function phrasesRegexes(ps: string[]): RegExp[] {
+  return chunks(ps, (p) => esc(p).length).map(
+    (c) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${c.map(esc).join('|')})(?![\\p{L}\\p{N}])`, 'giu'),
+  );
+}
+
 /**
- * A whole-word phrase. One word gets the token rules (case and digit humps, the hex guard); a
- * multi-word phrase needs a non-letter on both sides.
+ * Source size per regex. V8's hard limit is on one literal run (~32k chars, which `MAX_PHRASE` keeps
+ * far away); measured, a 150k-char alternation of 1000-char words still compiles. Chunking just keeps
+ * any one regex's compile bounded.
  */
-function phraseRegex(p: string): RegExp {
-  if (!/\s/.test(p)) return wordRegex(p).all;
-  return new RegExp(`(?<![\\p{L}\\p{N}])${esc(p)}(?![\\p{L}\\p{N}])`, 'giu');
+const CHUNK_SOURCE = 8000;
+
+/** Consecutive runs of `items` whose summed source size is at most `CHUNK_SOURCE` (one item at least). */
+function chunks<T>(items: T[], size: (x: T) => number): T[][] {
+  const out: T[][] = [];
+  let cur: T[] = [];
+  let n = 0;
+  for (const x of items) {
+    const k = size(x) + 1;
+    if (cur.length && n + k > CHUNK_SOURCE) {
+      out.push(cur);
+      cur = [];
+      n = 0;
+    }
+    cur.push(x);
+    n += k;
+  }
+  if (cur.length) out.push(cur);
+  return out;
 }
 
 const COMPILED = new Map<string, RegExp[]>();
@@ -242,12 +308,14 @@ function patternsFor(scan: DesignScan, host: string): RegExp[] {
     COMPILED.set(key, hit);
     return hit;
   }
-  // Longest first across both kinds, as before: a phrase goes before the words inside it.
-  const phrases = [
-    ...hosts.map((p) => ({ p, re: new RegExp(esc(p), 'giu') })),
-    ...texts.map((p) => ({ p, re: phraseRegex(p) })),
-  ].sort((a, b) => b.p.length - a.p.length);
-  const patterns = [...phrases.map((x) => x.re), ...tokens.map((t) => wordRegex(t).all)];
+  // Host forms, then multi-word phrases, then words: a phrase goes before the words inside it. A
+  // one-word title or sample gets the token rules (case and digit humps, the hex guard).
+  const multi = texts.filter((p) => /\s/.test(p));
+  const patterns = [
+    ...hosts.map((p) => new RegExp(esc(p), 'giu')),
+    ...phrasesRegexes(multi),
+    ...wordRegexes([...texts.filter((p) => !/\s/.test(p)), ...tokens]),
+  ];
   if (COMPILED.size >= COMPILED_MAX) {
     const oldest = COMPILED.keys().next().value;
     if (oldest !== undefined) COMPILED.delete(oldest);

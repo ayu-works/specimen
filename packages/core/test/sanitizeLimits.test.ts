@@ -5,6 +5,8 @@ import {
   brandTokens,
   containsBrand,
   createStreamSanitizer,
+  MAX_SEGMENT_TOKENS,
+  MAX_TAIL_TOKENS,
   MAX_TITLE_TOKENS,
   MAX_TOKEN,
   sanitize,
@@ -50,6 +52,9 @@ function timed(fn: () => void): number {
   fn();
   return performance.now() - t0;
 }
+
+/** The most title tokens `brandTokens` can return, plus one for the domain. */
+const MAX_TOKENS = 1 + MAX_TITLE_TOKENS + MAX_TAIL_TOKENS + MAX_SEGMENT_TOKENS;
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
 
@@ -102,12 +107,33 @@ describe('ethics guardrail: hostile page titles (SPC-17 sec H1, M1)', () => {
     }
   });
 
+  it('T2.03 fifty 1000-char headline samples (spaced and one-word) never exceed the regex size limit', () => {
+    const scan = on('zentrix.com', 'Untitled');
+    const base = scan.typography.styles[0];
+    if (!base) throw new Error('fixture has no style');
+    // 50 spaced samples: ~50k chars of case-insensitive phrase source.
+    scan.typography.styles = Array.from({ length: 50 }, (_, i) => ({
+      ...base,
+      sample: `${'a'.repeat(497)} ${'b'.repeat(500)}${i}`,
+    }));
+    // And 50 one-word ones on another scan.
+    const words = on('zentrix.com', 'Untitled');
+    words.typography.styles = Array.from({ length: 50 }, (_, i) => ({
+      ...base,
+      sample: `${'c'.repeat(997)}${i}`,
+    }));
+    expect(() => sanitize('zentrix at 16px', words)).not.toThrow();
+    expect(() => sanitize('zentrix at 16px', scan)).not.toThrow();
+    expect(sanitize(`x ${'a'.repeat(497)} ${'b'.repeat(500)}1 y`, scan)).toBe('x y');
+    expect(() => generateDesignMd(scan)).not.toThrow();
+  });
+
   it('T2.03 the caps keep the brand: the domain always, and the first title words', () => {
     const scan = on('example.org', `Zentrix | ${titleOf(30_000)}`);
     const tokens = brandTokens(scan);
     expect(tokens).toContain('zentrix');
     expect(tokens).toContain('example');
-    expect(tokens.length).toBeLessThanOrEqual(MAX_TITLE_TOKENS + 1);
+    expect(tokens.length).toBeLessThanOrEqual(MAX_TOKENS);
     expect(sanitize('Zentrix and example', scan).trim()).toBe('and');
     // A long title can't push the domain out, and no token is longer than a DNS label.
     const long = on('zentrix.com', `${'w'.repeat(MAX_TOKEN + 1)} ${titleOf(30_000)}`);
@@ -131,13 +157,33 @@ describe('ethics guardrail: hostile page titles (SPC-17 sec H1, M1)', () => {
     expect(sanitize('Ankora vibes', long)).not.toMatch(/ankora/i);
     const first = on('shop.example.io', `Ankora | ${titleOf(5_000)}`);
     expect(sanitize('Ankora vibes', first)).not.toMatch(/ankora/i);
-    expect(brandTokens(long).length).toBeLessThanOrEqual(MAX_TITLE_TOKENS + 1);
+    expect(brandTokens(long).length).toBeLessThanOrEqual(MAX_TOKENS);
     // A word cut where the end window starts is a fragment, not a token.
     const cut = on(
       'example.org',
       `${'a '.repeat(600)}${'x'.repeat(10)}${' b'.repeat(TITLE_SCAN / 2 - 3)}`,
     );
     expect(brandTokens(cut).some((t) => t.startsWith('x'))).toBe(false);
+  });
+
+  it('T2.03 a brand in the middle of a title is stripped on a host that does not carry it (SPC-32 lens A r2 M2)', () => {
+    const host = 'shop.example-cdn.com';
+    const text = 'Ankora uses calm blue.';
+    // 176 chars, Ankora is the 8th of 17 tokens: within the first-words cap.
+    const mid =
+      'Lightweight trail running shoes, waterproof hiking boots and Ankora performance socks, insoles, gaiters, laces, liners, bags, bottles, belts for every runner on every path';
+    expect(mid.length).toBeGreaterThan(170);
+    expect(sanitize(text, on(host, mid))).not.toMatch(/ankora/i);
+    // Past the first-words cap, as its own short segment: still a token.
+    const filler = Array.from({ length: 40 }, (_, i) => `v${i.toString(36)}k`).join(' ');
+    const seg = `${filler} | Ankora | ${filler}`;
+    expect(seg.indexOf('Ankora')).toBeLessThan(TITLE_SCAN);
+    expect(brandTokens(on(host, filler)).length).toBeGreaterThan(MAX_TITLE_TOKENS);
+    expect(brandTokens(on(host, seg))).toContain('ankora');
+    expect(sanitize(text, on(host, seg))).not.toMatch(/ankora/i);
+    expect(
+      sanitize(text, on(host, `${titleOf(5_000)} – Ankora Store – ${titleOf(5_000)}`)),
+    ).toMatch(/ankora/i); // a brand deep inside a 10k title, outside both windows, is the accepted gap
   });
 
   it('T2.03 a title or headline phrase is removed only as whole words, never inside a value (lens B M3)', () => {

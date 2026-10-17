@@ -77,3 +77,32 @@ dropped. The effect is minor: one fewer token, and the phrase pass still covers 
   still fail-closed, and the new T3.22 test pins that the content is the full sanitized text.
 - **`cell`/`code`.** These now map CR, C0 controls, DEL and U+2028/9 to spaces (tab kept), and `code('')` → `''`.
   Correct; there is no empty-span pairing.
+
+## r2 finding (after the dc682a8 check, asked by the orchestrator): MEDIUM, fold requested
+
+### M2. A brand in the middle of a long title leaks when the host doesn't contain it
+Probe on dc682a8, with the real `sanitize` in production mode and the text `"Ankora uses calm blue."`:
+
+| Host | Title | `ankora` a token? | Output |
+|---|---|---|---|
+| ankora.com | 98-char "Free shipping … \| Ankora \| best running shoes …" | yes | removed |
+| ankora.com | 176-char, Ankora 8th of 17 tokens | yes (from the SLD) | removed |
+| shop.example-cdn.com | 98-char | yes (within the 6 + 6) | removed |
+| shop.example-cdn.com | 176-char, Ankora 8th of 17 tokens | **no** | **"Ankora uses calm blue."** |
+
+Why:
+- The SLD covers the brand only when the host contains it. The schema has no `og:site_name`, so nothing else
+  supplies it.
+- The title phrase pass removes only the *whole title* string, never a single word from it.
+- Tokens come only from the first 6 and the last 6 words, so a middle brand is in neither set.
+
+`main` used every title token, so for this case the guardrail is weaker than before. Hosts without the brand are
+common: shop subdomains of platforms, CDNs, marketplaces.
+
+**Fix.** The H1 cost came from thousands of uncompiled tokens, and patterns are now compiled once and cached. So:
+1. Raise `MAX_TITLE_TOKENS` to 32, taken from the first `TITLE_SCAN` chars.
+2. Also add every token of any title *segment* of ≤ 3 words. Segments are split on `| – — · : •`, so
+   "… | Ankora | …" always yields `ankora` wherever it sits.
+
+Re-run P1 and P3 (cache miss) to show the bar still holds. Add a test with the 176-char title on a non-brand
+host.
