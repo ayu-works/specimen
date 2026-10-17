@@ -31,5 +31,5 @@ failure scenario and a fix. Stop rule: 0 CRITICAL with the HIGHs only wording, o
 write memory. Folder rule, secrets and spend as in SPRINT/setup.md §Rules. Talk to the orchestrator and executors only, briefly,
 by session name; files over chat.
 
-**Context:** at ~35–40% context, write `docs/sprint/handoffs/pe.md` (≤ 60 lines: state, open threads, pointers),
+**Context:** at 30% context, write `docs/sprint/handoffs/pe.md` (≤ 60 lines: state, open threads, pointers),
 tell the orchestrator, and stop. A fresh PE continues from that file.
