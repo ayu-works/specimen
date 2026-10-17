@@ -78,14 +78,9 @@ after the text; (b) Gemini's `MAX_TOKENS` is final: one throw, later chunks are 
   - **L1, L2, L4** (skipped): the orchestrator is filing them as one follow-up ticket (outside the token-limit scope).
 
 - CI: gitleaks flagged the dummy key `sk-test-…` in byokTest.test.tsx (fold commit 37da9be). Following the
-  orchestrator, the branch was rewritten locally (fold commit 134b9b2, `KEY = 'test-key'`, no ignore entry), and
-  `pnpm gate` is green. **The force-push was denied by this session's permission classifier**, so the remote is
-  still at 461c800. That's escalated to the orchestrator (specimen-5c) for the owner.
+  orchestrator, the branch was rewritten (fold commit 134b9b2, `KEY = 'test-key'`, no ignore entry); the owner
+  force-pushed it (origin = 6c7ebba). CI is green (gate + video).
+- PE fold check (pe-b2, 2ebfddd..6c7ebba): APPROVED. Lens A is done.
 
 ## Next
-- Once the force-push is allowed: `git push --force-with-lease=exec/spc-41:461c800 origin exec/spc-41`, check CI,
-  then tell specimen-5c and spc-38-63. Then the PE fold check (pe-b2, covers the H1 re-check), then wait for the
-  owner's "merge all".
-
-## How to resume
-Branch `exec/spc-41`, worktree `worktrees/spc-41`. Read this file, then `packages/ai/src/providers/`.
+- Nothing for the executor. Wait for the owner's "merge all".
