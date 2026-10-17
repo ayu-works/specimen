@@ -67,4 +67,4 @@ Not touched: `sidepanel/store.ts` (SPC-44), `council.test.tsx` (#41), `test/help
 - `docs/TESTING.md`: T3.38 row.
 
 ## Next / how to resume
-- Fold review findings from `docs/sprint/reviews/SPC-40-*.md`; never merge.
+- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Waiting on lens B; fold its findings; never merge.
