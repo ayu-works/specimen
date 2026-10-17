@@ -87,6 +87,11 @@ export interface TabLoadOptions {
   url?: string;
   timeoutMs?: number;
   recheckMs?: number;
+  /**
+   * At the timeout, resolve instead of rejecting when the last state seen shows the navigation
+   * committed to a page we can see (still `loading`, e.g. a slow ad or iframe): scan what's there.
+   */
+  scanIfCommitted?: boolean;
 }
 
 /** Whether Chrome shows us `url` in `Tab.url` (no `tabs` permission: only with host access). */
@@ -122,15 +127,24 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
     // and let the scan say what is really there (not a website, or site access needed).
     let pendingSeen = false;
     let blankReads = 0;
+    // The latest read or event tab for this id, for the timeout's committed check.
+    let last: TabLoadState | undefined;
     /** Loaded means `complete` on the real page, never the initial about:blank or a pending navigation. */
     const loaded = (t: TabLoadState) => {
       if (t.pendingUrl || (t.url && t.url !== 'about:blank')) visible = true;
       if (t.status !== 'complete' || t.pendingUrl) return false;
       return t.url ? t.url !== 'about:blank' : !visible;
     };
-    const timer = setTimeout(() => done(new Error('The page took too long to load')), timeoutMs);
+    const committed = (t?: TabLoadState) =>
+      Boolean(t && !t.pendingUrl && t.url && t.url !== 'about:blank');
+    const timer = setTimeout(() => {
+      if (opts.scanIfCommitted && committed(last)) done();
+      else done(new Error('The page took too long to load'));
+    }, timeoutMs);
     const onUpdated = (tabId: number, info: { status?: string }, tab?: TabLoadState) => {
-      if (!ready || tabId !== id || info.status !== 'complete') return;
+      if (tabId !== id) return;
+      if (tab) last = tab;
+      if (!ready || info.status !== 'complete') return;
       // Without the tab argument, trust the event; with it, skip the initial about:blank.
       if (!tab || loaded(tab)) done();
     };
@@ -150,6 +164,7 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
     function check() {
       chrome.tabs.get(id).then(
         (t) => {
+          last = t;
           if (loaded(t)) return done();
           if (t.pendingUrl) pendingSeen = true;
           const abandoned = pendingSeen && t.status === 'complete' && !t.pendingUrl;
@@ -174,16 +189,34 @@ export function waitForTabLoad(id: number, opts: TabLoadOptions = {}): Promise<v
   });
 }
 
-/** Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. */
+/** Close a tab we opened, best effort: it may already be gone, and cleanup never throws. */
+async function closeOwnTab(id: number): Promise<void> {
+  try {
+    await chrome.tabs.remove(id);
+  } catch {
+    // Already closed (No tab with id) or not closable: the caller's own error is what matters.
+  }
+}
+
+/**
+ * Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. On
+ * success the tab stays open; on any failure the tab we opened (and only that one) is closed.
+ * A page still loading at the time limit is scanned as it is once its navigation has committed.
+ */
 export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: string | null }> {
   const tab = await chrome.tabs.create({ url, active: true });
   const id = tab.id;
   if (id === undefined) throw new Error('Could not open a tab');
-  await waitForTabLoad(id, { url });
-  await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
-  const out = await scanTab(id);
-  const fresh = await chrome.tabs.get(id).catch(() => null);
-  return { ...out, favicon: fresh?.favIconUrl ?? null };
+  try {
+    await waitForTabLoad(id, { url, scanIfCommitted: true });
+    await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
+    const out = await scanTab(id);
+    const fresh = await chrome.tabs.get(id).catch(() => null);
+    return { ...out, favicon: fresh?.favIconUrl ?? null };
+  } catch (e) {
+    await closeOwnTab(id);
+    throw e;
+  }
 }
 
 export { sameUrl } from './sameUrl';
