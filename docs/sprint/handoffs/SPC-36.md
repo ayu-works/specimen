@@ -99,4 +99,4 @@ across `code()` and `cell()`); HTML `<code>` + `&#124;` (DESIGN.md is read raw b
 - T2.05 row in `docs/TESTING.md`. `pnpm gate` green locally (gitleaks not installed locally: skipped; CI scans).
 
 ## Next / how to resume
-- PR open; fold reviews as they arrive in `docs/sprint/reviews/`.
+- PR #51 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-36-a-r1.md`). Waiting on lens B; fold findings as they arrive.
