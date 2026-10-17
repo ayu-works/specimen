@@ -108,8 +108,10 @@ optional one in the PR body.
 - `pnpm gate`: secrets skipped locally (no gitleaks; CI scans); typecheck, lint, test, build green; e2e had one
   timeout in T5.03 (mobile capture window, unrelated, busy machine) and passed 54/54 on rerun; check-ids green.
 
+- PR #52 open (base exec/spc-41). Lens A r1 (pe-b2): APPROVED, 0 findings (docs/sprint/reviews/SPC-30-a-r1.md).
+
 ## Next
-- PR (base exec/spc-41) → reviews (PE lens A + lens B), fold findings.
+- Lens B review; fold its findings. No merge without the owner (run mode: one final "merge all").
 
 ## How to resume
 Read this file, then `git log exec/spc-41..exec/spc-30`.
