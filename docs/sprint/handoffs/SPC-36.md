@@ -111,4 +111,5 @@ across `code()` and `cell()`); HTML `<code>` + `&#124;` (DESIGN.md is read raw b
   code cell doubled, accepted). Rejected the plain-text fallback (needs its own markdown escaping; rule splits).
   Folded: `cell()` comment corrected; `githubTables()` helper (split on any `|` not after `\`, strip one `\`,
   escapes in plain text, code literal) and every test runs under both parsers. Checked against the old `cell()`:
-  the helper reproduces lens B's GitHub "OLD plain" column exactly. LOWs: L1/L3 follow-ups (orchestrator), L2 no change.
+  the helper reproduces lens B's GitHub "OLD plain" column exactly. pe-b2 fold check on 5ebaba9: APPROVED.
+  LOWs: L1/L3 → one follow-up ticket (orchestrator filing; add its id to the PR body), L2 no change.
