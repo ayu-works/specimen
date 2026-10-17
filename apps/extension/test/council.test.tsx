@@ -111,7 +111,8 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   // Stop every host's run and wait for its final write, so none lands in the next test's DB.
-  for (const h of hosts) h.halt(Date.now());
+  // Infinity: a halt covers every run, whatever its resolvedAt.
+  for (const h of hosts) h.halt(Number.POSITIVE_INFINITY);
   // A start still building its provider has no liveRunId yet: let it reach `live` first.
   await new Promise((r) => setTimeout(r, 0));
   await waitFor(
@@ -433,7 +434,10 @@ describe('Ask + council (component)', () => {
     // SPC-29: the setup card renders before initCouncil's effect registers the runtime listener.
     // Wait until this panel listens, or under load `council.started` reaches no one and the panel
     // only hears `council.finished`. Hosts notify only their own test's listeners (see wireHost).
-    await waitFor(() => expect(useCouncil.getState().loaded).toBe(true));
+    await waitFor(() => {
+      expect(useCouncil.getState().loaded).toBe(true);
+      expect(runtimeListeners.size).toBeGreaterThan(0);
+    });
     // The other window's panel starts a run on the same host.
     const [other, hostEnd] = createPortPair('council');
     host.attach(hostEnd as never);
@@ -448,6 +452,7 @@ describe('Ask + council (component)', () => {
       context: '',
       resolvedAt: Date.now(),
     });
+    // 5 s is headroom on a loaded machine, not the fix (the wait above is).
     await screen.findByTestId('council-running', {}, { timeout: 5_000 });
     await screen.findByTestId('council-report', {}, { timeout: 10_000 });
   });

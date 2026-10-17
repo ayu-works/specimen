@@ -87,8 +87,11 @@ for the whole test. The fix is test-only; no `src/` change.
 - PR #41 open, linked on SPC-29. Lens A r1 (pe-b2): APPROVED, 1 optional LOW (L1: the drain missed a start still
   building its provider). Folded: a `setTimeout(0)` before the drain's `waitFor`. No re-review needed.
 
+- Lens B r1: APPROVE, 3 optional LOWs, all folded. L1: the wait also checks `runtimeListeners.size > 0`. L2: kept the
+  5 s timeout, commented as headroom, not the fix. L3: `halt(Number.POSITIVE_INFINITY)`. Rerun under load: 60/60.
+
 ## Next
-- Lens B review → fold → owner's merge call. Then watch 10 CI runs for a T3.33 flake.
+- PE fold check → owner's merge call. Then watch 10 CI runs for a T3.33 flake.
 
 ## How to resume
 Read this file; `git log origin/main..exec/spc-29`. Load loop: the scratchpad `loop.sh` is gone with the session,
