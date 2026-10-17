@@ -20,6 +20,8 @@ export function friendlyScanError(msg: string): string {
     return SITE_ACCESS;
   if (/No tab with id|tab was closed/i.test(msg))
     return 'The tab was closed before the scan finished.';
+  if (/took too long to load/i.test(msg))
+    return 'The page took too long to load. Check the address or your connection and try again.';
   if (
     /Receiving end does not exist|Could not establish connection|no response for|message (port|channel) closed/i.test(
       msg,
@@ -81,32 +83,59 @@ export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise
   return { scan, screenshot: res.screenshot, hints: res.raw.hints, saveError };
 }
 
-/** Resolve when the tab finishes loading; reject on timeout or when it is closed. */
-export function waitForTabLoad(id: number, timeoutMs = 30000): Promise<void> {
+type TabLoadState = Pick<chrome.tabs.Tab, 'status' | 'url' | 'pendingUrl'>;
+
+/**
+ * Loaded means `complete` on the real page: the initial about:blank of a new tab (or one with a
+ * navigation still pending) is not. A url Chrome hides from us (no host access) still counts.
+ */
+const tabLoaded = (t: TabLoadState | undefined) =>
+  t?.status === 'complete' && !t.pendingUrl && t.url !== 'about:blank';
+
+/**
+ * Resolve when the tab finishes loading; reject on timeout or when it is closed. The listener can
+ * miss a `complete` that Chrome sent before it was registered, so the tab is also re-read until
+ * it settles (each read waits for the previous answer).
+ */
+export function waitForTabLoad(id: number, timeoutMs = 30000, recheckMs = 500): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let recheck: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => done(new Error('The page took too long to load')), timeoutMs);
-    const onUpdated = (tabId: number, info: { status?: string }) => {
-      if (tabId === id && info.status === 'complete') done();
+    const onUpdated = (tabId: number, info: { status?: string }, tab?: TabLoadState) => {
+      if (tabId !== id || info.status !== 'complete') return;
+      // Without the tab argument, trust the event; with it, skip the initial about:blank.
+      if (!tab || tabLoaded(tab)) done();
     };
     const onRemoved = (tabId: number) => {
       if (tabId === id) done(new Error('The tab was closed'));
     };
     function done(err?: Error) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      clearTimeout(recheck);
       chrome.tabs.onUpdated.removeListener(onUpdated);
       chrome.tabs.onRemoved.removeListener(onRemoved);
       if (err) reject(err);
       else resolve();
     }
+    function check() {
+      chrome.tabs.get(id).then(
+        (t) => {
+          if (tabLoaded(t)) done();
+          else if (!settled) recheck = setTimeout(check, recheckMs);
+        },
+        (e: unknown) => {
+          if (/No tab with id/i.test(e instanceof Error ? e.message : String(e))) {
+            done(new Error('The tab was closed'));
+          } else if (!settled) recheck = setTimeout(check, recheckMs); // a passing read failure
+        },
+      );
+    }
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.tabs.onRemoved.addListener(onRemoved);
-    // The tab may already be complete by the time the listener is attached.
-    chrome.tabs
-      .get(id)
-      .then((t) => {
-        if (t.status === 'complete') done();
-      })
-      .catch(() => {});
+    check();
   });
 }
 

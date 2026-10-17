@@ -218,9 +218,7 @@ export async function captureMobile(
   const intoExisting = (win.id !== undefined && win.id === homeId) || (win.tabs?.length ?? 0) > 1;
   // Only a window we created is recorded for recovery: never one of the user's.
   const ownWindow = !intoExisting && win.id !== undefined && win.id !== homeId;
-  // Not awaited: any delay between create and waitForTabLoad can miss the popup's load in the
-  // E2E browser (T5.03); storage writes from one page apply in order, so the later clear wins.
-  if (ownWindow) void rememberMobileWindow(win.id as number);
+  if (ownWindow) await rememberMobileWindow(win.id as number);
   let strayTab: number | undefined;
   try {
     if (intoExisting) {
