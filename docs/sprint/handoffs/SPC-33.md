@@ -91,11 +91,21 @@ fail-closed vibe code is what I edit), and rebase onto `main` once #33 merges; t
 - Rebased on `origin/main` de35272 (#33, #34), temp base dropped. `pnpm gate` green (1 pre-existing lint warning in
   chatScrub, not this PR); check-ids --all passes.
 
+## Lens B r1 fold (spc-33-06: 0C/1H/2M/4L; orchestrator: fold H1, M1, M2 + cheap LOWs; lens A L1 un-accepted)
+- H1: `clamp()` sanitizes the text again after the final cut (sanitize only removes, so it stays ≤ max). Reviewer's
+  summary + keyword repros added to T3.35; both fail on r1.
+- M1 (+ lens A L1): save failures are also `toast()`ed (the global Toaster outlives Inspect). Run state is module
+  level (`latestRun`, `running`), so a remounted card shows "Looking…" and can't start a second run; saves go through
+  a module-level queue so an older save never lands after a newer one.
+- M2: a vibe finished after a scan switch is still saved by id (not shown; failure → toast only).
+- L1 non-string keywords dropped in `VibeSchema`; L2 fallback uses `cutText(…, 280)`; L3 keywords deduped
+  case-insensitively; L4 busy covers the model call only (a save that never settles no longer pins the button;
+  trade-off: later saves queue behind it — a hung Dexie open blocks every write anyway).
+- New/changed T3.36 tests (6) fail on r1 `Vibe.tsx`; 5 new T3.35 tests fail on r1 `vibe.ts`.
+
 ## Next
-- Lens A r1 (pe-8a): APPROVED, 0C/0H/0M, 1 optional LOW (L1: a save error is lost if Inspect unmounts during the
-  one IndexedDB write). Not folded: the fix moves the error into `store.ts`, outside this PR's files, for a ms-wide
-  window; the orchestrator can ask for it.
-- Waiting on lens B; fold its findings.
+- Lens A r1 (pe-8a): APPROVED; its L1 is folded with lens B M1 (toast, no store.ts change).
+- Lens A/B check of the r2 fold.
 
 ## How to resume
 - Worktree as above; read this file and the PR's reviews under `docs/sprint/reviews/SPC-33-*`.

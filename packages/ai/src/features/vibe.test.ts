@@ -181,4 +181,54 @@ describe('vibe output fits the DesignScan v5 bounds (SPC-33)', () => {
     });
     await expect(vibe(p, branded, null)).rejects.toMatchObject({ message: VIBE_FILTERED });
   });
+
+  it('T3.35 the final cut never leaves a brand: a longer word cut to the brand is sanitized (summary)', async () => {
+    // Under the pre-cut, so only the final cut applies; it lands inside "zentrixology".
+    const summary = `${'calm '.repeat(797)}airy ok zentrixology is calm`;
+    const p = createMockProvider({ text: reply(summary, []) });
+    const v = await vibe(p, branded, null);
+    expect(v.summary.length).toBeLessThanOrEqual(BOUNDS.vibeSummary);
+    expect(v.summary.toLowerCase()).not.toMatch(/zentrix\b/);
+  });
+
+  it('T3.35 the final cut never leaves a brand (keyword)', async () => {
+    const p = createMockProvider({
+      text: reply('Calm.', [`${'calm '.repeat(18)}ok zentrixology`, 'airy']),
+    });
+    const v = await vibe(p, branded, null);
+    for (const k of v.keywords) {
+      expect(k.length).toBeLessThanOrEqual(BOUNDS.keyword);
+      expect(k.toLowerCase()).not.toMatch(/zentrix\b/);
+    }
+    expect(v.keywords).toContain('airy');
+  });
+
+  it('T3.35 non-string keywords are dropped; the summary is not replaced by the raw reply', async () => {
+    const p = createMockProvider({
+      text: '{"summary":"Calm and airy.","keywords":["calm",1,null,{"a":1},"airy"]}',
+    });
+    expect(await vibe(p, scan, null)).toMatchObject({
+      summary: 'Calm and airy.',
+      keywords: ['calm', 'airy'],
+    });
+  });
+
+  it('T3.35 the non-JSON fallback never splits a surrogate pair', async () => {
+    const p = createMockProvider({ text: `${'x'.repeat(279)}😀 rest` });
+    const v = await vibe(p, scan, null);
+    expect(v.summary).not.toMatch(/[\ud800-\udbff]$/);
+    expect(v.summary.length).toBeLessThanOrEqual(280);
+  });
+
+  it('T3.35 keywords are unique (case-insensitive), so repeats never fill the slots', async () => {
+    const keywords = [
+      'calm',
+      'Calm',
+      'Zentrix calm',
+      ...Array.from({ length: 20 }, () => 'calm'),
+      'airy',
+    ];
+    const p = createMockProvider({ text: reply('Calm.', keywords) });
+    expect((await vibe(p, branded, null)).keywords).toEqual(['calm', 'airy']);
+  });
 });

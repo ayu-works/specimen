@@ -21,12 +21,32 @@ vi.mock('../src/lib/db', async (importOriginal) => {
   };
 });
 
+const toastSpy = vi.hoisted(() => vi.fn<(m: string) => void>());
+vi.mock('../src/components/toast', () => ({ toast: toastSpy, Toaster: () => null }));
+
+/** A provider whose reply waits for `open()`: the model call stays in flight until then. */
+function gatedProvider(text: string) {
+  let open: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    open = r;
+  });
+  const provider = {
+    ...fakeProvider([text]),
+    async *chat() {
+      await gate;
+      yield text;
+    },
+  };
+  return { provider, open: () => open() };
+}
+
 const REPLY = '{"summary":"Calm and airy.","keywords":["calm","airy"]}';
 const quota = () =>
   Promise.reject(new DOMException('The quota has been exceeded.', 'QuotaExceededError'));
 
 beforeEach(async () => {
   installChrome();
+  toastSpy.mockReset();
   await db.scans.clear();
   useStore.setState({ scan: sampleScan, status: 'done', activeTab: 'inspect' });
 });
@@ -37,9 +57,15 @@ afterEach(() => {
   delete (globalThis as { __specimenProvider?: unknown }).__specimenProvider;
 });
 
-function renderCard(chunks: string[] = [REPLY]) {
-  (globalThis as { __specimenProvider?: unknown }).__specimenProvider = fakeProvider(chunks);
-  render(
+const card = () => (
+  <AiProvider>
+    <VibeCard />
+  </AiProvider>
+);
+
+function renderCard(chunks: string[] = [REPLY], provider: unknown = fakeProvider(chunks)) {
+  (globalThis as { __specimenProvider?: unknown }).__specimenProvider = provider;
+  return render(
     <AiProvider>
       <VibeCard />
     </AiProvider>,
@@ -64,6 +90,10 @@ describe('Vibe card: a vibe that cannot be saved says so (SPC-33)', () => {
     );
     // The vibe itself worked: the store keeps it for the prompt.
     expect(useStore.getState().scan?.vibe?.summary).toBe('Calm and airy.');
+    // And as a toast, which outlives the card.
+    expect(toastSpy).toHaveBeenCalledWith(
+      'Vibe not saved to Library: your browser is out of storage space',
+    );
   });
 
   it('T3.36 a successful save (or a scan not in the Library) shows no error', async () => {
@@ -93,6 +123,75 @@ describe('Vibe card: a vibe that cannot be saved says so (SPC-33)', () => {
       ).toBe(false),
     );
     expect(screen.queryByRole('alert')).toBeNull();
+    // The failure is still reported, by toast, for the scan it belongs to.
+    expect(toastSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('T3.36 a save failing after Inspect unmounted (a tab switch) is still reported', async () => {
+    let fail: (e: unknown) => void = () => {};
+    save.impl = () =>
+      new Promise((_, reject) => {
+        fail = reject;
+      });
+    const { unmount } = renderCard();
+    await describeVibe();
+    expect(await screen.findByText('Calm and airy.')).toBeTruthy();
+    unmount();
+    fail(new DOMException('The quota has been exceeded.', 'QuotaExceededError'));
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        'Vibe not saved to Library: your browser is out of storage space',
+      ),
+    );
+  });
+
+  it('T3.36 a card remounted during the model call is busy and cannot start a second run', async () => {
+    const g = gatedProvider(REPLY);
+    const first = renderCard([], g.provider);
+    await describeVibe();
+    first.unmount();
+    render(card());
+    const button = await screen.findByRole('button', { name: /Looking/ });
+    expect(button.hasAttribute('disabled')).toBe(true);
+    g.open();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Describe the vibe/ }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
+    expect(useStore.getState().scan?.vibe?.summary).toBe('Calm and airy.');
+  });
+
+  it('T3.36 a vibe finished after the panel moved to another scan is saved to its own scan, not shown', async () => {
+    await saveScan(sampleScan, null);
+    const g = gatedProvider(REPLY);
+    renderCard([], g.provider);
+    await describeVibe();
+    const other = { ...sampleScan, id: 'other', vibe: undefined };
+    useStore.setState({ scan: other });
+    g.open();
+    await waitFor(async () =>
+      expect((await getStoredScan(sampleScan.id))?.vibe?.summary).toBe('Calm and airy.'),
+    );
+    expect(useStore.getState().scan?.vibe).toBeUndefined();
+    expect(screen.queryByText('Calm and airy.')).toBeNull();
+  });
+
+  it('T3.36 a save that never settles does not keep the button busy', async () => {
+    let settle: () => void = () => {};
+    save.impl = () =>
+      new Promise<void>((r) => {
+        settle = r;
+      });
+    renderCard();
+    await describeVibe();
+    expect(await screen.findByText('Calm and airy.')).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Describe the vibe/ }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
+    settle(); // let the module's save queue drain for the next test
   });
 
   it('T3.36 a looping model’s vibe saves to the Library within the v5 bounds (real updateScan)', async () => {

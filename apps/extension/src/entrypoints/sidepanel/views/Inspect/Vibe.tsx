@@ -1,6 +1,7 @@
 import { vibe } from '@specimen/ai';
 import { Sparkles } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from '@/components/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -9,50 +10,76 @@ import { SETUP_HINT } from '@/lib/aiRuntime';
 import { libraryErrorText, updateScan } from '@/lib/db';
 import { useStore } from '../../store';
 
+// Module state, not component state: Inspect unmounts on a tab switch while a run goes on.
+/** The latest run; an older run's result never reaches the panel. */
+let latestRun = 0;
+/** The model call in flight; a remounted card shows it as busy instead of starting another. */
+let running: Promise<void> | null = null;
+/** Library writes in order, so an older run's save never lands after a newer one's. */
+let saves: Promise<void> = Promise.resolve();
+
 /** "Describe the vibe": vision providers only; the result feeds the prompt's visual direction. */
 export function VibeCard() {
   const { scan, screenshot, setVibe } = useStore();
   const ai = useAiContext();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(running !== null);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [saveErr, setSaveErr] = useState<{ scanId: string; text: string } | null>(null);
-  // The latest run: a result from an older run, or for a scan no longer shown, is dropped.
-  const runId = useRef(0);
+  useEffect(() => {
+    let live = true;
+    void running?.then(() => {
+      if (live) setBusy(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   if (!scan) return null;
 
   const provider = ai.provider;
   const enabled = !!provider && !busy;
 
   async function run() {
-    if (!provider || !scan) return;
-    const id = ++runId.current;
-    const current = () => runId.current === id && useStore.getState().scan?.id === scan.id;
+    if (!provider || !scan || running) return;
+    const id = ++latestRun;
+    const shown = () => latestRun === id && useStore.getState().scan?.id === scan.id;
     setBusy(true);
     setErr('');
     setNote('');
     setSaveErr(null);
+    const call = vibe(provider, scan, screenshot);
+    running = call.then(
+      () => {},
+      () => {},
+    );
+    let v: Awaited<typeof call>;
     try {
-      const v = await vibe(provider, scan, screenshot);
-      if (!current()) return;
-      const next = { summary: v.summary, keywords: v.keywords, model: v.model };
+      v = await call;
+    } catch (e) {
+      if (shown()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
+      return;
+    } finally {
+      running = null;
+      setBusy(false);
+    }
+    const next = { summary: v.summary, keywords: v.keywords, model: v.model };
+    // A vibe for a scan the panel has moved off is never shown on the new one, but is still saved.
+    if (shown()) {
       setVibe(next);
       if (!v.usedImage) setNote('Based on the measured values (this model can’t look at images).');
-      try {
-        // Persist for saved scans; a scan not in the Library simply has no row to update.
-        await updateScan(scan.id, { vibe: next });
-      } catch (e) {
-        // The vibe stays usable in this panel, but it must not look saved.
-        if (current())
-          setSaveErr({
-            scanId: scan.id,
-            text: `Vibe not saved to Library: ${libraryErrorText(e)}`,
-          });
-      }
+    }
+    // Persist for saved scans, by id; a scan not in the Library simply has no row to update.
+    const save = saves.then(() => updateScan(scan.id, { vibe: next }));
+    saves = save.catch(() => {});
+    try {
+      await save;
     } catch (e) {
-      if (current()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
-    } finally {
-      if (runId.current === id) setBusy(false);
+      // The vibe stays usable in this panel, but it must not look saved. The toast outlives this
+      // card (a tab switch) and covers a scan no longer shown; the line stays while it is.
+      const text = `Vibe not saved to Library: ${libraryErrorText(e)}`;
+      toast(text);
+      if (shown()) setSaveErr({ scanId: scan.id, text });
     }
   }
 
