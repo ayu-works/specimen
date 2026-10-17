@@ -6,7 +6,15 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 ~13:45 (CURRENT STATE)
+## UPDATE 2026-10-17 ~13:55 (CURRENT STATE)
+
+- Merged today (owner said merge each): #31 SPC-18, #32 SPC-32, #34 SPC-35, #33 SPC-19 (DesignScan v5). Main de35272, CI green. All Done in Linear.
+- Running (build tab w1:tP): **spc-33-4f** (w1:p1C, SPC-33, PR #35 in review: pe-8a lens A + lens B pane w1:p1D), **SPC-20** (w1:p1E, lane B, planning), **SPC-34** (w1:p1F, lane C, planning; a protocol CONTRACT → PE ruling → owner OK before building). PE **pe-8a** (w1:pS).
+- Next by priority when a slot frees: SPC-28 (after SPC-20, both in scanFlow.ts) → SPC-21 (shared chrome stub, last) → SPC-29 → SPC-37 → SPC-30 → SPC-31 → SPC-36 → SPC-27. SPC-23 held (Netlify).
+- Owner prefs today: "be faster, and prioritize"; short updates; only the owner says merge ("merge all" = every PR I'd presented as ready).
+- Lesson: never chain pane/worktree cleanup after `gh pr merge` with `;`, because a refused merge still ran the cleanup (no loss: the branch was on GitHub). Use `&&`, or clean up separately.
+
+## UPDATE 2026-10-17 ~13:45
 
 - PE is now **pe-8a** (w1:pS; pe-ed handed over at its context limit, pe.md 7772a06). Orchestrator specimen-6a.
 - **#31 SPC-18 MERGED** 11074ac (the owner said merge), Done; spc-18 pane/worktree removed. Follow-ups filed: SPC-34 (finish_reason 'length', contract), SPC-35 (crash during load), SPC-36 (\| in cells).
