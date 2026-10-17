@@ -18,6 +18,10 @@ let running: Promise<void> | null = null;
 /** Library writes in order, so an older run's save never lands after a newer one's. */
 let saves: Promise<void> = Promise.resolve();
 
+/** How long a vibe may take before the card gives up (the council's first-text stall). */
+export const VIBE_TIMEOUT_MS = 120_000;
+export const VIBE_TIMEOUT_TEXT = 'The model took too long to describe the vibe. Try again.';
+
 /** "Describe the vibe": vision providers only; the result feeds the prompt's visual direction. */
 export function VibeCard() {
   const { scan, screenshot, setVibe } = useStore();
@@ -48,7 +52,18 @@ export function VibeCard() {
     setErr('');
     setNote('');
     setSaveErr(null);
-    const call = vibe(provider, scan, screenshot);
+    // A provider that never settles must not keep the card busy: give up after the timeout,
+    // abort the call, and never read its result (a late reply is neither shown nor saved).
+    const ctl = new AbortController();
+    const timeout = new Error(VIBE_TIMEOUT_TEXT);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(timeout);
+        ctl.abort();
+      }, VIBE_TIMEOUT_MS);
+    });
+    const call = Promise.race([vibe(provider, scan, screenshot, ctl.signal), timedOut]);
     running = call.then(
       () => {},
       () => {},
@@ -57,9 +72,13 @@ export function VibeCard() {
     try {
       v = await call;
     } catch (e) {
-      if (shown()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
+      const text = e instanceof Error ? e.message : 'Could not describe the vibe.';
+      // The card may have unmounted (a tab switch) while it waited; the toast outlives it.
+      if (e === timeout) toast(text);
+      if (shown()) setErr(text);
       return;
     } finally {
+      clearTimeout(timer);
       running = null;
       setBusy(false);
     }

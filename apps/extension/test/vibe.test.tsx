@@ -5,7 +5,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
-import { VibeCard } from '../src/entrypoints/sidepanel/views/Inspect/Vibe';
+import {
+  VIBE_TIMEOUT_MS,
+  VIBE_TIMEOUT_TEXT,
+  VibeCard,
+} from '../src/entrypoints/sidepanel/views/Inspect/Vibe';
 import { AiProvider } from '../src/lib/aiContext';
 import { db, getStoredScan, saveScan } from '../src/lib/db';
 import { fakeProvider, installChrome } from './helpers/chrome';
@@ -206,5 +210,108 @@ describe('Vibe card: a vibe that cannot be saved says so (SPC-33)', () => {
     expect(stored?.keywords.length).toBeGreaterThan(0);
     for (const k of stored?.keywords ?? []) expect(k.length).toBeLessThanOrEqual(BOUNDS.keyword);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+/** A provider whose first call never settles (and ignores its abort signal); later calls reply `next`. */
+function hangingProvider(next = REPLY) {
+  const signals: (AbortSignal | undefined)[] = [];
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const provider = {
+    ...fakeProvider([next]),
+    async *chat(_req: unknown, signal?: AbortSignal) {
+      signals.push(signal);
+      if (signals.length === 1) {
+        await gate; // never opened unless a test sends a late reply
+        yield '{"summary":"Late and loud.","keywords":["late"]}';
+        return;
+      }
+      yield next;
+    },
+  };
+  return { provider, signals, lateReply: () => release() };
+}
+
+const idleButton = () =>
+  waitFor(() =>
+    expect(screen.getByRole('button', { name: /Describe the vibe/ }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+
+describe('Vibe card: a model call that never settles times out (SPC-40)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('T3.38 a never-settling vibe returns the card to idle with an error after the timeout', async () => {
+    const h = hangingProvider();
+    renderCard([], h.provider);
+    await describeVibe();
+    const busy = await screen.findByRole('button', { name: /Looking/ });
+    expect(busy.hasAttribute('disabled')).toBe(true);
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS - 1000);
+    expect(screen.getByRole('button', { name: /Looking/ })).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(1000);
+    await idleButton();
+    expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+    expect(toastSpy).toHaveBeenCalledWith(VIBE_TIMEOUT_TEXT);
+    expect(useStore.getState().scan?.vibe).toBeUndefined();
+    // The call was told to stop.
+    expect(h.signals[0]?.aborted).toBe(true);
+  });
+
+  it('T3.38 a late reply after the timeout is dropped; a new run after it is shown and saved', async () => {
+    await saveScan(sampleScan, null);
+    const saved: unknown[] = [];
+    save.impl = async (...a) => {
+      saved.push(a[1]);
+    };
+    const h = hangingProvider('{"summary":"Second and calm.","keywords":["calm"]}');
+    renderCard([], h.provider);
+    await describeVibe();
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
+    await idleButton();
+    // A second run while the first provider call is still stuck.
+    await describeVibe();
+    expect(await screen.findByText('Second and calm.')).toBeTruthy();
+    await waitFor(() => expect(saved).toHaveLength(1));
+    // Now the first call replies, late.
+    h.lateReply();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(screen.queryByText('Late and loud.')).toBeNull();
+    expect(useStore.getState().scan?.vibe?.summary).toBe('Second and calm.');
+    expect(saved).toEqual([{ vibe: expect.objectContaining({ summary: 'Second and calm.' }) }]);
+  });
+
+  it('T3.38 a card remounted during the hang is busy, then idle at the timeout', async () => {
+    const h = hangingProvider();
+    const first = renderCard([], h.provider);
+    await describeVibe();
+    first.unmount();
+    render(card());
+    const button = await screen.findByRole('button', { name: /Looking/ });
+    expect(button.hasAttribute('disabled')).toBe(true);
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
+    await idleButton();
+    // The remounted card did not start the run, so only the toast reports it.
+    expect(toastSpy).toHaveBeenCalledWith(VIBE_TIMEOUT_TEXT);
+  });
+
+  it('T3.38 a reply in time is shown, and the timeout later adds no error', async () => {
+    renderCard();
+    await describeVibe();
+    expect(await screen.findByText('Calm and airy.')).toBeTruthy();
+    await idleButton();
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS * 2);
+    expect(screen.queryByText(VIBE_TIMEOUT_TEXT)).toBeNull();
+    expect(toastSpy).not.toHaveBeenCalled();
+    expect(useStore.getState().scan?.vibe?.summary).toBe('Calm and airy.');
   });
 });
