@@ -64,8 +64,10 @@ after the text; (b) Gemini's `MAX_TOKENS` is final: one throw, later chunks are 
 - Plan approved. Tests first (6 cut-off cases red, 3 normal stops green), then the three adapters; `packages/ai`
   193/193. TESTING.md rows T3.02–T3.04 extended. `pnpm gate`, then PR.
 
+- PR #45 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-41-a-r1.md`).
+
 ## Next
-- Reviews (PE lens A + lens B); fold findings with new commits.
+- Lens B review; fold its findings with new commits. Then wait for the owner's "merge all".
 
 ## How to resume
 Branch `exec/spc-41`, worktree `worktrees/spc-41`. Read this file, then `packages/ai/src/providers/`.
