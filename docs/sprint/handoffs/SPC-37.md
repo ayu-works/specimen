@@ -133,7 +133,23 @@ quickly: the second download finishes and the model works in Ask.
 - `pnpm gate` green.
 
 ## Next
-- Lens A r1: APPROVED, 0 findings (docs/sprint/reviews/SPC-37-a-r1.md). Waiting on lens B.
+- Lens A r1: APPROVED, 0 findings (docs/sprint/reviews/SPC-37-a-r1.md).
+- Lens B r1 (docs/sprint/reviews/SPC-37-b-r1.md, 0C/0H/1M/4L), all folded:
+  - **M1:** specimen-75 gave me `options/LocalGemma.tsx` (option A). The card has a `deleting` phase: Download,
+    Delete and the model radios are off while `remove()` runs, the status reads "Deleting…", and a failed delete
+    restores the earlier phase. The test is in the new `test/localGemmaDelete.test.tsx` (`localGemma.test.tsx` is #40's).
+    I rewrote the PR's manual test to steps the card allows.
+  - **L1:** each `LoadReq` has a `gone` promise. Every wait in `loadOnce` (delete, another load, `hasGpu`) races
+    it, so a cancel ends the load at once.
+  - **L2:** `status.loading` counts a waiting, uncancelled load only for the asked `modelId` (no protocol change;
+    `status` already carries `modelId`). The pre-existing "a running body of any model" meaning is unchanged.
+  - **L3:** `llmBusy` has no production caller. I fixed the docstring (tests use it to check the host drained),
+    and note (b) above is moot.
+  - **L4:** added the tests: a delete in window 1, an unload while waiting on a delete, a crash ahead of a
+    queued load, a Port that closes while its load waits, and `expectIdle` in the other-model test. Plus one for L2.
+  - Proof: the M1, L1 (×2) and L2 tests fail on the old code (old card / 3ff3afd's llmHost); the crash and
+    closed-Port tests are guards.
+- Next: gate + CI green → fold check by pe-b2.
 - Follow-up: extract the shared fake web-llm/Worker harness after #40 merges.
 
 ## How to resume

@@ -7,7 +7,7 @@ import { GEMMA_MODELS, gemmaById } from '@/lib/gemmaModels';
 import { send } from '@/lib/messaging';
 import { cn } from '@/lib/utils';
 
-type Phase = 'checking' | 'none' | 'downloading' | 'ready' | 'error';
+type Phase = 'checking' | 'none' | 'downloading' | 'deleting' | 'ready' | 'error';
 
 async function gpuStatus(): Promise<{ ok: boolean; text: string }> {
   try {
@@ -108,19 +108,26 @@ export function LocalGemma({
 
   async function remove() {
     if (!modelId) return;
+    // Both buttons stay off until the delete ends: a Download clicked meanwhile would run under a
+    // card that then says "Not downloaded" (SPC-37 lens B M1).
+    const before = phase;
     setError('');
+    setPhase('deleting');
     try {
       await client.remove(modelId);
       await markDownloaded(modelId, false);
+      if (!live.current) return;
       setPhase('none');
       setProgress(0);
     } catch (e) {
+      if (!live.current) return;
       setError(e instanceof Error ? e.message : String(e));
+      setPhase(before);
     }
   }
 
   const pct = Math.round(progress * 100);
-  const busy = phase === 'downloading';
+  const busy = phase === 'downloading' || phase === 'deleting';
 
   return (
     <Card className="flex flex-col gap-3" data-testid="local-gemma">
@@ -163,7 +170,7 @@ export function LocalGemma({
         ))}
       </fieldset>
 
-      {busy && (
+      {phase === 'downloading' && (
         <div className="flex flex-col gap-1">
           <div
             className="h-2 overflow-hidden rounded bg-muted"
@@ -181,6 +188,7 @@ export function LocalGemma({
         {phase === 'checking' && 'Checking…'}
         {phase === 'none' && 'Not downloaded'}
         {phase === 'downloading' && `Downloading ${pct}%`}
+        {phase === 'deleting' && 'Deleting…'}
         {phase === 'ready' && 'Ready'}
         {phase === 'error' && 'Something went wrong'}
       </p>

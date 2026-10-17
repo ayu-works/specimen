@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   failDelete: undefined as undefined | Error,
   /** Runs inside `Worker.terminate()`. */
   onTerminate: null as null | (() => void),
+  /** The last fake Worker made: a test fires its `error` to simulate a crash. */
+  worker: null as null | { fire: (type: string) => void },
   /** Workers made, terminations, cache deletes and engines made, in call order. */
   log: [] as string[],
 }));
@@ -131,15 +133,25 @@ beforeEach(async () => {
     deleteGate: null,
     failDelete: undefined,
     onTerminate: null,
+    worker: null,
     log: [],
   });
   vi.stubGlobal(
     'Worker',
     class {
+      private ls = new Map<string, Set<() => void>>();
       constructor() {
         state.log.push('worker');
+        state.worker = {
+          fire: (t) => {
+            for (const cb of this.ls.get(t) ?? []) cb();
+          },
+        };
       }
-      addEventListener() {}
+      addEventListener(t: string, cb: () => void) {
+        if (!this.ls.has(t)) this.ls.set(t, new Set());
+        this.ls.get(t)?.add(cb);
+      }
       terminate() {
         state.log.push('terminate');
         state.onTerminate?.();
@@ -221,6 +233,8 @@ describe('llm host: load vs unload/delete races (SPC-37)', () => {
     gpu.resolve();
     await c.waitFor(isReady);
     expect(c.events.some(loadError)).toBe(false);
+    c.send({ type: 'unload' });
+    await expectIdle(c);
   });
 
   it('T3.37 an unload after the load body is set up but before it runs: every waiter errors, no worker', async () => {
@@ -339,5 +353,104 @@ describe('llm host: load vs unload/delete races (SPC-37)', () => {
     expect(c.loadEnds()).toHaveLength(1);
     expect((await c.status()).loaded).toBeUndefined();
     await expectIdle(c);
+  });
+
+  /** Load DEFAULT_GEMMA held in its download; returns the client and the gate. */
+  async function heldLoad() {
+    const gate = deferred();
+    state.loadGate = gate.promise;
+    const a = open();
+    a.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await a.waitFor((e) => e.type === 'progress');
+    state.loadGate = null;
+    return { a, gate };
+  }
+
+  it('T3.37 a delete of a load queued behind another model ends it at once; the other load goes on', async () => {
+    const { a, gate } = await heldLoad();
+    const b = open();
+    b.send({ type: 'load', modelId: OTHER });
+    await sleep(10);
+    b.send({ type: 'delete', modelId: OTHER });
+    // Ends before the download it waits behind does (lens B L1).
+    await b.waitFor(loadError);
+    expect(errorText(b)).toMatch(/deleted/);
+    expect(a.events.some(isReady)).toBe(false);
+    gate.resolve();
+    await a.waitFor(isReady);
+    await sleep(20);
+    expect(state.log.filter((x) => x === 'worker')).toHaveLength(1);
+    expect(b.loadEnds()).toHaveLength(1);
+    expect((await a.status()).loaded).toBe(DEFAULT_GEMMA);
+  });
+
+  it('T3.37 an unload while a load waits on a delete ends it before the delete does', async () => {
+    const del = deferred();
+    state.deleteGate = del.promise;
+    const c = open();
+    c.send({ type: 'delete', modelId: DEFAULT_GEMMA });
+    await sleep(5);
+    c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await sleep(10);
+    c.send({ type: 'unload' });
+    await c.waitFor(loadError);
+    expect(errorText(c)).toMatch(/unloaded/);
+    expect(c.events.some((e) => e.type === 'deleted')).toBe(false);
+    del.resolve();
+    await c.waitFor((e) => e.type === 'deleted');
+    await sleep(20);
+    expect(state.log).toEqual(['delete']);
+    await expectIdle(c);
+  });
+
+  it('T3.37 a worker crash in the load ahead lets a queued load of another model go on', async () => {
+    const { a } = await heldLoad();
+    const b = open();
+    b.send({ type: 'load', modelId: OTHER });
+    await sleep(10);
+    state.worker?.fire('error');
+    await a.waitFor(loadError);
+    expect(errorText(a)).toMatch(/stopped unexpectedly/);
+    await b.waitFor(isReady);
+    expect(b.loadEnds()).toHaveLength(1);
+    expect((await b.status()).loaded).toBe(OTHER);
+  });
+
+  it('T3.37 a Port that closes while its load waits on a delete: the load still completes, then drains', async () => {
+    const del = deferred();
+    state.deleteGate = del.promise;
+    const c = open();
+    c.send({ type: 'delete', modelId: DEFAULT_GEMMA });
+    await sleep(5);
+    c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await sleep(5);
+    c.disconnect();
+    del.resolve();
+    await sleep(30);
+    expect(state.log).toEqual(['delete', 'worker', 'engine']);
+    const d = open();
+    expect((await d.status()).loaded).toBe(DEFAULT_GEMMA);
+    d.send({ type: 'unload' });
+    await expectIdle(d);
+  });
+
+  it("T3.37 status counts a waiting load only for its own model, not another model's card", async () => {
+    const del = deferred();
+    state.deleteGate = del.promise;
+    const c = open();
+    c.send({ type: 'delete', modelId: DEFAULT_GEMMA });
+    await sleep(5);
+    c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+    await sleep(10);
+    const asked = async (modelId: string) => {
+      const before = c.events.length;
+      c.send({ type: 'status', modelId });
+      await c.waitFor((e) => e.type === 'status' && c.events.indexOf(e) >= before);
+      return c.events.filter((e) => e.type === 'status').at(-1) as { loading: boolean };
+    };
+    expect((await asked(DEFAULT_GEMMA)).loading).toBe(true);
+    expect((await asked(OTHER)).loading).toBe(false);
+    del.resolve();
+    await c.waitFor(isReady);
   });
 });
