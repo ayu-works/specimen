@@ -2,7 +2,7 @@
 
 Executor session: `spc-43-b9` · Branch `exec/spc-43` (from origin/main b01ea77) · PE `pe-b2` · Orchestrator `specimen-75`, then `specimen-5c`
 
-Status: **PR #47 open; lens A r1 APPROVED by pe-b2 (0 findings, `docs/sprint/reviews/SPC-43-a-r1.md`). CI gate red only from a gitleaks hit in commit 37da9be on origin/exec/spc-41 (not on this branch); re-run CI after spc-41 force-pushes. Waiting for lens B.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
+Status: **PR #47 open; lens A r1 APPROVED by pe-b2 (0 findings, `docs/sprint/reviews/SPC-43-a-r1.md`). CI gate red only from a gitleaks hit in commit 37da9be on origin/exec/spc-41 (not on this branch); re-run CI after spc-41 force-pushes. Lens B r1 (`SPC-43-b-r1.md`, 0C 0H 2M 3L) folded: M1, M2 (Compose.tsx OK'd by pe-b2), L1, L2, L3 (tests); the optional Playwright two-tab check is listed as a follow-up. Waiting for pe-b2's fold check.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
 PE build notes, all done: (a) the sender channel is `unref()`ed (no hang in vitest); (b) `updateScan` on a missing row
 sends no ping, tested with the throwing writers and the duplicates-only import; (c) a superseded re-list makes no
 object URLs, a newer one revokes the previous list's, and a re-list in flight at unmount makes none (generation
@@ -102,6 +102,18 @@ scan in the other: the rename input keeps its text.
 - `lib/libraryChannel.ts` (new), pings in `lib/db.ts` after each committed write, Library subscribes with a
   generation counter. `test/libraryChannel.test.tsx` (T4.14, 10 tests); mutation check: with the subscription
   removed, the 4 two-panel tests fail. TESTING.md row T4.14. `pnpm gate` green.
+
+## Lens B r1 fold
+- M1: `ScanCard` records the value an edit started from; an unchanged title or tags edit writes nothing (it used to
+  compare with the live prop, which a re-list had changed). Test: an unchanged edit in B after A renames or retags.
+- M2: `Compose` drops a pick, or moves the base, when another window deleted that scan, and shows "A scan you picked
+  was deleted in another window." Render/state only. Tests: a deleted pick and a deleted base.
+- L1: thumbnail URLs live in a ref map; a re-list creates URLs only for new ids and revokes only removed ones, outside
+  any state updater (StrictMode-safe). Test: a burst re-lists with no URL churn; a delete revokes one, a new scan adds one.
+- L2: a re-list that fails after a list was shown keeps it; the "unavailable" alert clears on the next success.
+- L3: a test where an older re-list finishes last (fails without the generation check). The Playwright two-tab check
+  is a follow-up (optional).
+- Mutation check: reverting each of M1, M2, L2 and the generation check fails its test.
 
 ## Next
 - Reviews (PE lens A + lens B), fold findings, owner's manual test.

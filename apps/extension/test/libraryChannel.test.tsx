@@ -31,6 +31,13 @@ const scanOf = (id: string, over: Partial<DesignScan> = {}): DesignScan => ({
   ...over,
 });
 
+// The real listScans unless a test swaps in a slow or failing one.
+const list = vi.hoisted(() => ({ impl: null as null | (() => Promise<unknown>) }));
+vi.mock('../src/lib/db', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/lib/db')>();
+  return { ...real, listScans: () => (list.impl ? list.impl() : real.listScans()) };
+});
+
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
 /** Every ping on the channel, as another panel would see it. */
@@ -65,6 +72,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  list.impl = null;
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -251,19 +259,27 @@ describe('Two side panels (component, SPC-43)', () => {
     await waitFor(() => expect(titles(a)).toEqual(['Half-typed', 'Stripe']));
   });
 
-  it('T4.14 a burst of pings leaks no thumbnail URLs; unmount closes the channel', async () => {
+  it('T4.14 a burst of pings leaks no thumbnail URLs and keeps unchanged ones; unmount closes the channel', async () => {
     await seed();
     const close = vi.spyOn(BroadcastChannel.prototype, 'close');
     const view = render(<Library />);
     await waitFor(() => expect(titles(view.container)).toHaveLength(3));
+    expect(urls.created).toHaveLength(3);
+    const linear = cardIn(view.container, 'Linear').querySelector('img')?.getAttribute('src');
     for (let i = 0; i < 5; i++) {
       notifyLibraryChanged();
       await tick(i % 2 ? 10 : 200); // some pings collapse, some re-list
     }
     await tick(250);
+    // Re-lists with no change make and revoke nothing: no image is repointed.
+    expect(urls.created).toHaveLength(3);
+    expect(urls.revoked).toEqual([]);
+    await deleteScans(['2']);
+    await saveScan(scanOf('4', { title: 'Vercel' }), PNG);
+    await waitFor(() => expect(titles(view.container)).toEqual(['Cal', 'Stripe', 'Vercel']));
+    expect(urls.revoked).toEqual([linear]); // only the deleted scan's URL
+    expect(urls.created).toHaveLength(4); // only the new scan's URL
     const live = urls.created.filter((u) => !urls.revoked.includes(u));
-    expect(urls.created.length).toBeGreaterThan(3); // it did re-list
-    expect(live).toHaveLength(3);
     const shown = [...view.container.querySelectorAll('img')].map((i) => i.getAttribute('src'));
     expect(shown.sort()).toEqual([...live].sort());
 
@@ -273,5 +289,122 @@ describe('Two side panels (component, SPC-43)', () => {
     notifyLibraryChanged();
     await tick(200); // a ping after unmount re-lists nothing
     expect(urls.created.filter((u) => !urls.revoked.includes(u))).toEqual([]);
+  });
+
+  it('T4.14 leaving an unchanged rename or tags edit never undoes a change made in the other window', async () => {
+    await seed();
+    const { b } = await twoPanels();
+    fireEvent.click(within(cardIn(b, 'Linear')).getByRole('button', { name: 'More actions' }));
+    fireEvent.click(within(b).getByRole('menuitem', { name: 'Rename' }));
+    await updateScan('2', { title: 'Linear app' }); // the other window renames it meanwhile
+    await tick(250); // B re-lists while its input is still open
+    fireEvent.blur(within(b).getByLabelText('Title'));
+    await tick(50);
+    expect((await db.scans.get('2'))?.title).toBe('Linear app');
+
+    fireEvent.click(within(cardIn(b, 'Linear app')).getByRole('button', { name: 'More actions' }));
+    fireEvent.click(within(b).getByRole('menuitem', { name: 'Tags' }));
+    await updateScan('2', { tags: ['added-elsewhere'] });
+    await tick(250);
+    fireEvent.blur(within(b).getByLabelText('Tags, comma separated'));
+    await tick(50);
+    expect((await db.scans.get('2'))?.tags).toEqual(['added-elsewhere']);
+  });
+
+  it('T4.14 an older re-list that finishes last never replaces a newer one', async () => {
+    await seed();
+    const view = render(<Library />);
+    await waitFor(() => expect(titles(view.container)).toHaveLength(3));
+    const real = await vi.importActual<typeof import('../src/lib/db')>('../src/lib/db');
+    // The first re-list reads now but answers late; the second answers at once.
+    let release: () => void = () => {};
+    const stale = real.listScans();
+    list.impl = () => {
+      list.impl = null;
+      return new Promise((r) => {
+        release = () => r(stale);
+      });
+    };
+    notifyLibraryChanged();
+    await tick(250); // re-list 1 is waiting on the slow read
+    await deleteScans(['2']); // its ping starts re-list 2, which sees the delete
+    await waitFor(() => expect(titles(view.container)).toEqual(['Cal', 'Stripe']));
+    release();
+    await tick(50);
+    expect(titles(view.container)).toEqual(['Cal', 'Stripe']);
+  });
+
+  it('T4.14 a re-list that fails keeps the cards; a first load that fails says so until one works', async () => {
+    await seed();
+    const view = render(<Library />);
+    await waitFor(() => expect(titles(view.container)).toHaveLength(3));
+    list.impl = () => Promise.reject(new DOMException('closed', 'DatabaseClosedError'));
+    notifyLibraryChanged();
+    await tick(250);
+    expect(titles(view.container)).toHaveLength(3);
+    expect(within(view.container).queryByRole('alert')).toBeNull();
+    view.unmount();
+
+    const again = render(<Library />);
+    await waitFor(() =>
+      expect(within(again.container).getByRole('alert').textContent).toMatch(/unavailable/),
+    );
+    list.impl = null;
+    notifyLibraryChanged();
+    await waitFor(() => expect(titles(again.container)).toHaveLength(3));
+    expect(within(again.container).queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Compose while another window deletes (component, SPC-43)', () => {
+  async function openCompose() {
+    await saveScan(scanOf('1', { title: 'Stripe' }), null);
+    await saveScan(scanOf('2', { title: 'Linear' }), null);
+    await saveScan(scanOf('3', { title: 'Cal' }), null);
+    await tick();
+    const view = render(<Library />);
+    await waitFor(() =>
+      expect(within(view.container).getAllByTestId('library-card')).toHaveLength(3),
+    );
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Compose' }));
+    const select = (f: string) =>
+      view.container.querySelector(`#compose-${f}`) as HTMLSelectElement;
+    return { view, select };
+  }
+
+  it('T4.14 a picked scan deleted elsewhere falls back to the base, says so, and is not saved as a source', async () => {
+    const { view, select } = await openCompose();
+    const base = select('base').value;
+    const other = ['1', '2', '3'].find((id) => id !== base) as string;
+    fireEvent.change(select('colors'), { target: { value: other } });
+    expect(select('colors').value).toBe(other);
+    await deleteScans([other]);
+    await waitFor(() =>
+      expect(within(view.container).getByRole('status').textContent).toMatch(
+        /deleted in another window/,
+      ),
+    );
+    expect(select('colors').value).toBe(base);
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect(await db.composes.count()).toBe(1));
+    const [row] = await db.composes.toArray();
+    expect(Object.values(row?.sources ?? {})).not.toContain(other);
+  });
+
+  it('T4.14 a base deleted elsewhere moves to a scan that is left; the preview and Save stay', async () => {
+    const { view, select } = await openCompose();
+    const base = select('base').value;
+    await deleteScans([base]);
+    await waitFor(() =>
+      expect(within(view.container).getByRole('status').textContent).toMatch(
+        /deleted in another window/,
+      ),
+    );
+    const now = select('base').value;
+    expect(now).not.toBe(base);
+    expect(['1', '2', '3']).toContain(now);
+    expect(
+      (within(view.container).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });

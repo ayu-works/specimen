@@ -20,6 +20,7 @@ import { Compose } from './Compose';
 import { ScanCard } from './ScanCard';
 
 const KEY_CAP_ASKED = 'settings.libraryCapAsked';
+const UNAVAILABLE = 'The Library is unavailable in this browser profile.';
 
 async function capAlreadyAsked(): Promise<boolean> {
   try {
@@ -47,6 +48,10 @@ export function Library() {
 
   /** Bumped by each re-list: only the newest one applies, so overlapping re-lists can't land out of order. */
   const generation = useRef(0);
+  /** The object URL of each shown thumbnail. A scan's thumbnail never changes under its id, so a re-list keeps it. */
+  const urls = useRef(new Map<string, string>());
+  /** A list was shown once: a later re-list that fails keeps it instead of emptying the Library. */
+  const loaded = useRef(false);
 
   const reload = useCallback(async () => {
     const gen = ++generation.current;
@@ -54,16 +59,19 @@ export function Library() {
       const [list, blobs] = await Promise.all([listScans(), thumbBlobs()]);
       // Superseded before any object URL was made, so there is nothing to revoke.
       if (gen !== generation.current) return;
+      const next = new Map<string, string>();
+      for (const [id, b] of blobs) next.set(id, urls.current.get(id) ?? URL.createObjectURL(b));
+      for (const [id, u] of urls.current) if (!next.has(id)) URL.revokeObjectURL(u);
+      urls.current = next;
+      loaded.current = true;
       setScans(list);
-      setThumbs((old) => {
-        for (const u of old.values()) URL.revokeObjectURL(u);
-        return new Map([...blobs].map(([id, b]) => [id, URL.createObjectURL(b)]));
-      });
+      setThumbs(next);
       setSelected((sel) => new Set([...sel].filter((id) => list.some((s) => s.id === id))));
+      setError((e) => (e === UNAVAILABLE ? null : e));
     } catch {
-      if (gen !== generation.current) return;
+      if (gen !== generation.current || loaded.current) return;
       setScans([]);
-      setError('The Library is unavailable in this browser profile.');
+      setError(UNAVAILABLE);
     }
   }, []);
 
@@ -84,11 +92,10 @@ export function Library() {
   }, [reload]);
 
   // Release object URLs on unmount.
-  const thumbsRef = useRef(thumbs);
-  thumbsRef.current = thumbs;
   useEffect(
     () => () => {
-      for (const u of thumbsRef.current.values()) URL.revokeObjectURL(u);
+      for (const u of urls.current.values()) URL.revokeObjectURL(u);
+      urls.current = new Map();
     },
     [],
   );

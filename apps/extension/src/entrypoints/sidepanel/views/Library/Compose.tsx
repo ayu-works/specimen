@@ -1,7 +1,7 @@
 import { compose, FACET_LABELS, FACETS, type Facet } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
 import { ArrowLeft } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -60,8 +60,25 @@ export function Compose({
   const { openScan, setTab } = useStore();
   const [baseId, setBaseId] = useState(initialBase ?? scans[0]?.id ?? '');
   const [picks, setPicks] = useState<Partial<Record<Facet, string>>>({});
+  const [note, setNote] = useState<string | null>(null);
   const byId = useMemo(() => new Map(scans.map((s) => [s.id, s])), [scans]);
   const base = byId.get(baseId);
+
+  // Another window deleted a scan picked here: fall back to what is left, and say so.
+  useEffect(() => {
+    let dropped = false;
+    const first = scans[0];
+    if (baseId && !byId.has(baseId) && first) {
+      setBaseId(first.id);
+      dropped = true;
+    }
+    const gone = FACETS.filter((f) => picks[f] !== undefined && !byId.has(picks[f] as string));
+    if (gone.length > 0) {
+      setPicks((p) => Object.fromEntries(Object.entries(p).filter(([, id]) => id && byId.has(id))));
+      dropped = true;
+    }
+    if (dropped) setNote('A scan you picked was deleted in another window.');
+  }, [byId, baseId, picks, scans]);
 
   const result = useMemo(() => {
     if (!base) return null;
@@ -124,6 +141,7 @@ export function Compose({
           onChange={(v) => {
             setBaseId(v);
             setPicks({});
+            setNote(null);
           }}
         />
         <div className="my-0.5 border-t border-border" />
@@ -134,10 +152,18 @@ export function Compose({
             name={FACET_LABELS[f]}
             value={picks[f] ?? baseId}
             scans={scans}
-            onChange={(v) => setPicks((p) => ({ ...p, [f]: v === baseId ? undefined : v }))}
+            onChange={(v) => {
+              setPicks((p) => ({ ...p, [f]: v === baseId ? undefined : v }));
+              setNote(null);
+            }}
           />
         ))}
       </Card>
+      {note && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {note}
+        </p>
+      )}
       {result?.error && (
         <p role="alert" className="rounded-md border border-destructive/40 p-2 text-destructive">
           Could not mix these: {result.error}
