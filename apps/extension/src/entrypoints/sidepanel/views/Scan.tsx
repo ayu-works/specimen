@@ -217,6 +217,8 @@ export function Scan() {
   }, [scanId]);
 
   const scanning = status === 'scanning';
+  // A failed scan keeps the last one in the store (Generate and Inspect still use it): say it is that one.
+  const stale = status === 'error' && !!scan;
   return (
     <div className="flex flex-col gap-3">
       {!scan && (
@@ -256,11 +258,23 @@ export function Scan() {
           className="flex items-start gap-2 rounded-md border border-destructive/40 p-2 text-destructive"
         >
           {scan && <Mascot size={32} mood="sad" />}
-          <span className="min-w-0">{error}</span>
+          <span className="min-w-0">
+            {error}
+            {stale && ' The card below is your previous scan.'}
+          </span>
         </div>
       )}
       {scan && (
-        <Card className="flex flex-col gap-2.5" data-testid="scan-result">
+        <Card
+          className={`flex flex-col gap-2.5${stale ? ' opacity-70' : ''}`}
+          data-testid="scan-result"
+          data-stale={stale ? 'true' : undefined}
+        >
+          {stale && (
+            <p role="note" data-testid="previous-scan" className="text-xs font-medium">
+              Previous scan, not this page.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {/* Only a brief reaction: at rest the favicon alone identifies the scan. */}
             {(scanning || cheer) && (
@@ -313,7 +327,7 @@ export function Scan() {
               Inspect
             </Button>
             <Button variant="outline" onClick={run} disabled={scanning}>
-              {scanning ? 'Scanning…' : 'Re-scan'}
+              {scanning ? 'Scanning…' : stale ? 'Scan this page' : 'Re-scan'}
             </Button>
           </div>
         </Card>
