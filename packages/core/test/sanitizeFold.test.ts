@@ -57,6 +57,20 @@ describe('ethics guardrail: Unicode folding (SPC-31)', () => {
     expect(sanitize('by Fintrix today', on('example.org', 'ﬁntrix'))).toBe('by today');
   });
 
+  it('T2.03 invisible format characters never split a brand (lens A M1)', () => {
+    const scan = on('example.org', 'Zentrix');
+    for (const t of ['Zen\u200btrix', 'Zen\u00adtrix', 'Zen\u2060trix', 'Zen\u200dtrix']) {
+      expect(sanitize(`by ${t} today`, scan), JSON.stringify(t)).toBe('by today');
+    }
+    expect(sanitize('by Zentrix today', on('example.org', 'Zen\u00adtrix'))).toBe('by today');
+    expect(containsBrand('--zen\u200btrix-blue', ['zentrix'])).toBe(true);
+    // A ZWJ emoji sequence next to a brand stays whole; only width-0 characters inside the cut go.
+    const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}';
+    expect(sanitize(`Zentrix${family} here`, scan)).toBe(`${family} here`);
+    expect(sanitize(`${family}Zentrix here`, scan)).toBe(`${family} here`);
+    expect(sanitize(`soft\u00adware ${family}`, scan)).toBe(`soft\u00adware ${family}`);
+  });
+
   it('T2.03 removal takes exactly the original characters', () => {
     const scan = on('zentrix.com', 'Untitled');
     expect(sanitize('Café Zéntrix-blue look', scan)).toBe('Café -blue look');

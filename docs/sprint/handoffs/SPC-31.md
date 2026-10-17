@@ -96,8 +96,11 @@ the key choice: the existing case-sensitive camel/acronym/digit-hump boundaries,
   homoglyphs out of scope, stated in the PR body. (d) host matching stays ASCII; IDN title test added.
 - `docs/TESTING.md` T2.03 and T3.22 rows extended. `pnpm gate` green.
 
+- Lens A r1 (pe-b2): APPROVED, 1 MEDIUM folded. M1: `\p{Cf}` format chars (soft hyphen, ZWSP, word joiner, ZWJ)
+  now fold to width 0 like marks; tests for text, title, `containsBrand`, and ZWJ emoji next to a brand.
+
 ## Next
-- PE lens A + lens B reviews; fold findings.
+- Lens B review; fold findings.
 
 ## How to resume
 Read this file, `packages/core/src/generate/sanitize.ts`, `packages/core/test/sanitizeFold.test.ts`.

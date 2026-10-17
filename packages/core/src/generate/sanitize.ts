@@ -26,7 +26,7 @@ export function isStopWord(w: string): boolean {
 }
 
 // Unicode folding (SPC-31). Brands and text are both matched on a "skeleton": per code point NFKD
-// with combining marks dropped, plus the full case folds NFKD lacks. Case is kept, so the case
+// with combining marks and format characters (\p{Cf}) dropped, plus the full case folds NFKD lacks. Case is kept, so the case
 // boundaries below still work: `ZÉNTRIXBlue` → `ZENTRIXBlue`, `Straße` → `Strasse`, `İ` → `I`,
 // `Ｚｅｎ` → `Zen`, `ﬁ` → `fi`. Cross-script look-alikes (Cyrillic `е`) are not folded.
 const FOLD_EXTRA: Record<string, string> = { ß: 'ss', ẞ: 'SS', ς: 'σ', ı: 'i' };
@@ -40,7 +40,8 @@ function foldChar(c: string): string {
   if (extra !== undefined) return extra;
   let f = FOLDS.get(c);
   if (f === undefined) {
-    f = c.normalize('NFKD').replace(/\p{M}/gu, '');
+    // Marks and invisible format characters (soft hyphen, zero-width space, joiners) have width 0.
+    f = c.normalize('NFKD').replace(/[\p{M}\p{Cf}]/gu, '');
     if (FOLDS.size >= FOLDS_MAX) FOLDS.clear();
     FOLDS.set(c, f);
   }
