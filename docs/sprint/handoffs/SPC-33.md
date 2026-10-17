@@ -92,7 +92,10 @@ fail-closed vibe code is what I edit), and rebase onto `main` once #33 merges; t
   chatScrub, not this PR); check-ids --all passes.
 
 ## Next
-- PR open → reviews (PE lens A + lens B) → fold findings.
+- Lens A r1 (pe-8a): APPROVED, 0C/0H/0M, 1 optional LOW (L1: a save error is lost if Inspect unmounts during the
+  one IndexedDB write). Not folded: the fix moves the error into `store.ts`, outside this PR's files, for a ms-wide
+  window; the orchestrator can ask for it.
+- Waiting on lens B; fold its findings.
 
 ## How to resume
 - Worktree as above; read this file and the PR's reviews under `docs/sprint/reviews/SPC-33-*`.
