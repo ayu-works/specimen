@@ -75,6 +75,16 @@ mode). So no adapter change or SPC-46 seam is needed. The only gap is local Gemm
   by `ctl.signal.aborted`; muted "Stopped." line; history via `askHistory`), tests in `test/ask.test.tsx` (2 new)
   and `test/askHistory.test.ts` (3), T3.12 row extended. The new Ask tests fail against the old `Ask.tsx`.
 - `pnpm gate` green 2026-10-17 (gitleaks skipped locally; CI scans).
+- Lens A r1 (pe-b2): APPROVED, 0 findings.
+- Lens B r1 folded (0C/0H/2M/2L, all fixed):
+  - M1: what's in flight lives at module level (`inFlight` + `useSyncExternalStore`), so a remounted Ask shows Stop
+    and blocks Send. `setLast` patches the index captured at submit, not "the last message".
+  - M2: history keeps the question and replays a fixed stub (`STOPPED_STUB` / `NO_ANSWER_STUB`) instead of the half
+    answer, so "shorter" / "try again" after a Stop or error still has context. This changes the plan's
+    "drop the pair" rule, so pe-b2 checks it in the fold check.
+  - L1: "…" shows only for the answer in flight. An empty reply gets `NO_ANSWER_TEXT`, and a saved empty answer with
+    no error shows "No answer.".
+  - L2: an `aborted` error the user didn't start shows "The answer was interrupted. Try again.".
 
 ## Next / resume
-- PR #53 open against `exec/spc-41`. Lens A r1: APPROVED, 0 findings. Waiting for lens B. L4 is SPC-54.
+- Lens B r1 folded and pushed; waiting for pe-b2's fold check. L4 is SPC-54.

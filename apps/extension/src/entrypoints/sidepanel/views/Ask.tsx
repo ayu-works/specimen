@@ -1,6 +1,6 @@
 import { ask } from '@specimen/ai';
 import { Send, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Mascot } from '@/components/Mascot';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -17,14 +17,32 @@ const STARTERS = [
   'How would I adapt this for a mobile app?',
 ];
 
-/** Streams keep running if the tab is switched; the store holds the text. One at a time. */
+export const NO_ANSWER_TEXT = 'No answer came back. Try again.';
+const INTERRUPTED_TEXT = 'The answer was interrupted. Try again.';
+
+/**
+ * Streams keep running if the tab is switched; the store holds the text. One at a time. What is in
+ * flight lives here, not in component state, so a remounted Ask still shows Stop and blocks Send.
+ */
 let controller: AbortController | null = null;
+let inFlight: { scanId: string; at: number } | null = null;
+const listeners = new Set<() => void>();
+function setInFlight(next: typeof inFlight): void {
+  inFlight = next;
+  for (const l of listeners) l();
+}
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => listeners.delete(l);
+};
+const useInFlight = () => useSyncExternalStore(subscribe, () => inFlight);
 
 export function Ask() {
   const { scan, chats, setChat, setTab } = useStore();
   const ai = useAiContext();
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
+  const running = useInFlight();
+  const busy = running !== null;
   const bottom = useRef<HTMLDivElement>(null);
   const messages = scan ? (chats[scan.id] ?? []) : [];
 
@@ -79,36 +97,40 @@ export function Ask() {
     const question = text.trim();
     if (!question || busy) return;
     setInput('');
-    setBusy(true);
     const history = askHistory(chats[scanId] ?? []);
-    setChat(scanId, (p) => [
-      ...p,
-      { role: 'user', content: question },
-      { role: 'assistant', content: '' },
-    ]);
+    let at = -1;
+    setChat(scanId, (p) => {
+      at = p.length + 1;
+      return [...p, { role: 'user', content: question }, { role: 'assistant', content: '' }];
+    });
+    // Patch this question's own answer, never "the last message" (a later one may follow it).
     const setLast = (patch: { content?: string; error?: string }) =>
-      setChat(scanId, (p) => p.map((m, i) => (i === p.length - 1 ? { ...m, ...patch } : m)));
+      setChat(scanId, (p) => p.map((m, i) => (i === at ? { ...m, ...patch } : m)));
     const ctl = new AbortController();
     controller = ctl;
+    setInFlight({ scanId, at });
     try {
       if (!scan) return;
       const final = await ask(provider, scan, question, history, {
         signal: ctl.signal,
         onText: (t) => setLast({ content: t }),
       });
-      setLast({ content: final });
+      setLast(final ? { content: final } : { content: '', error: NO_ANSWER_TEXT });
     } catch (e) {
       // Stopped by the user, however the abort surfaced: marked, so it is never replayed as whole.
+      const kind = (e as { kind?: string } | null)?.kind;
       setLast({
         error: ctl.signal.aborted
           ? STOPPED_TEXT
-          : e instanceof Error
-            ? e.message
-            : 'Something went wrong.',
+          : kind === 'aborted'
+            ? INTERRUPTED_TEXT
+            : e instanceof Error
+              ? e.message
+              : 'Something went wrong.',
       });
     } finally {
-      controller = null;
-      setBusy(false);
+      if (controller === ctl) controller = null;
+      setInFlight(null);
       void saveChat(scanId, useStore.getState().chats[scanId] ?? []);
     }
   }
@@ -158,10 +180,13 @@ export function Ask() {
               </>
             ) : m.content ? (
               m.content
-            ) : (
+            ) : running?.scanId === scan.id && running.at === i ? (
               <span className="flex items-center gap-2">
                 <Mascot size={32} mood="thinking" bounce />…
               </span>
+            ) : (
+              // An empty answer saved before SPC-42 (or with no request running): never an endless "…".
+              <span className="text-muted-foreground text-xs">No answer.</span>
             )}
           </div>
         ))}
