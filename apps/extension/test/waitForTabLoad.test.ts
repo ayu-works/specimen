@@ -9,7 +9,10 @@ const ID = 5;
 const PAGE = 'https://example.test/';
 
 /** A local `chrome.tabs` stub: `get` answers from a queue (the last answer repeats). */
-function stubTabs(answers: Array<Tab | Error>, opts: { onAdd?: (fire: Updated) => void } = {}) {
+function stubTabs(
+  answers: Array<Tab | Error>,
+  opts: { onAdd?: (fire: Updated) => void; hostAccess?: boolean } = {},
+) {
   const updated = new Set<Updated>();
   const removed = new Set<Removed>();
   const queue = [...answers];
@@ -21,7 +24,9 @@ function stubTabs(answers: Array<Tab | Error>, opts: { onAdd?: (fire: Updated) =
   const fireUpdated: Updated = (tabId, info, tab) => {
     for (const l of [...updated]) l(tabId, info, tab);
   };
+  const contains = vi.fn(async () => opts.hostAccess ?? false);
   vi.stubGlobal('chrome', {
+    permissions: { contains },
     tabs: {
       get,
       onUpdated: {
@@ -39,6 +44,7 @@ function stubTabs(answers: Array<Tab | Error>, opts: { onAdd?: (fire: Updated) =
   });
   return {
     get,
+    contains,
     fireUpdated,
     fireRemoved: (tabId: number) => {
       for (const l of [...removed]) l(tabId);
@@ -80,12 +86,16 @@ describe('waitForTabLoad (SPC-28)', () => {
     expect(t.listeners()).toBe(0);
   });
 
-  it('T5.12 complete while the listener attaches (the read is stale): resolves once', async () => {
-    const t = stubTabs([loading], {
-      // Chrome dispatches events asynchronously: this lands before the read answers.
-      onAdd: (fire) => queueMicrotask(() => fire(ID, { status: 'complete' }, complete)),
-    });
-    const s = track(waitForTabLoad(ID));
+  it('T5.12 event and read race: settles once, no further reads', async () => {
+    let answer: ((t: Tab) => void) | undefined;
+    const t = stubTabs([loading]);
+    t.get.mockImplementationOnce(() => new Promise<Tab>((r) => (answer = r)));
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.get).toHaveBeenCalledTimes(1);
+    // The event lands while the first read is in flight; that read then answers a stale 'loading'.
+    t.fireUpdated(ID, { status: 'complete' }, complete);
+    answer?.(loading);
     await vi.advanceTimersByTimeAsync(0);
     expect(s.state).toBe('resolved');
     expect(t.listeners()).toBe(0);
@@ -93,10 +103,20 @@ describe('waitForTabLoad (SPC-28)', () => {
     expect(t.get).toHaveBeenCalledTimes(1);
   });
 
+  it('T5.12 an event before the host-access answer is left to the read that follows', async () => {
+    const t = stubTabs([complete], {
+      onAdd: (fire) => queueMicrotask(() => fire(ID, { status: 'complete' }, complete)),
+    });
+    const s = track(waitForTabLoad(ID, { url: PAGE }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.state).toBe('resolved');
+    expect(t.get).toHaveBeenCalledTimes(1);
+  });
+
   it('T5.12 complete event lost (SPC-25): a later re-read resolves it', async () => {
     // The event never reaches the listener; the first read is still loading.
     const t = stubTabs([loading, complete]);
-    const s = track(waitForTabLoad(ID, 30000, 500));
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
     await vi.advanceTimersByTimeAsync(0);
     expect(s.state).toBe('pending');
     await vi.advanceTimersByTimeAsync(500);
@@ -132,7 +152,7 @@ describe('waitForTabLoad (SPC-28)', () => {
   it('T5.12 the initial about:blank (or a pending navigation) is not the loaded page', async () => {
     const blank: Tab = { id: ID, status: 'complete', url: 'about:blank', pendingUrl: PAGE };
     const t = stubTabs([blank, { ...complete, pendingUrl: PAGE }, complete]);
-    const s = track(waitForTabLoad(ID, 30000, 500));
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
     t.fireUpdated(ID, { status: 'complete' }, { id: ID, status: 'complete', url: 'about:blank' });
     await vi.advanceTimersByTimeAsync(500);
     expect(s.state).toBe('pending');
@@ -141,16 +161,87 @@ describe('waitForTabLoad (SPC-28)', () => {
     expect(t.get).toHaveBeenCalledTimes(3);
   });
 
-  it('T5.12 a url Chrome hides (no host access) still counts as loaded', async () => {
-    stubTabs([{ id: ID, status: 'complete' }]);
-    const s = track(waitForTabLoad(ID));
+  it('T5.12 a complete event for a pending navigation is ignored; the read then resolves', async () => {
+    const t = stubTabs([loading, complete], {
+      onAdd: (fire) =>
+        queueMicrotask(() =>
+          fire(ID, { status: 'complete' }, { id: ID, status: 'complete', pendingUrl: PAGE }),
+        ),
+    });
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('resolved');
+    expect(t.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('T5.12 with host access, a hidden url is the initial about:blank (no tabs permission)', async () => {
+    // Real shapes: Chrome hides about:blank's url from us, never shows 'about:blank'.
+    const t = stubTabs(
+      [{ id: ID, status: 'complete', pendingUrl: PAGE }, { id: ID, status: 'complete' }, complete],
+      { hostAccess: true },
+    );
+    const s = track(waitForTabLoad(ID, { url: PAGE, recheckMs: 500 }));
+    t.fireUpdated(ID, { status: 'complete' }, { id: ID, status: 'complete' });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('resolved');
+    expect(t.get).toHaveBeenCalledTimes(3);
+    expect(t.contains).toHaveBeenCalledWith({ origins: ['https://example.test/*'] });
+  });
+
+  it('T5.12 without the host-access answer, a seen pendingUrl still marks a hidden url as blank', async () => {
+    const t = stubTabs([
+      { id: ID, status: 'loading', pendingUrl: PAGE },
+      { id: ID, status: 'complete' },
+      complete,
+    ]);
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('resolved');
+    expect(t.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('T5.12 a navigation that leaves the tab blank (a download) fails fast, clearly', async () => {
+    const pending: Tab = { id: ID, status: 'loading', pendingUrl: PAGE };
+    const t = stubTabs([pending, { id: ID, status: 'complete' }], { hostAccess: true });
+    const s = track(waitForTabLoad(ID, { url: PAGE, recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(s.state).toBe('rejected');
+    expect(t.get).toHaveBeenCalledTimes(5);
+    expect(t.listeners()).toBe(0);
+    expect(friendlyScanError(s.error?.message ?? '')).toBe(
+      "This address didn't open a page (it may be a download). Check the link and try again.",
+    );
+  });
+
+  it('T5.12 a blank tab before any pending navigation is waited on, not called abandoned', async () => {
+    const t = stubTabs([{ id: ID, status: 'complete' }], { hostAccess: true });
+    const s = track(waitForTabLoad(ID, { url: PAGE, timeoutMs: 10000, recheckMs: 500 }));
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(s.state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.error?.message).toBe('The page took too long to load');
+    expect(t.listeners()).toBe(0);
+  });
+
+  it('T5.12 a url Chrome always hides (no host access) still counts as loaded', async () => {
+    const t = stubTabs([{ id: ID, status: 'complete' }]);
+    const s = track(waitForTabLoad(ID, { url: PAGE }));
     await vi.advanceTimersByTimeAsync(0);
     expect(s.state).toBe('resolved');
+    expect(t.contains).toHaveBeenCalledTimes(1);
   });
 
   it('T5.12 timeout: rejects with a clear error, then reads and listens no more', async () => {
     const t = stubTabs([loading]);
-    const s = track(waitForTabLoad(ID, 3000, 500));
+    const s = track(waitForTabLoad(ID, { timeoutMs: 3000, recheckMs: 500 }));
     await vi.advanceTimersByTimeAsync(3000);
     expect(s.state).toBe('rejected');
     expect(s.error?.message).toBe('The page took too long to load');
@@ -167,7 +258,7 @@ describe('waitForTabLoad (SPC-28)', () => {
     let answer: ((t: Tab) => void) | undefined;
     const t = stubTabs([loading]);
     t.get.mockImplementationOnce(() => new Promise<Tab>((r) => (answer = r)));
-    const s = track(waitForTabLoad(ID, 30000, 500));
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
     await vi.advanceTimersByTimeAsync(5000);
     expect(t.get).toHaveBeenCalledTimes(1);
     answer?.(loading);
@@ -197,7 +288,7 @@ describe('waitForTabLoad (SPC-28)', () => {
 
   it('T5.12 a passing read failure is retried, then the load resolves', async () => {
     const t = stubTabs([new Error('Tabs cannot be edited right now'), complete]);
-    const s = track(waitForTabLoad(ID, 30000, 500));
+    const s = track(waitForTabLoad(ID, { recheckMs: 500 }));
     await vi.advanceTimersByTimeAsync(0);
     expect(s.state).toBe('pending');
     await vi.advanceTimersByTimeAsync(500);

@@ -99,10 +99,29 @@ the event. One check can't close that gap; checking again later does. Also: a `t
 - `pnpm gate` green 2026-10-17 (gitleaks not installed locally; CI runs it). check-ids: 113 IDs present.
 
 - PR #39 opened; link commented on SPC-28. Lens A r1 (pe-4d, `docs/sprint/reviews/SPC-28-a-r1.md`): APPROVED, 0 findings.
-  Its note (rescanUrl leaves its tab open on failure) is existing behaviour, a possible follow-up for the orchestrator.
+  Its note (rescanUrl leaves its tab open on failure) is existing behaviour; filed by the orchestrator as SPC-45 (out of scope for #39).
+
+- Lens B r1 (`docs/sprint/reviews/SPC-28-b-r1.md`, 0C/0H/2M/3L), folded:
+  - **M1** (the about:blank guard was a no-op: without `tabs`, Chrome hides about:blank's url): callers pass the
+    target `url`. If `permissions.contains` says we can see its origin, or a read has shown a `pendingUrl`/real url,
+    a hidden url means still blank. Otherwise (url always hidden) `complete` is trusted as on main. Events are
+    ignored until that answer, and the read right after it covers them. The mobile test rig's popup tab now has
+    `url: PAGE`, since the rig reports host access and real Chrome then shows the url.
+  - **M2** T5.03 `--repeat-each=20` (2026-10-17, local macOS): `pnpm build && pnpm e2e -g "T5.03" --repeat-each=20`
+    → **20 passed** on the M1 fold; with a temporary `await sleep(1000)` after `rememberMobileWindow` → **20 passed**
+    (reverted, `grep TEMP` = 0); after the L1 fold → **20 passed**. Not CI or CPU-throttled: the PR's CI run is the
+    next evidence.
+  - **L1** folded: after a `pendingUrl` was seen, 4 reads (~2 s) of `complete` that still aren't loaded → "The
+    address did not open a page" → "This address didn't open a page (it may be a download). Check the link and try
+    again." A blank tab before any pending navigation still waits (it's the M1 case, not abandoned).
+  - **L2 out of scope** (it changes what the timeout means: resolve on a committed but still-loading page). It's
+    pre-existing, so it's a follow-up candidate for the orchestrator.
+  - **L3** folded: the "during" test is now "event and read race" (the event lands while the read is in flight,
+    then the read answers a stale `loading`), plus a test for a `complete` event whose tab still has `pendingUrl`.
+  - T5.12 now has 17 tests; 10 of the 14 before L1 failed on main's `scanFlow.ts`.
 
 ## Next
-- Lens B review → fold findings.
+- Fold check by the PE (pe-b2) → owner merge decision.
 
 ## How to resume
 Read this file; branch `exec/spc-28`; plan above is the contract once approved.

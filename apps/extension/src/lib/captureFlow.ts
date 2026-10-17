@@ -233,7 +233,7 @@ export async function captureMobile(
     }
     const tabId = win.tabs?.[0]?.id;
     if (tabId === undefined) throw new Error('Could not open the mobile window');
-    await waitForTabLoad(tabId);
+    await waitForTabLoad(tabId, { url });
     await sleep(MOBILE_SETTLE_MS);
     const first = await send('scan.run', {
       tabId,
