@@ -1,6 +1,6 @@
 import { computeA11y } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
-import { mapThrown, TRUNCATED_TEXT } from '../errors';
+import { mapThrown, OUT_OF_CREDIT_TEXT, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, LLMProvider, ProviderErrorKind } from '../types';
 import { safe, safeStream } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
@@ -641,6 +641,8 @@ async function runTurn(
         continue;
       }
       if (err.message === TRUNCATED_TEXT) return fail(CRITIQUE_TRUNCATED);
+      // Fixed text of ours, and not a 'rate' kind, so it was never retried above.
+      if (err.message === OUT_OF_CREDIT_TEXT) return fail(OUT_OF_CREDIT_TEXT);
       return fail(CRITIQUE_ERRORS[err.kind]);
     }
     turn.status = !raw.trim() ? 'empty' : !turn.content.trim() ? 'filtered' : 'done';

@@ -27,13 +27,9 @@ export default defineConfig({
       'storage',
       'offscreen',
       'unlimitedStorage',
-      // E2E build only: Playwright can't click Chrome's permission prompt, so `debugger` is
-      // pre-granted there (mobile/dark media emulation tests). Normal builds keep it optional.
-      ...(e2e ? ['debugger' as never] : []),
     ],
-    // `debugger` is requested at runtime, only when the user turns on dark-mode capture.
-    // (WXT's type list lacks it, though Chrome accepts it as an optional permission.)
-    optional_permissions: (e2e ? [] : ['debugger']) as never[],
+    // No `debugger` (SPC-44): Chrome can't grant it as an optional permission, and mobile and
+    // dark/light capture work without it. The e2e build declares the same permissions.
     optional_host_permissions: ['<all_urls>'],
     ...(e2e ? { host_permissions: ['<all_urls>'] } : {}),
     icons: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png', 128: 'icon/128.png' },

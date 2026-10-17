@@ -17,22 +17,36 @@ let latestRun = 0;
 let running: Promise<void> | null = null;
 /** Library writes in order, so an older run's save never lands after a newer one's. */
 let saves: Promise<void> = Promise.resolve();
+/** The latest run's error, so a card remounted after a tab switch still shows it. */
+let lastErr: { scanId: string; text: string } | null = null;
+/** Mounted cards; with none, an error is only seen as a toast. */
+let mounted = 0;
+
+/** Stall timeouts, as in the council: to the first text, then between pieces of text. */
+export const VIBE_TIMEOUT_MS = 120_000;
+export const VIBE_GAP_MS = 30_000;
+export const VIBE_TIMEOUT_TEXT =
+  'No answer from the model (it may be busy or still loading). Try again in a moment.';
 
 /** "Describe the vibe": vision providers only; the result feeds the prompt's visual direction. */
 export function VibeCard() {
   const { scan, screenshot, setVibe } = useStore();
   const ai = useAiContext();
   const [busy, setBusy] = useState(running !== null);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState(lastErr);
   const [note, setNote] = useState('');
   const [saveErr, setSaveErr] = useState<{ scanId: string; text: string } | null>(null);
   useEffect(() => {
     let live = true;
+    mounted++;
     void running?.then(() => {
-      if (live) setBusy(false);
+      if (!live) return;
+      setBusy(false);
+      setErr(lastErr);
     });
     return () => {
       live = false;
+      mounted--;
     };
   }, []);
   if (!scan) return null;
@@ -45,22 +59,63 @@ export function VibeCard() {
     const id = ++latestRun;
     const shown = () => latestRun === id && useStore.getState().scan?.id === scan.id;
     setBusy(true);
-    setErr('');
+    lastErr = null;
+    setErr(null);
     setNote('');
     setSaveErr(null);
-    const call = vibe(provider, scan, screenshot);
-    running = call.then(
-      () => {},
-      () => {},
-    );
+    // A provider that never settles must not keep the card busy: give up when no text arrives for
+    // a while, abort the call, and never read its result (a late reply is neither shown nor saved).
+    const ctl = new AbortController();
+    const timeout = new Error(VIBE_TIMEOUT_TEXT);
+    let fail: (e: Error) => void = () => {};
+    const stalled = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    const arm = (ms: number) => {
+      if (settled) return; // a late reply's text never re-arms a finished run
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        fail(timeout); // settles the race now; a provider's own abort error arrives later
+        ctl.abort();
+      }, ms);
+    };
+    // Slow but streaming text (a local model on a weak GPU) keeps the run alive.
+    const watched: typeof provider = {
+      ...provider,
+      async *chat(req, signal) {
+        arm(VIBE_TIMEOUT_MS); // each call (a retry too) is a fresh request with its own wait for text
+        for await (const d of provider.chat(req, signal)) {
+          arm(VIBE_GAP_MS);
+          yield d;
+        }
+      },
+    };
+    arm(VIBE_TIMEOUT_MS);
+    const call = Promise.race([vibe(watched, scan, screenshot, ctl.signal), stalled]);
+    let finish: () => void = () => {};
+    running = new Promise<void>((r) => {
+      finish = r;
+    });
     let v: Awaited<typeof call>;
     try {
       v = await call;
     } catch (e) {
-      if (shown()) setErr(e instanceof Error ? e.message : 'Could not describe the vibe.');
+      const error = {
+        scanId: scan.id,
+        text: e instanceof Error ? e.message : 'Could not describe the vibe.',
+      };
+      if (latestRun === id) lastErr = error;
+      if (shown()) setErr(error);
+      // Nobody may be looking (a tab switch during the wait): then the toast says it.
+      if (e === timeout && (mounted === 0 || !shown())) toast(error.text);
       return;
     } finally {
+      settled = true;
+      clearTimeout(timer);
       running = null;
+      finish(); // after lastErr is set, so a remounted card reads it
       setBusy(false);
     }
     const next = { summary: v.summary, keywords: v.keywords, model: v.model };
@@ -103,7 +158,7 @@ export function VibeCard() {
           {hint}
         </button>
       )}
-      {err && <p className="text-xs text-destructive">{err}</p>}
+      {err?.scanId === scan.id && <p className="text-xs text-destructive">{err.text}</p>}
       {saveErr?.scanId === scan.id && (
         <p role="alert" className="text-xs text-destructive">
           {saveErr.text}

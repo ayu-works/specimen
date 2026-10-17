@@ -5,6 +5,7 @@
 import { filterCssVariables } from '@specimen/core';
 import { BOUNDS, cutText, type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
+import { notifyLibraryChanged } from './libraryChannel';
 
 export interface StoredScan extends DesignScan {
   tags: string[];
@@ -87,6 +88,7 @@ export async function saveScan(
     await db.scans.put(row);
     if (blob) await db.thumbs.put({ scanId: row.id, blob });
   });
+  notifyLibraryChanged();
   return row;
 }
 
@@ -195,9 +197,9 @@ export async function updateScan(
 ): Promise<void> {
   const { tags, favorite, ...data } = patch;
   await chatsReady; // a re-key may move a chat row
-  await db.transaction('rw', db.scans, db.thumbs, db.chats, async () => {
+  const written = await db.transaction('rw', db.scans, db.thumbs, db.chats, async () => {
     const row = await findRow(id);
-    if (!row) return;
+    if (!row) return false;
     // The stored row may be older (repaired on read); the patched result must meet the current schema.
     const clean = DesignScanSchema.parse({ ...migrate(row), ...data });
     await putReplacing(row.id, {
@@ -205,7 +207,9 @@ export async function updateScan(
       tags: tags ?? (Array.isArray(row.tags) ? row.tags : []),
       favorite: 'favorite' in patch ? favorite : row.favorite,
     });
+    return true;
   });
+  if (written) notifyLibraryChanged();
 }
 
 /** Replace a stored scan's data in place (merge, re-capture), keeping its tags and favorite. */
@@ -221,6 +225,7 @@ export async function replaceStoredScan(scan: DesignScan): Promise<void> {
       favorite: old?.favorite,
     });
   });
+  notifyLibraryChanged();
 }
 
 /** JSON with sorted keys, so equal scans compare equal whatever their key order. */
@@ -270,7 +275,7 @@ export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
       return { clean, key, altId };
     }),
   );
-  return db.transaction('rw', db.scans, async () => {
+  const written = await db.transaction('rw', db.scans, async () => {
     const ids = [...new Set(items.flatMap((i) => [i.clean.id, i.altId]))];
     const stored = await db.scans.bulkGet(ids);
     /** id → content key (null = a stored row that no longer reads), for rows stored or about to be. */
@@ -306,6 +311,8 @@ export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
     await db.scans.bulkAdd(rows);
     return { imported: rows.length, duplicates };
   });
+  if (written.imported > 0) notifyLibraryChanged();
+  return written;
 }
 
 export async function deleteScans(ids: string[]): Promise<void> {
@@ -314,6 +321,7 @@ export async function deleteScans(ids: string[]): Promise<void> {
     await db.thumbs.bulkDelete(ids);
     await db.chats.bulkDelete(ids);
   });
+  notifyLibraryChanged();
 }
 
 /** A saved scan's thumbnail as a data URL (for vision models), or null. */
@@ -367,4 +375,5 @@ export async function saveCompose(row: ComposeRow, composed: DesignScan): Promis
     await db.composes.put(row);
     await db.scans.put({ ...clean, tags: ['composed'] });
   });
+  notifyLibraryChanged();
 }
