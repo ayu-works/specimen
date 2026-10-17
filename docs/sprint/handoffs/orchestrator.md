@@ -6,7 +6,15 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-15 ~23:00 (CURRENT STATE: PAUSED by the owner)
+## UPDATE 2026-10-17 (CURRENT STATE: restart for a Claude Code update, then resume)
+
+- **Owner (2026-10-17): resume Sprint 3 by priority, three bugs at a time** (3 executors; owner-approved). First three: SPC-32 (lane A), SPC-18 (lane B), SPC-19 (lane C). Lanes, Owns and the next-in-line order are in plan.md "Resume 2026-10-17".
+- The owner asked to restart the PE and the orchestrator to pick up a Claude Code update. pe-99 was exited and a fresh PE launched in pane w1:pS from `docs/sprint/kickoffs/pe.md` (check that it sent "pe ready"; if not, read the pane).
+- **On restart:** ListAgents → send the PE your name. Then kick off the three executors (template: an executor kickoff names the ticket, worktree, branch exec/<ticket> from origin/main, orchestrator + PE session names, ticket-specific notes, then brief → setup → plan → Linear with all comments → `pnpm i` → plan in handoffs/<ticket>.md → PE approval → build → gate → PR). All three panes go in a new `build` tab (the old one closed when it emptied). Move SPC-32/18/19 → In Progress.
+- Ticket notes: SPC-32: fail closed on any sanitizer error (never fall back to raw text), cap/caching, a perf budget in the plan; security review on the PR. SPC-18: keep `attachLlmPort` behaviour, council tests green; security review. SPC-19: the M2 bounds are a contract (PE ruling → owner OK before building that part); L3 = store the parsed value in db.ts writers; keep `await chatsReady` and `DesignScanSchema.parse`.
+- Main is 77ac925 (#30), CI green. No open PRs. No live executors.
+
+## UPDATE 2026-10-15 ~23:00
 
 - **Sprint 3 paused after SPC-26** (owner). #30 merged 77ac925; SPC-26 Done. spc-26 pane, worktree and branch removed. pe-99 standing by (pe.md copied here).
 - Next on resume: SPC-32 (lane A, ahead of SPC-18), then SPC-18 → SPC-21; lane B SPC-19 (incl. sec M2/L1–L3; M2 bounds = contract, owner OK) → SPC-20 → SPC-28 → SPC-27.

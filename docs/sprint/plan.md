@@ -24,3 +24,13 @@ Cross-lane rules:
 
 ## Reviews
 Code PRs: PE lens A + a fresh lens B (security for 16, 17, 18; privacy for 26: what is stored). Contract changes go to the owner.
+
+## Resume 2026-10-17 (owner): by priority, three bugs at a time
+The owner approved **3 executors at once** (one more than setup.md's 2), taking tickets in priority order. First three:
+| Lane | Ticket | Main files (Owns while active) |
+|---|---|---|
+| **A** | SPC-32 long-title freeze / sanitizer fail-closed (High) | `packages/core` generate/sanitize + its callers' fallbacks (council `safe()`, Vibe) |
+| **B** | SPC-18 Gemma abort/disconnect (High) | `offscreen/llmHost.ts` (keep `attachLlmPort`; PE checks the council tests) |
+| **C** | SPC-19 import atomicity + silent save fail, plus sec M2/L1–L3 (Medium) | `lib/libraryIO.ts`, `lib/db.ts`, `scanFlow.ts`; `packages/core` schema bounds (M2 = **contract: PE ruling + owner OK** before building that part) |
+Next in priority as a slot frees: SPC-20 → SPC-28 → SPC-21 → SPC-29 → SPC-30 → SPC-31 → SPC-27. SPC-23 still held (Netlify deploy).
+Overlap watch: SPC-32 and SPC-19 both touch `packages/core` but different files (sanitize vs schema); SPC-32's council fallback vs SPC-18's llmHost are separate files.
