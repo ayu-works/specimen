@@ -125,8 +125,16 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
 - Lens A r1 (pe-b2): APPROVED, 0 C/H/M. The optional L1 is folded: the e2e T5.03 now allows ±2px between the oracle
   and the capture, and reads the card's px from the text. No re-review needed.
 
+- Lens B r1 (spc-44-93): approve once CI is green. 0 C/H, 1 M, 3 L.
+  - M1 (CI must show xvfb keeps a 390px popup ≤ 480): waiting on the `gate` check on #43. If it fails on the oracle
+    assert, keep the assert and fix the launch (window size / device scale factor), or ask the PE. Never relax it.
+  - L1 (a host that always keeps popups wide opens a useless popup on every scan): proposed to the orchestrator as a
+    follow-up ticket (a note on the `wide` row, or skip after `wide` for the session). Not in this PR.
+  - L2 folded: TESTING.md T5.03 says a local green doesn't verify mobile capture; only CI is pinned.
+  - L3 folded: `store/listing.md` says dark/light capture is "on sites with a theme switch".
+
 ## Next
-Lens B review. Fold findings as new commits.
+Confirm the CI `gate` on #43 is green (M1), then tell the lens-B reviewer.
 
 ## How to resume
 Read this file, `git log exec/spc-44`, and any `docs/sprint/reviews/SPC-44-*.md`. Worktree `worktrees/spc-44`.
