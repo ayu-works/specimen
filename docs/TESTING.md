@@ -100,9 +100,9 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | ID | Type | Test |
 |---|---|---|
 | T3.01 | U | Provider registry: register/get/list; default provider = none |
-| T3.02 | U | `openaiCompat` builds the correct request (URL, headers, body) for OpenAI, OpenRouter, Groq, Ollama presets and a custom base URL; parses SSE stream (mocked fetch) |
-| T3.03 | U | `anthropic` sends `anthropic-dangerous-direct-browser-access`, parses SSE events |
-| T3.04 | U | `gemini` uses the `x-goog-api-key` header, parses the stream |
+| T3.02 | U | `openaiCompat` builds the correct request (URL, headers, body) for OpenAI, OpenRouter, Groq, Ollama presets and a custom base URL; parses SSE stream (mocked fetch) A stream ending `finish_reason: 'length'` (in the last text's chunk or an empty-delta chunk after it) rejects with `TRUNCATED_TEXT` after the text; `'stop'` ends whole (SPC-41). |
+| T3.03 | U | `anthropic` sends `anthropic-dangerous-direct-browser-access`, parses SSE events A `stop_reason` of `max_tokens` or `model_context_window_exceeded` rejects with `TRUNCATED_TEXT` after the text; `end_turn` ends whole (SPC-41). |
+| T3.04 | U | `gemini` uses the `x-goog-api-key` header, parses the stream `finishReason: 'MAX_TOKENS'` rejects with `TRUNCATED_TEXT` after that chunk's text, once, ignoring later chunks; `STOP` ends whole (SPC-41). |
 | T3.05 | U | Error mapping: 401 → "invalid key", 429 → "rate limited", network → "offline"; every message is fixed text, and no error (message, string, stack, JSON, cause) holds any 8+ character piece of the key, for any status, body shape, mid-stream error event or thrown fetch error (adapters + `listModels`); `scrubLegacyProviderText` cleans pre-SPC-16 stored text |
 | T3.06 | U | Abort signal stops streaming in every adapter, including `chromeBuiltin` (stubbed `LanguageModel`: each `status()` state, `unsupported`, abort before and during the stream, `destroy()` once, a throwing `destroy()` never masks the result) |
 | T3.07 | U | `polishPrompt` rejects model output missing any token value and falls back to the original A rewrite cut off at the length limit keeps the original with that reason (SPC-34). |

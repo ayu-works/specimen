@@ -1,6 +1,7 @@
 import { parseDataUrl } from '../dataUrl';
-import { streamError } from '../errors';
+import { streamError, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
+import { ProviderError } from '../types';
 import { postSse, trimSlash } from './http';
 
 export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
@@ -53,7 +54,7 @@ export function createGemini(cfg: ProviderConfig): LLMProvider {
       const { url, headers, body } = buildGeminiRequest(cfg, req);
       for await (const ev of postSse(url, headers, body, signal)) {
         let json: {
-          candidates?: { content?: { parts?: { text?: unknown }[] } }[];
+          candidates?: { content?: { parts?: { text?: unknown }[] }; finishReason?: unknown }[];
           error?: unknown;
         };
         try {
@@ -65,6 +66,9 @@ export function createGemini(cfg: ProviderConfig): LLMProvider {
         for (const part of json.candidates?.[0]?.content?.parts ?? []) {
           if (typeof part.text === 'string' && part.text) yield part.text;
         }
+        // Final: the chunk's own text is out, and nothing after it is read.
+        if (json.candidates?.[0]?.finishReason === 'MAX_TOKENS')
+          throw new ProviderError('other', TRUNCATED_TEXT);
       }
     },
   };

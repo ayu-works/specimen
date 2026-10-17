@@ -7,7 +7,10 @@ export interface LLMProvider {
     detail?: string;
     progress?: number;
   }>;
-  /** Yields text deltas. */
+  /**
+   * Yields text deltas. A reply cut at the token limit throws `ProviderError('other', TRUNCATED_TEXT)`
+   * after its deltas, so callers keep the partial text but never take it as a whole reply.
+   */
   chat(req: ChatRequest, signal?: AbortSignal): AsyncIterable<string>;
 }
 
