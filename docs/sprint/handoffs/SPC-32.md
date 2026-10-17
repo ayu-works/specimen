@@ -168,6 +168,10 @@ title bound stays with SPC-19; (5) Vibe keywords are pinned as dropped when the 
   - Groups are chunked at 8k chars of source. V8's real limit is a ~32k single literal run (which `MAX_PHRASE`
     already avoids); a 150k-char alternation of 1000-char words compiled fine in a probe.
   - Accepted gap: a brand deep inside a title over 300 chars that sits outside both windows (pinned in a test).
+- Lens A APPROVED on 097ef81 (pe-8a; note committed in 32b2832). Optional LOW left open unless the orchestrator
+  or owner asks: groups run in order of their longest word, so title "Deadbeefcafe | Cafeteria | Cafe" turns
+  "cafeTeria" into "Teria" (the hex group runs before the long group's `cafeteria`).
+- State: waiting on the orchestrator (lens-B re-check if wanted) and the owner's merge decision.
 
 ## How to resume
 Read this file, `git log origin/main..`, and the review file above. `pnpm i` then `pnpm gate`.
