@@ -1,6 +1,6 @@
 import type { DesignScan } from '@specimen/core/schema';
 import { describe, expect, it } from 'vitest';
-import { TRUNCATED_TEXT } from '../errors';
+import { httpError, OUT_OF_CREDIT_TEXT, TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan, loadInjectionStrings } from '../testing/testUtils';
 import { type ChatRequest, type LLMProvider, ProviderError } from '../types';
@@ -249,6 +249,30 @@ describe('critique panel engine', () => {
     // Only the constant itself: another 'other' error keeps the generic text.
     const q = failing([new ProviderError('other', `${TRUNCATED_TEXT} (x)`)]);
     expect((await runCritique(q, scan)).error).toBe(CRITIQUE_ERRORS.other);
+  });
+
+  it('T3.21 an out-of-credit account stops the run at once with that text, no retry (SPC-30)', async () => {
+    // Driven from OpenAI's real 429 body, so a regression in httpError to 'rate' shows up here too.
+    const quota = await httpError(
+      new Response(
+        JSON.stringify({
+          error: { type: 'insufficient_quota', code: 'insufficient_quota', message: 'x' },
+        }),
+        { status: 429 },
+      ),
+    );
+    const p = failing([undefined, quota, undefined]);
+    const seen: CritiqueTurn[] = [];
+    const r = await runCritique(p, scan, {
+      retryDelaysMs: [1, 1, 1],
+      onTurn: (_i, t) => seen.push({ ...t }),
+    });
+    expect(r.status).toBe('error');
+    expect(p.calls).toHaveLength(2);
+    expect(seen.some((t) => t.status === 'retrying')).toBe(false);
+    expect(r.turns[1]?.error).toBe(OUT_OF_CREDIT_TEXT);
+    expect(r.error).toBe(OUT_OF_CREDIT_TEXT);
+    expect(r.verdict).toBeNull();
   });
 
   it('T3.21 a cut-off summary is never parsed into a verdict, even when its text would parse', async () => {

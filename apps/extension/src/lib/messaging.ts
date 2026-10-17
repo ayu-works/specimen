@@ -5,8 +5,6 @@ import type { RunStatus } from './councilProtocol';
 export interface ScanOpts {
   /** Re-sample with the page switched to this scheme through its own class/attribute switch. */
   theme?: 'dark' | 'light';
-  /** Emulate `prefers-color-scheme` via the optional `debugger` permission, then restore. */
-  emulate?: 'dark' | 'light';
   /** Skip component specs and page hints. */
   colorsOnly?: boolean;
   /** Skip only the component specs (mobile capture). */

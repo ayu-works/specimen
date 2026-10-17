@@ -4,7 +4,8 @@
  * over Port `council`. The provider config, key included, travels only in `start` and stays in
  * the host's memory for that run: it is never in a record or in any host → panel message.
  * No other extension page may read `council` Port messages: an `onConnect` listener that isn't
- * the host must ignore (or disconnect) ports named `council`, because `start` carries the key.
+ * the host must ignore ports named `council`, because `start` carries the key, and never
+ * disconnect them: in Chrome one receiver's disconnect closes the channel for the host too.
  */
 import {
   CRITIQUE_LIMITS,

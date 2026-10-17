@@ -134,8 +134,8 @@ Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpack
 Open the side panel from the toolbar icon (or press `Alt+Shift+S`). It has five tabs.
 
 1. **Scan.** Click **Scan this page**. The first scan asks for one-time access to sites (see [Permissions](#permissions)). The result shows a thumbnail and warnings. From here you can:
-   - **Also capture mobile** (on by default): re-measures the page at phone width in a small window. If Chrome keeps that window too wide, you can grant the optional `debugger` permission to emulate a 390px phone.
-   - **Dark or light mode**: if the site defines the other theme, Specimen measures it. If the site only follows your system setting, you can capture it with the optional `debugger` permission.
+   - **Also capture mobile** (on by default): re-measures the page at phone width in a small window. If Chrome keeps that window too wide (or is in full screen), nothing is stored as mobile and the card says why.
+   - **Dark or light mode**: if the site has its own theme switch, Specimen measures the other theme. If the site only follows your system setting, the card says so and the other theme is derived from the measured one.
    - **Add another page**: open a second page of the same site in your tab and merge it into the scan.
 2. **Inspect.** Palette with roles, accessibility (contrast pairs against WCAG AA), type scale, spacing, shapes (radii, shadows, borders), components and their states, and a layout blueprint. Toolbar buttons turn on a baseline **Grid** overlay, a live element **Inspect** card and an **Eyedropper** on the page.
 3. **Generate.** Pick **Prompt** or **DESIGN.md**. For the prompt, pick a target: Claude Code, Cursor, v0, Lovable or generic. Optionally include the other theme. **Copy** or **Download**.
@@ -196,7 +196,6 @@ Specimen declares no content scripts and no always-on site access.
 | `unlimitedStorage` | Library (IndexedDB) and downloaded model weights can be large. | Always. |
 | `offscreen` | Host a hidden page that runs the local Gemma model in a Web Worker. | Only when you use local Gemma. |
 | optional: all sites (`<all_urls>`) | Opening the panel from the toolbar does not grant `activeTab`, so scanning needs this. Also used for thumbnails and to read cross-origin stylesheets so measurements are complete. | One-time prompt on your first scan. You can revoke it at `chrome://extensions`. |
-| optional: `debugger` | Emulate a phone viewport or the dark color scheme. Chrome shows a "debugging this browser" bar for a few seconds. | Only when you click a capture button that needs it. |
 | optional: a provider's address | Call the API of the AI provider you configured. | When you save a key. |
 
 </details>

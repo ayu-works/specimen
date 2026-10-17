@@ -3,7 +3,10 @@ import {
   httpError,
   IMAGE_REJECTED_TEXT,
   mapThrown,
+  OUT_OF_CREDIT_TEXT,
+  RATE_TEXT,
   scrubLegacyProviderText,
+  streamError,
   TOO_LONG_TEXT,
 } from './errors';
 import { listModels } from './models';
@@ -252,6 +255,117 @@ describe('T3.05 httpError keeps classifying with fixed text', () => {
     const e = mapThrown(new Error('NotSupportedError: no model'));
     expect(e.message).toBe('NotSupportedError: no model');
     expect(e.cause).toBeInstanceOf(Error);
+  });
+});
+
+describe('T3.05 out of credit is its own fixed text, not a rate limit (SPC-30)', () => {
+  const body = (status: number, error: unknown) =>
+    new Response(JSON.stringify({ error }), { status });
+  const QUOTA_MSG = 'You exceeded your current quota, please check your plan and billing details.';
+  const OUT = { kind: 'other', message: OUT_OF_CREDIT_TEXT };
+
+  it("OpenAI's 429 insufficient_quota is out of credit, by code or by type", async () => {
+    const full = { message: QUOTA_MSG, type: 'insufficient_quota', code: 'insufficient_quota' };
+    // Exact text: the Settings Test only special-cases TRUNCATED_TEXT, so this shows as an error.
+    expect(await httpError(body(429, full))).toMatchObject(OUT);
+    expect((await httpError(body(429, full))).message).toBe(OUT_OF_CREDIT_TEXT);
+    expect(
+      await httpError(body(429, { message: QUOTA_MSG, code: 'insufficient_quota' })),
+    ).toMatchObject(OUT);
+    expect(
+      await httpError(body(429, { message: QUOTA_MSG, type: 'insufficient_quota' })),
+    ).toMatchObject(OUT);
+    expect(
+      await httpError(body(400, { message: 'x', code: 'billing_hard_limit_reached' })),
+    ).toMatchObject(OUT);
+    // No active billing (new account, card removed): OpenAI sends it as a 429 too.
+    const inactive = {
+      message: 'Your account is not active, please check your billing details on our website.',
+      type: 'billing_not_active',
+      code: 'billing_not_active',
+    };
+    expect(await httpError(body(429, inactive))).toMatchObject(OUT);
+  });
+
+  it('a gateway that flattens the error still gets out of credit by code', async () => {
+    expect(await httpError(body(429, 'insufficient_quota'))).toMatchObject(OUT);
+    const flat = new Response(JSON.stringify({ code: 'insufficient_quota', message: QUOTA_MSG }), {
+      status: 429,
+    });
+    expect(await httpError(flat)).toMatchObject(OUT);
+  });
+
+  it('a 402 is out of credit, even with an unreadable body', async () => {
+    expect(await httpError(body(402, { message: 'Insufficient Balance' }))).toMatchObject(OUT);
+    expect(await httpError(new Response('', { status: 402 }))).toMatchObject(OUT);
+    const r = new Response('x', { status: 402 });
+    vi.spyOn(r, 'text').mockRejectedValue(new Error(KEY));
+    expect(await httpError(r)).toMatchObject(OUT);
+  });
+
+  it('credit wording beats the 400/403 branches (Anthropic, xAI), checked before auth', async () => {
+    const anthropic = {
+      type: 'invalid_request_error',
+      message:
+        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.',
+    };
+    expect(await httpError(body(400, anthropic))).toMatchObject(OUT);
+    const xai = { message: "Your team doesn't have any credits yet. Purchase them first." };
+    expect(await httpError(body(403, xai))).toMatchObject(OUT);
+    // A 403 for anything else is still auth.
+    expect((await httpError(body(403, { message: 'permission denied' }))).kind).toBe('auth');
+  });
+
+  it('a plain 429 and Gemini quota 429s stay a rate limit (they clear by waiting)', async () => {
+    for (const r of [
+      new Response('', { status: 429 }),
+      body(429, {
+        message: 'Rate limit reached for gpt-4o',
+        type: 'requests',
+        code: 'rate_limit_exceeded',
+      }),
+      // Gemini's per-minute limit uses the same words as OpenAI's out-of-credit message.
+      body(429, { code: 429, status: 'RESOURCE_EXHAUSTED', message: QUOTA_MSG }),
+      body(429, {
+        code: 429,
+        status: 'RESOURCE_EXHAUSTED',
+        message:
+          'Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 50 per day',
+      }),
+    ]) {
+      expect(await httpError(r)).toMatchObject({ kind: 'rate', message: RATE_TEXT });
+    }
+  });
+
+  it('only string code/type fields count, and no body text reaches the message', async () => {
+    expect((await httpError(body(429, { code: 429, message: 'insufficient_quota' }))).kind).toBe(
+      'rate',
+    );
+    const e = await httpError(body(429, { code: 'insufficient_quota', message: `bad key ${KEY}` }));
+    expect(e.message).toBe(OUT_OF_CREDIT_TEXT);
+    expect(leaks(serialise(e))).toBe(false);
+  });
+
+  it('reaches the caller through the openaiCompat adapter unchanged', async () => {
+    stubFetch(() =>
+      body(429, { message: QUOTA_MSG, type: 'insufficient_quota', code: 'insufficient_quota' }),
+    );
+    const e = await caught(
+      failChat(() => createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: KEY })),
+    );
+    expect(e).toBeInstanceOf(ProviderError);
+    expect(e).toMatchObject(OUT);
+  });
+
+  it('a mid-stream insufficient_quota event is out of credit; a rate event stays rate', () => {
+    expect(streamError({ code: 'insufficient_quota', type: 'insufficient_quota' })).toMatchObject(
+      OUT,
+    );
+    expect(streamError({ code: 'billing_not_active' })).toMatchObject(OUT);
+    // OpenRouter reports a mid-stream error with a numeric code.
+    expect(streamError({ code: 402, message: 'Insufficient credits' })).toMatchObject(OUT);
+    expect(streamError({ type: 'rate_limit_exceeded' }).kind).toBe('rate');
+    expect(streamError({ status: 'RESOURCE_EXHAUSTED' }).kind).toBe('rate');
   });
 });
 

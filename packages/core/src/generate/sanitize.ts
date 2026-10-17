@@ -22,7 +22,44 @@ const STOP = new Set(
 );
 
 export function isStopWord(w: string): boolean {
-  return STOP.has(w.toLowerCase());
+  return STOP.has(foldText(w).toLowerCase());
+}
+
+// Unicode folding (SPC-31). Brands and text are both matched on a "skeleton": letters, digits and
+// spaces get NFKD with the generic combining diacritics (Script=Inherited) dropped, plus the full
+// case folds NFKD lacks; format characters (\p{Cf}: soft hyphen, zero-width space) are dropped. Case
+// is kept, so the case boundaries below still work: `ZÉNTRIXBlue` → `ZENTRIXBlue`, `Straße` →
+// `Strasse`, `İ` → `I`, `Ｚｅｎ` → `Zen`, `ﬁ` → `fi`. Symbols stay as they are, so `™` (NFKD `TM`) is
+// still a boundary, and script vowel signs (Devanagari `ा`, Thai) are spelling, so they stay too.
+// Cross-script look-alikes (Cyrillic `е`) are not folded.
+const FOLD_EXTRA: Record<string, string> = { ß: 'ss', ẞ: 'SS', ς: 'σ', ı: 'i' };
+const FOLDS = new Map<string, string>();
+const FOLDS_MAX = 4096;
+const NON_ASCII = /\P{ASCII}/u;
+const FOLDABLE = /[\p{L}\p{M}\p{Nd}\p{Zs}]/u;
+const DIACRITIC = /(?=\p{M})\p{Script=Inherited}/gu;
+const isMark = (c: string | undefined) => !!c && /\p{M}/u.test(c);
+
+function foldChar(c: string): string {
+  if (c.charCodeAt(0) < 0x80) return c;
+  const extra = FOLD_EXTRA[c];
+  if (extra !== undefined) return extra;
+  let f = FOLDS.get(c);
+  if (f === undefined) {
+    // Diacritics and invisible format characters have width 0.
+    f = /\p{Cf}/u.test(c) ? '' : FOLDABLE.test(c) ? c.normalize('NFKD').replace(DIACRITIC, '') : c;
+    if (FOLDS.size >= FOLDS_MAX) FOLDS.clear();
+    FOLDS.set(c, f);
+  }
+  return f;
+}
+
+/** The case-preserving skeleton of `s` (ASCII comes back as is). */
+export function foldText(s: string): string {
+  if (!NON_ASCII.test(s)) return s;
+  let out = '';
+  for (const c of s) out += foldChar(c);
+  return out;
 }
 
 /** Second-level domain (handles `co.uk`-style suffixes). */
@@ -89,7 +126,7 @@ function segmentTokens(win: string): string[] {
 /** Lower-cased brand tokens derived from the host and the page title. */
 export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] {
   const set = new Set<string>();
-  const sld = secondLevel(scan.host);
+  const sld = secondLevel(foldText(scan.host));
   if (sld.length >= 2 && sld.length <= MAX_TOKEN) set.add(sld);
   for (const piece of sld.split(/[^\p{L}\p{N}]+/u)) {
     if (isToken(piece)) set.add(piece);
@@ -101,6 +138,8 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
   const from = Math.max(0, t.length - TITLE_SCAN);
   let tail = t.slice(from);
   if (isWordChar(t[from - 1])) tail = tail.replace(/^[\p{L}\p{N}]+/u, '');
+  head = foldText(head);
+  tail = foldText(tail);
   for (const w of titleTokens(head).slice(0, MAX_TITLE_TOKENS)) set.add(w);
   if (from > 0) for (const w of titleTokens(tail).slice(-MAX_TAIL_TOKENS)) set.add(w);
   const segs = [...segmentTokens(head), ...(from > 0 ? segmentTokens(tail) : [])];
@@ -110,9 +149,10 @@ export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] 
 
 /** Case is kept: a camelCase hump (`zentrixBlue`) is a boundary, so lower-casing would hide it. */
 export function containsBrand(text: string, tokens: string[]): boolean {
+  const sk = foldText(text);
   return wordRegexes(tokens).some((re) => {
     re.lastIndex = 0; // global regexes, shared through the cache
-    return re.test(text);
+    return re.test(sk);
   });
 }
 
@@ -122,7 +162,7 @@ export function containsBrand(text: string, tokens: string[]): boolean {
  * (`hp`) need a boundary, or `--php-version` would match.
  */
 export function nameHasBrand(name: string, tokens: string[]): boolean {
-  const lower = name.toLowerCase();
+  const lower = foldText(name).toLowerCase();
   return tokens.some((b) => b.length >= 4 && lower.includes(b)) || containsBrand(name, tokens);
 }
 
@@ -191,7 +231,9 @@ const GROUPS_MAX = 64;
  * regexes are global, so callers that `.test` reset `lastIndex` first.
  */
 function wordRegexes(list: string[]): RegExp[] {
-  const ws = [...new Set(list)].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  const ws = [...new Set(list.map(foldText))].sort(
+    (a, b) => b.length - a.length || a.localeCompare(b),
+  );
   const key = ws.join('\u0000');
   const hit = GROUPS.get(key);
   if (hit) return hit;
@@ -251,7 +293,7 @@ function textPhrasesOf(scan: DesignScan): string[] {
 
 function capPhrases(phrases: string[]): string[] {
   return phrases
-    .map((p) => p.trim())
+    .map((p) => foldText(p).trim())
     .filter((p) => p.length >= 3 && p.length <= MAX_PHRASE)
     .sort((a, b) => b.length - a.length);
 }
@@ -340,23 +382,77 @@ export function sanitize(text: string, scan: DesignScan): string {
 const hostOf = (scan: DesignScan) => scan.host.toLowerCase().replace(/^www\./, '');
 
 function sanitizeWith(text: string, host: string, patterns: RegExp[]): string {
-  const out = text.split('\n').map((line) => {
-    let cur = line;
-    let hit = false;
+  const result = text
+    .split('\n')
+    .map((line) => stripLine(line, patterns))
+    .join('\n');
+
+  if (host.length >= 3 && foldText(result).toLowerCase().includes(host)) {
+    if (devMode()) throw new Error('sanitize: host still present in generated output');
+    const re = [new RegExp(esc(host), 'gi')];
+    return result
+      .split('\n')
+      .map((line) => stripLine(line, re))
+      .join('\n');
+  }
+  return result;
+}
+
+/** Removes every match of each pattern in turn (a later pattern sees the earlier cuts). */
+function stripLine(line: string, patterns: RegExp[]): string {
+  let cur = line;
+  let hit = false;
+  if (!NON_ASCII.test(line)) {
     for (const re of patterns) {
       const next = cur.replace(re, '');
       if (next !== cur) hit = true;
       cur = next;
     }
-    return hit ? cur.replace(/(\S) {2,}(?=\S)/g, '$1 ').replace(/\( +/g, '(') : cur;
-  });
-  const result = out.join('\n');
-
-  if (host.length >= 3 && result.toLowerCase().includes(host)) {
-    if (devMode()) throw new Error('sanitize: host still present in generated output');
-    return result.split(new RegExp(esc(host), 'gi')).join('');
+  } else {
+    const r = stripFolded(line, patterns);
+    hit = r !== line;
+    cur = r;
   }
-  return result;
+  return hit ? cur.replace(/(\S) {2,}(?=\S)/g, '$1 ').replace(/\( +/g, '(') : cur;
+}
+
+/**
+ * The same as the ASCII loop, but the patterns run on the line's skeleton and each match removes
+ * the original code points it came from: whole code points only (a match edge inside `ß` → `ss`
+ * takes the `ß`), and a removed letter takes its combining marks with it. Linear per pattern.
+ */
+function stripFolded(line: string, patterns: RegExp[]): string {
+  const cps = [...line];
+  const width = cps.map((c) => foldChar(c).length);
+  const gone = new Uint8Array(cps.length);
+  // Skeleton of the code points still present, and each skeleton unit's code point.
+  const build = () => {
+    let sk = '';
+    const src: number[] = [];
+    cps.forEach((c, i) => {
+      if (gone[i] || !width[i]) return;
+      sk += foldChar(c);
+      for (let k = 0; k < (width[i] ?? 0); k++) src.push(i);
+    });
+    return { sk, src };
+  };
+  let { sk, src } = build();
+  for (const re of patterns) {
+    let cut = false;
+    for (const m of sk.matchAll(re)) {
+      const end = m.index + m[0].length;
+      if (end === m.index) continue;
+      const first = src[m.index] ?? 0;
+      const last = src[end - 1] ?? first;
+      for (let i = first; i <= last; i++) gone[i] = 1;
+      // Diacritics after the cut belong to it; format characters there (a closing bidi control,
+      // a joiner) stay. Inside the cut, both go.
+      for (let i = last + 1; i < cps.length && !width[i] && isMark(cps[i]); i++) gone[i] = 1;
+      cut = true;
+    }
+    if (cut) ({ sk, src } = build());
+  }
+  return cps.filter((_, i) => !gone[i]).join('');
 }
 
 /** An open last line longer than this is re-sanitized only every `LONG_STEP` new characters. */
