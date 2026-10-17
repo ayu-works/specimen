@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   failCreate: undefined as undefined | Error,
   failDelete: undefined as undefined | Error,
   interrupts: 0,
+  /** The last fake Worker created: tests fire its `error` to simulate a crash. */
+  worker: null as null | { fire: (type: string) => void },
 }));
 
 vi.mock('@mlc-ai/web-llm', () => {
@@ -88,7 +90,7 @@ vi.mock('@mlc-ai/web-llm', () => {
 });
 vi.mock('@/lib/webllmConfig', () => ({ buildAppConfig: () => ({ model_list: [] }) }));
 
-import { DEFAULT_GEMMA } from '@/lib/gemmaModels';
+import { DEFAULT_GEMMA, GEMMA_MODELS } from '@/lib/gemmaModels';
 import { createPortPair } from '@/lib/localPort';
 
 type Host = typeof import('../../src/entrypoints/offscreen/llmHost');
@@ -101,13 +103,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * The client's view of a Port, as seen by the host. Like Chrome: `disconnect()` fires only the
  * other end's (the host's) onDisconnect, and the host's posts throw afterwards.
  */
-function makePort() {
+function makePort(senderUrl = 'chrome-extension://specimen/sidepanel.html') {
   const events: LlmEvent[] = [];
   const onMsg = new Set<(m: LlmRequest) => void>();
   const onDisc = new Set<() => void>();
   let open = true;
   const port = {
     name: 'llm',
+    sender: { url: senderUrl },
     postMessage: (e: LlmEvent) => {
       if (!open) throw new Error('Attempting to use a disconnected port object');
       events.push(e);
@@ -144,8 +147,8 @@ const ended = (id: string) => (e: LlmEvent) =>
   (e.type === 'done' || e.type === 'error') && 'id' in e && e.id === id;
 const req = (text: string) => ({ messages: [{ role: 'user' as const, content: text }] });
 
-function open(): FakePort {
-  const c = makePort();
+function open(senderUrl?: string): FakePort {
+  const c = makePort(senderUrl);
   connect(c.port);
   return c;
 }
@@ -174,17 +177,31 @@ beforeEach(async () => {
     failCreate: undefined,
     failDelete: undefined,
     interrupts: 0,
+    worker: null,
   });
   vi.stubGlobal(
     'Worker',
+    // Like the real one, terminate() settles nothing: a stream in flight stays pending for ever.
     class {
+      private ls = new Map<string, Set<() => void>>();
+      constructor() {
+        state.worker = {
+          fire: (t) => {
+            for (const cb of this.ls.get(t) ?? []) cb();
+          },
+        };
+      }
+      addEventListener(t: string, cb: () => void) {
+        if (!this.ls.has(t)) this.ls.set(t, new Set());
+        this.ls.get(t)?.add(cb);
+      }
       terminate() {}
     },
   );
   vi.stubGlobal('navigator', { gpu: { requestAdapter: async () => ({}) } });
   vi.stubGlobal('chrome', {
     runtime: {
-      getURL: (p: string) => p,
+      getURL: (p: string) => `chrome-extension://specimen/${p}`,
       onConnect: { addListener: (cb: (p: unknown) => void) => (connect = cb) },
     },
   });
@@ -448,5 +465,82 @@ describe('llm Port protocol (host)', () => {
     await other.waitFor(ended('O'));
     expect(other.of('O').map((e) => e.type)).toEqual(['delta', 'delta', 'delta', 'done']);
     expect(state.creates).toEqual(['c1', 'c2', 'o']);
+  });
+  /** Start a chat whose stream only moves when the test says so, and wait for it to be generating. */
+  async function hung(c: FakePort, id: string) {
+    state.calls = [{ manual: true }];
+    c.send({ type: 'chat', id, req: req(id) });
+    for (let i = 0; i < 100 && !state.current; i++) await sleep(5);
+    expect(state.current).not.toBeNull();
+  }
+  async function nextChatRuns() {
+    const n = await loaded();
+    n.send({ type: 'chat', id: 'N', req: req('n') });
+    expect(await n.waitFor(ended('N'))).toMatchObject({ type: 'done' });
+  }
+
+  it('T3.11 unload or delete mid-stream ends that chat in error and frees the queue', async () => {
+    for (const msg of [
+      { type: 'unload' } as const,
+      { type: 'delete', modelId: DEFAULT_GEMMA } as const,
+    ]) {
+      const a = await loaded();
+      await hung(a, 'A');
+      open().send(msg);
+      const end = await a.waitFor(ended('A'));
+      expect(end).toMatchObject({ type: 'error', kind: 'other' });
+      expect((end as { message: string }).message).toMatch(/unloaded/);
+      expect(a.of('A').some((e) => e.type === 'done')).toBe(false);
+      await nextChatRuns();
+    }
+  });
+
+  it('T3.11 loading another model mid-stream ends that chat in error', async () => {
+    const other = GEMMA_MODELS.find((m) => m.id !== DEFAULT_GEMMA);
+    expect(other).toBeDefined();
+    const a = await loaded();
+    await hung(a, 'A');
+    const b = open();
+    b.send({ type: 'load', modelId: other?.id ?? '' });
+    expect(await a.waitFor(ended('A'))).toMatchObject({ type: 'error', kind: 'other' });
+    await b.waitFor((e) => e.type === 'ready');
+    b.send({ type: 'chat', id: 'B', req: req('b') });
+    expect(await b.waitFor(ended('B'))).toMatchObject({ type: 'done' });
+  });
+
+  it('T3.11 a worker crash mid-stream ends that chat in error, unloads, and the next load works', async () => {
+    const a = await loaded();
+    await hung(a, 'A');
+    state.worker?.fire('error');
+    const end = await a.waitFor(ended('A'));
+    expect((end as { message: string }).message).toMatch(/stopped unexpectedly/);
+    a.send({ type: 'status' });
+    expect((await a.waitFor((e) => e.type === 'status')) as { loaded?: string }).toMatchObject({
+      loaded: undefined,
+    });
+    await nextChatRuns();
+  });
+
+  it('T3.11 a stop on a chat whose engine is gone still frees the queue', async () => {
+    const a = await loaded();
+    await hung(a, 'A');
+    // The interrupt fails, so the stopped stream never drains: only the unload can free it.
+    state.interruptThrows = true;
+    a.disconnect();
+    await sleep(30);
+    expect(state.current).not.toBeNull();
+    open().send({ type: 'unload' });
+    await nextChatRuns();
+  });
+
+  it('T3.11 only extension pages can use the llm Port (not content scripts on web pages)', async () => {
+    const page = open('https://example.com/');
+    page.send({ type: 'status' });
+    page.send({ type: 'unload' });
+    await sleep(30);
+    expect(page.events).toEqual([]);
+    const ext = open('chrome-extension://specimen/options.html');
+    ext.send({ type: 'status' });
+    expect(await ext.waitFor((e) => e.type === 'status')).toMatchObject({ gpu: true });
   });
 });

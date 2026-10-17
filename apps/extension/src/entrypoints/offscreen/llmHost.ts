@@ -35,6 +35,8 @@ interface Job {
   port: chrome.runtime.Port;
   id: string;
   stopped: boolean;
+  /** Ends the run when the engine goes away (unload, delete, another load, worker crash). */
+  abandon?: (e: Error) => void;
 }
 const jobs = new Map<chrome.runtime.Port, Map<string, Job>>();
 /** The job the engine is generating, if any. `interruptGenerate()` is engine-wide: only stop this one. */
@@ -103,7 +105,12 @@ function dropPort(port: chrome.runtime.Port): void {
   for (const job of jobs.get(port)?.values() ?? []) stop(job);
 }
 
-function disposeEngine(): void {
+/**
+ * The WebWorkerMLCEngine client settles a call only from the worker's replies: a terminated or
+ * crashed worker leaves the running chat's `create()`/`next()` pending for ever. Abandon it first.
+ */
+function disposeEngine(reason = 'The local model was unloaded. Try again.'): void {
+  running?.abandon?.(new Error(reason));
   try {
     void engine?.unload();
   } catch {
@@ -127,7 +134,13 @@ async function load(modelId: string): Promise<void> {
   loadPromise = (async () => {
     try {
       disposeEngine();
-      worker = new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' });
+      const w = new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' });
+      worker = w;
+      const crashed = () => {
+        if (worker === w) disposeEngine('The local model stopped unexpectedly. Try again.');
+      };
+      w.addEventListener('error', crashed);
+      w.addEventListener('messageerror', crashed);
       engine = await CreateWebWorkerMLCEngine(worker, modelId, {
         appConfig: buildAppConfig(),
         initProgressCallback: (r) => {
@@ -173,18 +186,29 @@ async function runChat(job: Job, req: ChatRequest): Promise<void> {
       return;
     }
     if (!engine || !loadedId) throw new Error('No model is loaded');
-    running = job;
-    const stream = await engine.chat.completions.create({
-      messages: toMessages(req),
-      stream: true,
-      max_tokens: req.maxTokens,
-      temperature: req.temperature,
+    const gone = new Promise<never>((_, reject) => {
+      job.abandon = reject;
     });
+    gone.catch(() => {});
+    running = job;
+    const stream = await Promise.race([
+      engine.chat.completions.create({
+        messages: toMessages(req),
+        stream: true,
+        max_tokens: req.maxTokens,
+        temperature: req.temperature,
+      }),
+      gone,
+    ]);
     // Drain rather than break: the worker's generator holds the model lock until it ends. The
     // worker also clears its interrupt flag when generation starts, so re-interrupt while stopped.
+    // Each step races `gone`, so a disposed engine ends the chat instead of hanging the queue.
+    const it = stream[Symbol.asyncIterator]();
     let finish: string | null | undefined;
-    for await (const chunk of stream) {
-      const choice = chunk.choices[0];
+    for (;;) {
+      const step = await Promise.race([it.next(), gone]);
+      if (step.done) break;
+      const choice = step.value.choices[0];
       if (choice?.finish_reason) finish = choice.finish_reason;
       if (job.stopped) {
         if (!choice?.finish_reason) interrupt();
@@ -245,6 +269,7 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
       return;
     case 'chat': {
       let mine = jobs.get(port);
+      // Ids are unique per Port by the client's contract (a fresh id per call); refuse a reuse.
       if (mine?.has(msg.id)) {
         send(port, { type: 'error', id: msg.id, kind: 'other', message: 'Duplicate request id' });
         return;
@@ -291,8 +316,12 @@ export function attachLlmPort(port: chrome.runtime.Port): void {
 }
 
 export function startLlmHost(): void {
+  const origin = chrome.runtime.getURL('');
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== LLM_PORT) return;
+    // Only the extension's own pages (side panel, options). Content scripts connect with the web
+    // page's URL. Not `sender.tab`: the options page opens in a tab.
+    if (!port.sender?.url?.startsWith(origin)) return;
     attachLlmPort(port);
   });
 }

@@ -48,6 +48,8 @@ Executor session: `spc-18-80` · Branch `exec/spc-18` (from origin/main 77ac925)
 8. **M6:** delete of the loaded model disposes the engine (as today); a rejecting `deleteModelAllInfoInCache` gives an
    `error` event (as today, now tested). If a chat is running when its engine is disposed (unload/delete), the stream
    throws and the job ends in `error`, never `done`.
+   **Corrected in review (lens B H1):** the WebWorkerMLCEngine client never settles a call after `terminate()`, so the
+   stream does *not* throw; see "Review r1" below.
 
 The client (`packages/ai/src/providers/webllm.ts`) is not changed: it already ignores events for other ids, throws
 `aborted` locally on abort and treats any `error` for its id as a failure.
@@ -111,7 +113,8 @@ tests independent (prefer `vi.resetModules()` + dynamic import in `beforeEach`).
 ### Check
 `pnpm gate` green. Manual (owner): load Gemma, start an Ask, open a second chat (e.g. council or a second Ask in
 another window) and stop one; the other finishes in full. Close the panel mid-answer, reopen, ask again: the answer
-starts within a second or two instead of after the old one finishes.
+starts once the old prompt's prefill is done (seconds; longer on a weak GPU with a big page), not after the old
+answer finishes.
 
 ## Done
 - Tests first: 11 of the 15 new/updated T3.11 cases failed on 77ac925 (H1, H2, lost interrupt, cleanup errors, duplicate id, council port).
@@ -123,7 +126,24 @@ starts within a second or two instead of after the old one finishes.
 - `pnpm gate` green (the one Biome warning is `lib/chatScrub.ts`, already on main).
 
 ## Next
-- PR review: PE lens A, lens B, security. Fold findings as new commits.
+- PR #31 open. Lens A r1 APPROVED (2 optional LOWs: L1 duplicate-id comment, L2 interrupt per chunk), to fold together with lens B's findings in one new commit, then send the diff to pe-ed. Waiting on lens B + security.
+
+## Review r1 (folded in one commit after 3ae1b68)
+- **Lens B H1 (fixed):** each running job gets an `abandon` reject. `disposeEngine(reason)` fires it, and `create()` and
+  every `next()` race it, so unload, delete, a load of another model, or a worker `error` / `messageerror` (new
+  listeners, guarded by `worker === w`) ends the chat in `error` and frees the queue. 4 new tests; all 4 fail with the
+  abandon line disabled.
+- **Lens B L1 (fixed, wording):** the manual check now says "after the old prompt's prefill".
+- **Lens B L2 (fixed, differently):** `startLlmHost` accepts only Ports whose `sender.url` is on the extension's own
+  origin. Not `sender.tab` as suggested: the options page opens in a tab (`manifest.open_in_tab`) and uses this Port.
+  Test: an `https://` sender gets no reply; an options-page sender works.
+- **Lens B L3 (not here):** `finish_reason:'length'` → `done` is older than this PR and needs a protocol addition;
+  proposed to the orchestrator as a follow-up ticket.
+- **PE L1 (fixed):** a comment that ids are unique per Port by the client's contract.
+- **PE L2 (not changed):** the re-interrupt is at most one worker message per chunk and the stream ends within a chunk
+  or two; throttling would reopen the lost-interrupt window.
+- Known, not in scope: a worker crash *during a load* still leaves that load pending (CreateWebWorkerMLCEngine has the
+  same no-settle behaviour). Worth a follow-up with L3.
 
 ## How to resume
 Read this file, then `llmHost.ts` and `test/ai/llmHost.test.ts`. Branch `exec/spc-18`.
