@@ -113,9 +113,9 @@ optional one in the PR body.
   CREDIT_CODE; L1 a flattened `{error:"insufficient_quota"}` or top-level `code` is checked; L2 a numeric 402
   mid-stream code is out of credit; L3 the council test starts from a real 429 body via httpError; L4 full stops
   in the TESTING.md rows. Gate green on the whole run (secrets skipped locally, no gitleaks).
-- Out of scope (lens B notes, follow-up candidates): Anthropic HTTP 529 vs stream 529 retry mismatch;
-  OpenRouter 403 "Key limit exceeded" and Gemini 403 "requires billing" shown as invalid key; mid-stream image
-  rejection still MID_STREAM_TEXT (pe-b2 note).
+- Out of scope, ticketed: SPC-57 (Anthropic HTTP 529 vs stream 529 retry mismatch;
+  OpenRouter 403 "Key limit exceeded" and Gemini 403 "requires billing" shown as invalid key); mid-stream image
+  rejection still MID_STREAM_TEXT is handled by SPC-55 (vibe retry).
 
 - pe-b2 fold check of 459bb42: APPROVED (2026-10-17). Both reviews are done.
 
