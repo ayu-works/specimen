@@ -52,3 +52,10 @@ The rename is correctly refused (v5 `title ≤ 1000`), but the message doesn't s
 For an unknown error, the user sees Dexie's text after "Import failed, nothing was saved:". It is not a
 secret, but it is not plain language either. **Fix (optional):** use a generic "browser storage failed" and
 keep the detail out of the UI.
+
+## Fold check (0851801, on top of c1e4917): APPROVED
+- **L1 fixed.** The stored side is compared through the same `filterCssVariables`. The filter is idempotent, so a
+  live-scanned row is unchanged by it. A new T4.03 test pins that an old unfiltered row counts as a duplicate.
+- **L2 fixed.** The title input has `maxLength={BOUNDS.title}`.
+- **L3 declined.** The reason is accepted: the text is not a secret, and it is the only clue for an unknown
+  failure. `trim.ts` and `migrations.ts` are unchanged.
