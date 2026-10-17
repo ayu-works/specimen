@@ -40,23 +40,50 @@ function secondLevel(host: string): string {
   return second;
 }
 
+// Caps on hostile input (SPC-17 sec H1, M1). A page title or an imported scan can be any length, and
+// every token and phrase becomes a regex: uncapped, a 30k-char title took seconds per call and a
+// 32k+ one made V8 reject the pattern.
+/** Only the start of the title is read for brand tokens. */
+export const TITLE_SCAN = 300;
+/** At most this many title tokens (the domain's own tokens are always kept). */
+export const MAX_TITLE_TOKENS = 12;
+/** Longer tokens are dropped: a DNS label is at most 63 characters, so no real domain is lost. */
+export const MAX_TOKEN = 64;
+/** Longer phrases (title, headline samples) are skipped; their words are still tokens. */
+export const MAX_PHRASE = 1000;
+/** At most this many headline samples are removed as phrases. */
+export const MAX_SAMPLES = 50;
+
+const isToken = (w: string) => w.length >= 3 && w.length <= MAX_TOKEN && !isStopWord(w);
+
 /** Lower-cased brand tokens derived from the host and the page title. */
 export function brandTokens(scan: Pick<DesignScan, 'host' | 'title'>): string[] {
   const set = new Set<string>();
   const sld = secondLevel(scan.host);
-  if (sld.length >= 2) set.add(sld);
+  if (sld.length >= 2 && sld.length <= MAX_TOKEN) set.add(sld);
   for (const piece of sld.split(/[^\p{L}\p{N}]+/u)) {
-    if (piece.length >= 3 && !isStopWord(piece)) set.add(piece);
+    if (isToken(piece)) set.add(piece);
   }
-  for (const w of scan.title.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
-    if (w.length >= 3 && !isStopWord(w)) set.add(w);
+  const words = scan.title
+    .slice(0, TITLE_SCAN)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u);
+  // A word cut by the window is a fragment, not a word.
+  if (scan.title.length > TITLE_SCAN) words.pop();
+  let n = 0;
+  for (const w of words) {
+    if (n >= MAX_TITLE_TOKENS) break;
+    if (isToken(w) && !set.has(w)) {
+      set.add(w);
+      n++;
+    }
   }
   return [...set].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
 /** Case is kept: a camelCase hump (`zentrixBlue`) is a boundary, so lower-casing would hide it. */
 export function containsBrand(text: string, tokens: string[]): boolean {
-  return tokens.some((b) => wordRegex(b).test(text));
+  return tokens.some((b) => wordRegex(b).once.test(text));
 }
 
 /**
@@ -66,7 +93,7 @@ export function containsBrand(text: string, tokens: string[]): boolean {
  */
 export function nameHasBrand(name: string, tokens: string[]): boolean {
   const lower = name.toLowerCase();
-  return tokens.some((b) => (b.length >= 4 && lower.includes(b)) || wordRegex(b).test(name));
+  return tokens.some((b) => (b.length >= 4 && lower.includes(b)) || wordRegex(b).once.test(name));
 }
 
 // Boundaries are case-sensitive (a hump is lower→upper), so the regex can't use the `i` flag:
@@ -103,7 +130,17 @@ function anyCase(w: string): string {
     .join('');
 }
 
-function wordRegex(w: string): RegExp {
+/** A token's patterns: `all` (global) for `replace`, `once` for `.test`, so no `lastIndex` state leaks. */
+interface WordRegex {
+  all: RegExp;
+  once: RegExp;
+}
+const WORDS = new Map<string, WordRegex>();
+const WORDS_MAX = 1024;
+
+function wordRegex(w: string): WordRegex {
+  const hit = WORDS.get(w);
+  if (hit) return hit;
   const long = w.length >= 4;
   const left = [...BOUND_L, ...(long ? [DIGIT_L] : [])];
   const right = [
@@ -114,10 +151,11 @@ function wordRegex(w: string): RegExp {
   ];
   // A token spelled only with hex digits (abc, cafe) must never match inside a color literal.
   const notInHex = /^[0-9a-f]+$/i.test(w) ? '(?<!#[0-9a-fA-F]*)' : '';
-  return new RegExp(
-    `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!-gradient)`,
-    'gu',
-  );
+  const src = `${notInHex}(?:${left.join('|')})${anyCase(w)}(?:${right.join('|')})(?!-gradient)`;
+  const re = { all: new RegExp(src, 'gu'), once: new RegExp(src, 'u') };
+  if (WORDS.size >= WORDS_MAX) WORDS.clear();
+  WORDS.set(w, re);
+  return re;
 }
 
 function devMode(): boolean {
@@ -127,32 +165,68 @@ function devMode(): boolean {
   return mode === 'development' || mode === 'test';
 }
 
-/**
- * Ethics guardrail, final pass. Removes the host, title, headline samples and brand tokens
- * (case-insensitive, whole words) and throws in dev/test if the host still appears.
- */
-export function sanitize(text: string, scan: DesignScan): string {
-  const host = scan.host.toLowerCase().replace(/^www\./, '');
+/** Phrases removed as literal text (case-insensitive): host forms, the title, headline samples. */
+function phrasesOf(scan: DesignScan, host: string): string[] {
   const phrases: string[] = [scan.host, host, scan.title];
   try {
     phrases.push(new URL(scan.url).origin);
   } catch {
     /* url not parseable: skip */
   }
+  let samples = 0;
   for (const s of scan.typography.styles) {
+    if (samples >= MAX_SAMPLES) break;
     const sample = s.sample?.trim();
     if (!sample || sample.length < 3) continue;
     // A lone common word ("Product") would corrupt ordinary prose, so only multi-word
     // samples and uncommon single words are removed.
-    if (/\s/.test(sample) || !isStopWord(sample)) phrases.push(sample);
+    if (/\s/.test(sample) || !isStopWord(sample)) {
+      phrases.push(sample);
+      samples++;
+    }
   }
+  return phrases
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 3 && p.length <= MAX_PHRASE)
+    .sort((a, b) => b.length - a.length);
+}
+
+const COMPILED = new Map<string, RegExp[]>();
+const COMPILED_MAX = 8;
+
+/**
+ * The ordered patterns for one brand set, compiled once. The cache key is built from exactly the
+ * phrases and tokens the patterns are made of, so an edited scan can never hit a stale entry.
+ */
+function patternsFor(scan: DesignScan, host: string): RegExp[] {
+  const phrases = phrasesOf(scan, host);
+  const tokens = brandTokens(scan);
+  const key = JSON.stringify([phrases, tokens]);
+  const hit = COMPILED.get(key);
+  if (hit) return hit;
   const patterns = [
-    ...phrases
-      .filter((p) => p.trim().length >= 3)
-      .sort((a, b) => b.length - a.length)
-      .map((p) => new RegExp(esc(p.trim()), 'giu')),
-    ...brandTokens(scan).map(wordRegex),
+    ...phrases.map((p) => new RegExp(esc(p), 'giu')),
+    ...tokens.map((t) => wordRegex(t).all),
   ];
+  if (COMPILED.size >= COMPILED_MAX) {
+    const oldest = COMPILED.keys().next().value;
+    if (oldest !== undefined) COMPILED.delete(oldest);
+  }
+  COMPILED.set(key, patterns);
+  return patterns;
+}
+
+/**
+ * Ethics guardrail, final pass. Removes the host, title, headline samples and brand tokens
+ * (case-insensitive, whole words) and throws in dev/test if the host still appears.
+ *
+ * Works line by line: no pattern ever sees a newline, which is what lets `createStreamSanitizer`
+ * cache finished lines. Any error (a pattern that won't compile, the dev-mode host check) is thrown,
+ * never swallowed into unsanitized text; callers fail closed.
+ */
+export function sanitize(text: string, scan: DesignScan): string {
+  const host = scan.host.toLowerCase().replace(/^www\./, '');
+  const patterns = patternsFor(scan, host);
 
   const out = text.split('\n').map((line) => {
     let cur = line;
@@ -171,4 +245,42 @@ export function sanitize(text: string, scan: DesignScan): string {
     return result.split(new RegExp(esc(host), 'gi')).join('');
   }
   return result;
+}
+
+/** An open last line longer than this is re-sanitized only every `LONG_STEP` new characters. */
+const LONG_LINE = 512;
+const LONG_STEP = 256;
+
+/**
+ * Sanitizer for a growing stream (`raw` is the whole text so far, append-only). Finished lines are
+ * sanitized once and kept; only the open last line is redone. That is the same result as
+ * `sanitize(raw)`, because `sanitize` works per line. A long open line is redone in steps, so a
+ * snapshot can lag behind the raw text, but it is always sanitized text, never raw. Callers run a
+ * full `sanitize` on the final text. Throws like `sanitize`.
+ */
+export function createStreamSanitizer(scan: DesignScan): (raw: string) => string {
+  let cut = 0; // raw index just past the last newline already sanitized
+  let head = ''; // sanitize(raw.slice(0, cut))
+  let tailLen = -1; // length of the open line when it was last sanitized
+  let tailOut = '';
+  return (raw) => {
+    if (raw.length < cut) {
+      // Not the same stream any more (a retry restarted it): start over.
+      cut = 0;
+      head = '';
+      tailLen = -1;
+    }
+    const nl = raw.lastIndexOf('\n');
+    if (nl + 1 > cut) {
+      head += sanitize(raw.slice(cut, nl + 1), scan);
+      cut = nl + 1;
+      tailLen = -1;
+    }
+    const tail = raw.length - cut;
+    if (tail <= LONG_LINE || tailLen < 0 || tail - tailLen >= LONG_STEP) {
+      tailOut = sanitize(raw.slice(cut), scan);
+      tailLen = tail;
+    }
+    return head + tailOut;
+  };
 }

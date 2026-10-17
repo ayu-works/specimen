@@ -31,7 +31,7 @@ export {
   type PromptTarget,
   TARGET_LABELS,
 } from './prompt';
-export { brandTokens, sanitize } from './sanitize';
+export { brandTokens, createStreamSanitizer, sanitize } from './sanitize';
 export { generateShadcn } from './shadcn';
 export { generateTailwindV3, generateTailwindV4 } from './tailwind';
 

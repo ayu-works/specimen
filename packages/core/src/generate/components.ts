@@ -1,5 +1,5 @@
 import type { ComponentSpec, DesignScan } from '../schema';
-import { px, radiusText } from './common';
+import { code, px, radiusText } from './common';
 
 export type ComponentKind = ComponentSpec['kind'];
 
@@ -42,7 +42,7 @@ export function propLabel(prop: string): string {
 /** `background #4a32e0, text #fff` for a (state) property map. */
 export function describeProps(props: Record<string, string>): string {
   return Object.entries(props)
-    .map(([k, v]) => `${propLabel(k)} ${k === 'box-shadow' ? `\`${v}\`` : v}`)
+    .map(([k, v]) => `${propLabel(k)} ${k === 'box-shadow' ? code(v) : v}`)
     .join(', ');
 }
 

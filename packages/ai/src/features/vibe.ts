@@ -11,6 +11,8 @@ export const VibeSchema = z.object({
 });
 export type Vibe = z.infer<typeof VibeSchema>;
 
+export const VIBE_FILTERED = 'The description was filtered (brand names are removed).';
+
 const SYSTEM_IMAGE = [
   'You describe the visual feel of a website screenshot for a designer.',
   'Reply with a single JSON object: {"summary": string, "keywords": string[]}.',
@@ -95,8 +97,11 @@ export async function vibe(
     ? parsed.data
     : { summary: raw.replace(/[{}"]/g, '').trim().slice(0, 280), keywords: [] };
   if (!result.summary) throw new ProviderError('other', 'The model returned no description.');
+  // Fail closed: a summary the brand filter empties (or can't process) is never shown raw.
+  const summary = safe(result.summary, scan).trim();
+  if (!summary) throw new ProviderError('other', VIBE_FILTERED);
   return {
-    summary: safe(result.summary, scan).trim() || result.summary,
+    summary,
     keywords: result.keywords
       .map((k) => safe(k, scan).trim())
       .filter(Boolean)

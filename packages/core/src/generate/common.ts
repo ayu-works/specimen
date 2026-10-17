@@ -265,6 +265,14 @@ export function cell(s: string | number): string {
   return String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+/**
+ * Inline code. Backticks are dropped (never valid in a CSS name, value or font stack), so text from
+ * a page or an imported scan can't close the span and inject markdown (SPC-17 sec L2).
+ */
+export function code(s: string | number): string {
+  return `\`${String(s).replace(/`/g, '')}\``;
+}
+
 export function table(head: string[], rows: (string | number)[][]): string {
   const line = (cols: (string | number)[]) => `| ${cols.map(cell).join(' | ')} |`;
   return [line(head), line(head.map(() => '---')), ...rows.map(line)].join('\n');
