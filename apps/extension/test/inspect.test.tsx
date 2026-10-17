@@ -90,24 +90,31 @@ function hub<A extends unknown[]>() {
   };
 }
 
-function fakePort(name: string) {
-  const port = {
+const TAB = 7;
+
+/**
+ * One receiver's end of a Port. In real Chrome a receiver's `disconnect()` closes the channel for
+ * the sender and every other receiver (SPC-27 lens A r1 probe; e2e/inspectPorts.spec.ts pins it),
+ * so these tests assert Inspect never calls it.
+ */
+function fakePort(name: string, tabId: number | null = TAB) {
+  return {
     name,
+    sender: tabId === null ? {} : { tab: { id: tabId } },
     onMessage: hub<[unknown]>(),
     onDisconnect: hub<[]>(),
     disconnect: vi.fn(),
     postMessage: vi.fn(),
   };
-  return port;
 }
 
 /** The shared stub has no onConnect: add one, and answer `overlay.set` so Inspect can turn on. */
 function withOnConnect(c: FakeChrome) {
   const onConnect = hub<[ReturnType<typeof fakePort>]>();
   Object.assign(c.runtime, { onConnect });
-  c.tabs.query.mockResolvedValue([{ id: 7 }] as never);
+  c.tabs.query.mockResolvedValue([{ id: TAB }] as never);
   c.runtime.sendMessage.mockResolvedValue({ ok: true, data: { ok: true } } as never);
-  return onConnect;
+  return { onConnect, sendMessage: c.runtime.sendMessage };
 }
 
 /** What the overlay posts (overlay/index.ts): the real payload shape. */
@@ -128,45 +135,69 @@ const overlayHover = (tag = 'button'): { type: string } & InspectorHover => ({
   matchedTokens: [{ id: 'accent', hex: '#5e6ad2', prop: 'backgroundColor' }],
 });
 
+const inspectorCalls = (sendMessage: FakeChrome['runtime']['sendMessage']) =>
+  (sendMessage.mock.calls as unknown as [unknown][])
+    .map(([m]) => m as { type?: string; inspector?: boolean; tabId?: number })
+    .filter((m) => m.type === 'overlay.set' && m.inspector !== undefined)
+    .map((m) => ({ inspector: m.inspector, tabId: m.tabId }));
+
 describe('T1.38 Inspect Port listener (SPC-27)', () => {
-  let onConnect: ReturnType<typeof withOnConnect>;
+  let onConnect: ReturnType<typeof withOnConnect>['onConnect'];
+  let sendMessage: FakeChrome['runtime']['sendMessage'];
   beforeEach(() => {
-    onConnect = withOnConnect(installChrome());
+    ({ onConnect, sendMessage } = withOnConnect(installChrome()));
   });
 
+  const inspectButton = () => screen.getByRole('button', { name: 'Inspect' });
   async function turnOn() {
     renderInspect();
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
-    await waitFor(() => expect(onConnect.ls.size).toBe(1));
+    fireEvent.click(inspectButton());
+    await waitFor(() => expect(screen.queryByTestId('inspector-card')).not.toBeNull());
     return screen.getByTestId('inspector-card');
   }
-  const connect = (name: string) => {
-    const port = fakePort(name);
+  const connect = (name: string, tabId: number | null = TAB) => {
+    const port = fakePort(name, tabId);
     act(() => onConnect.fire(port));
     return port;
   };
   const post = (port: ReturnType<typeof fakePort>, m: unknown) => act(() => port.onMessage.fire(m));
 
-  it('T1.38 a foreign Port (council, unnamed) is disconnected unread', async () => {
+  it('T1.38 the overlay Port connecting during overlay.set (the real order) is read', async () => {
+    let port: ReturnType<typeof fakePort> | undefined;
+    sendMessage.mockImplementation((async (m: { type?: string; inspector?: boolean }) => {
+      // The overlay connects while it handles overlay.set, before the panel gets the reply.
+      if (m.type === 'overlay.set' && m.inspector) {
+        port = fakePort('inspector');
+        onConnect.fire(port);
+      }
+      return { ok: true, data: { ok: true } };
+    }) as never);
     const card = await turnOn();
-    for (const name of ['council', '']) {
+    expect(port).toBeDefined();
+    post(port as ReturnType<typeof fakePort>, overlayHover('h1'));
+    expect(card.textContent).toContain('h1 · 120×40');
+  });
+
+  it('T1.38 a foreign Port (council, llm, unnamed) is ignored: not read, never disconnected', async () => {
+    const card = await turnOn();
+    for (const name of ['council', 'llm', '']) {
       const port = connect(name);
-      expect(port.disconnect).toHaveBeenCalledTimes(1);
+      expect(port.disconnect).not.toHaveBeenCalled();
       expect(port.onMessage.addListener).not.toHaveBeenCalled();
+      expect(port.onDisconnect.addListener).not.toHaveBeenCalled();
       post(port, overlayHover());
     }
     expect(card.textContent).toContain('Hover an element on the page');
   });
 
-  it('T1.38 a foreign Port whose disconnect throws is still ignored, and inspector Ports keep working', async () => {
+  it('T1.38 an inspector Port from another tab is ignored, not disconnected', async () => {
     const card = await turnOn();
-    const council = fakePort('council');
-    council.disconnect.mockImplementation(() => {
-      throw new Error('gone');
-    });
-    expect(() => act(() => onConnect.fire(council))).not.toThrow();
-    const port = connect('inspector');
-    post(port, overlayHover('nav'));
+    for (const tabId of [99, null]) {
+      const other = connect('inspector', tabId);
+      expect(other.onMessage.addListener).not.toHaveBeenCalled();
+      expect(other.disconnect).not.toHaveBeenCalled();
+    }
+    post(connect('inspector'), overlayHover('nav'));
     expect(card.textContent).toContain('nav · 120×40');
   });
 
@@ -205,58 +236,87 @@ describe('T1.38 Inspect Port listener (SPC-27)', () => {
     expect(card.textContent).not.toContain('p ·');
   });
 
-  it('T1.38 toggling Inspect off removes the listener, disconnects open ports and resets the card', async () => {
+  it('T1.38 toggling Inspect off removes our listeners, never disconnects, and resets the card', async () => {
     await turnOn();
     const port = connect('inspector');
     post(port, overlayHover('section'));
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
-    await waitFor(() => expect(onConnect.ls.size).toBe(0));
-    expect(port.disconnect).toHaveBeenCalledTimes(1);
+    fireEvent.click(inspectButton());
+    await waitFor(() => expect(screen.queryByTestId('inspector-card')).toBeNull());
+    expect(onConnect.ls.size).toBe(0);
     expect(port.onMessage.ls.size).toBe(0);
+    expect(port.disconnect).not.toHaveBeenCalled();
+    expect(inspectorCalls(sendMessage)).toEqual([
+      { inspector: true, tabId: TAB },
+      { inspector: false, tabId: TAB },
+    ]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
-    await waitFor(() => expect(onConnect.ls.size).toBe(1));
+    fireEvent.click(inspectButton());
+    await waitFor(() => expect(screen.queryByTestId('inspector-card')).not.toBeNull());
+    expect(onConnect.ls.size).toBe(1);
     expect(screen.getByTestId('inspector-card').textContent).toContain(
       'Hover an element on the page',
     );
   });
 
-  it('T1.38 detach: listener removed first, a throwing disconnect does not stop the rest, twice is a no-op', () => {
+  it('T1.38 unmounting with Inspect on turns the overlay off and drops late posts', async () => {
+    await turnOn();
+    const port = connect('inspector');
+    cleanup();
+    expect(onConnect.ls.size).toBe(0);
+    expect(port.onMessage.ls.size).toBe(0);
+    expect(port.disconnect).not.toHaveBeenCalled();
+    expect(inspectorCalls(sendMessage).at(-1)).toEqual({ inspector: false, tabId: TAB });
+    expect(() => post(port, overlayHover())).not.toThrow();
+  });
+
+  it('T1.38 a failed overlay.set leaves no listener behind; a double click sends once', async () => {
+    renderInspect();
+    sendMessage.mockResolvedValueOnce({ ok: false, error: 'Cannot access this page' } as never);
+    fireEvent.click(inspectButton());
+    await screen.findByText(/Overlay unavailable on this page/);
+    expect(onConnect.ls.size).toBe(0);
+    expect(screen.queryByTestId('inspector-card')).toBeNull();
+
+    sendMessage.mockClear();
+    fireEvent.click(inspectButton());
+    fireEvent.click(inspectButton());
+    await waitFor(() => expect(screen.queryByTestId('inspector-card')).not.toBeNull());
+    expect(inspectorCalls(sendMessage)).toEqual([{ inspector: true, tabId: TAB }]);
+    expect(onConnect.ls.size).toBe(1);
+  });
+
+  it('T1.38 detach: onConnect removed first, a throwing removeListener does not stop the rest, twice is a no-op', () => {
     const order: string[] = [];
     onConnect.removeListener.mockImplementation((l) => {
       order.push('onConnect');
       return onConnect.ls.delete(l);
     });
     const onHover = vi.fn();
-    const detach = attachInspector(onHover);
+    const detach = attachInspector(onHover, TAB);
     const a = fakePort('inspector');
     const b = fakePort('inspector');
-    a.disconnect.mockImplementation(() => {
+    a.onMessage.removeListener.mockImplementation(() => {
       order.push('a');
       throw new Error('already gone');
     });
-    b.disconnect.mockImplementation(() => order.push('b'));
+    b.onMessage.removeListener.mockImplementation((l) => {
+      order.push('b');
+      return b.onMessage.ls.delete(l);
+    });
     onConnect.fire(a);
     onConnect.fire(b);
 
     expect(() => detach()).not.toThrow();
     expect(order).toEqual(['onConnect', 'a', 'b']);
     expect(onConnect.ls.size).toBe(0);
+    expect(b.onMessage.ls.size).toBe(0);
     a.onMessage.fire(overlayHover());
     b.onMessage.fire(overlayHover());
     expect(onHover).not.toHaveBeenCalled();
+    expect(a.disconnect).not.toHaveBeenCalled();
+    expect(b.disconnect).not.toHaveBeenCalled();
 
     detach();
     expect(onConnect.removeListener).toHaveBeenCalledTimes(1);
-    expect(b.disconnect).toHaveBeenCalledTimes(1);
-  });
-
-  it('T1.38 unmounting with Inspect on cleans up and drops late posts', async () => {
-    await turnOn();
-    const port = connect('inspector');
-    cleanup();
-    expect(onConnect.ls.size).toBe(0);
-    expect(port.disconnect).toHaveBeenCalledTimes(1);
-    expect(() => post(port, overlayHover())).not.toThrow();
   });
 });

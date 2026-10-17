@@ -76,7 +76,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T1.34 | E | Inspector hover streams the element's styles to the panel |
 | T1.35 | 🖐 | Scan linear.app, stripe.com, ramp.com, cal.com: roles and type look right (screenshots in the PR) |
 | T1.36 | 🖐 | Eyedropper pick → nearest token shown |
-| T1.38 | C | Inspect's Port listener (SPC-27): a foreign Port (`council`, unnamed) is disconnected unread (even if `disconnect()` throws); only the overlay's `inspector.hover` payload renders, malformed messages are dropped and the last hover stays; a disconnect mid-stream or a toggle off / unmount removes the listeners (onConnect first, one throwing `disconnect()` doesn't stop the rest), late posts are dropped and the card resets |
+| T1.38 | C+E | Inspect's Port listener (SPC-27). C: the overlay's Port connecting during `overlay.set` (the real order) is read; a foreign Port (`council`, `llm`, unnamed) or another tab's `inspector` Port is ignored, never read or disconnected; only the overlay's `inspector.hover` payload renders (malformed ones dropped, last hover stays); a disconnect mid-stream, toggle off or unmount removes only our listeners (onConnect first, one throwing removal doesn't stop the rest, never `disconnect()`), late posts are dropped, the card resets, and toggle off / unmount send `overlay.set {inspector:false}`; a failed `overlay.set` leaves no listener; a double click sends once. E: with the panel's real Inspect on, a `council` Port from another page still reaches its host page (no sender `onDisconnect`); the real Inspect button streams hovers to the card, again after leaving and re-entering the view |
 
 ## Phase 2: Outputs
 | ID | Type | Test |

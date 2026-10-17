@@ -68,6 +68,29 @@ fake `onConnect` + fake Port (name, onMessage, onDisconnect, disconnect spy) ont
 Scan a page → Inspect → toggle Inspect, hover elements (card updates) → toggle off/on (card resets) → with Inspect on,
 run Ask council in a second window's panel: the council still completes.
 
+## Review round 1 (2026-10-17): plan corrected
+Lens A r1 (pe-b2) and lens B r1 (spc-27-02) both found the approved "disconnect foreign Ports" was wrong: pe-b2
+probed real Chromium, where one receiver's `disconnect()` kills the sender's Port and the host's end. pe-b2 also
+ruled lens B's H1 real (the overlay connects while handling `overlay.set`, before the panel's effect attached).
+Folded:
+- **C1 / B-C1:** foreign Ports are ignored only; detach and `onDisconnect` only remove our listeners, never
+  `disconnect()`. `councilProtocol.ts` comment corrected ("ignore, never disconnect"; pe-b2 OK'd the edit).
+- **B-H1:** `toggle('inspector', true)` attaches before `send('overlay.set')`; detach lives in a ref, runs on a
+  failed send, toggle off and unmount.
+- **B-M1:** detach on toggle off / unmount also sends best-effort `overlay.set {inspector:false}` (panel-only per
+  pe-b2; the overlay is untouched, since lazy reconnect there risks a reconnect loop).
+- **B-M2:** tests rewritten: no test asserts `disconnect`; a component test fires the Port inside the
+  `sendMessage` mock; new e2e `e2e/inspectPorts.spec.ts` (council Port survives; real button → hover → card, and
+  again after leaving the view). Both e2e tests and 7 of the 12 component tests fail on the reviewed head 2395761.
+- **B-L1:** only the targeted tab's `inspector` Port is read (`port.sender.tab.id`), others ignored.
+- **B-L2:** a `pending` ref drops a second click while `overlay.set` is in flight.
+Not fixed here (follow-ups for the orchestrator):
+- The original B-L4 symptom (a crashed council host looks alive) can't be fixed from a receiver: it belongs in
+  `council.ts` (the `awaiting` timeout or a host heartbeat).
+- If the panel closes without the unmount cleanup's `overlay.set {inspector:false}` getting through, the overlay
+  stays "inspecting" with no Port, and the next Inspect-on returns early (`on === inspecting`) in
+  `overlay/index.ts`. A one-line overlay fix (reconnect when inspecting but port is null) was ruled out of this PR.
+
 ## Done
 - 2026-10-17: read brief/setup/plan/ticket (no comments); `pnpm i`; plan written.
 - 2026-10-17: pe-b2 APPROVED (disconnect foreign Ports; notes a–c folded in: guard checks only what the card reads,
@@ -78,4 +101,4 @@ run Ask council in a second window's panel: the council still completes.
 - `pnpm gate` green locally (gitleaks not installed locally, CI runs it). T1.34 e2e and the council suites green.
 
 ## Next / how to resume
-PR open → wait for reviews (PE lens A + lens B) under docs/sprint/reviews/, fold findings in new commits.
+r1 folded and pushed → pe-b2 fold check (and lens B if asked). Reviews in docs/sprint/reviews/SPC-27-{a,b}-r1.md.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Eyedropper } from '@/components/Eyedropper';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -40,9 +40,13 @@ function isHover(m: unknown): m is InspectorHover {
 
 /**
  * Listen for the overlay's `inspector` Ports until the returned detach() runs. Foreign Ports
- * (`council`, `llm`, …) are disconnected unread; posts after a disconnect or detach are dropped.
+ * (`council`, `llm`, …) are ignored unread; posts after a disconnect or detach are dropped.
+ * Never `port.disconnect()` here: in Chrome one receiver's disconnect closes the channel for the
+ * sender and every other receiver too (SPC-27 lens A r1 probe), e.g. the council host or another
+ * panel's Inspect. Detaching only removes this panel's listeners. With `tabId`, only that tab's
+ * overlay is read (another window's Inspect gets its own tab's hovers).
  */
-export function attachInspector(onHover: (h: InspectorHover) => void): () => void {
+export function attachInspector(onHover: (h: InspectorHover) => void, tabId?: number): () => void {
   let live = true;
   const ports = new Map<chrome.runtime.Port, () => void>();
   const safely = (fn: () => void) => {
@@ -55,11 +59,8 @@ export function attachInspector(onHover: (h: InspectorHover) => void): () => voi
 
   const onConnect = (port: chrome.runtime.Port) => {
     if (!live) return;
-    if (port.name !== 'inspector') {
-      // Safe: each receiving frame has its own end, so this only closes ours (the council host keeps its).
-      safely(() => port.disconnect());
-      return;
-    }
+    if (port.name !== 'inspector') return;
+    if (tabId !== undefined && port.sender?.tab?.id !== tabId) return;
     const onMessage = (m: unknown) => {
       if (live && ports.has(port) && isHover(m)) onHover(m);
     };
@@ -78,10 +79,7 @@ export function attachInspector(onHover: (h: InspectorHover) => void): () => voi
     if (!live) return;
     live = false;
     safely(() => chrome.runtime.onConnect.removeListener(onConnect));
-    for (const [port, release] of [...ports]) {
-      release();
-      safely(() => port.disconnect());
-    }
+    for (const release of [...ports.values()]) release();
   };
 }
 
@@ -92,22 +90,39 @@ function Toolbar() {
   const [eye, setEye] = useState(false);
   const [hover, setHover] = useState<InspectorHover | null>(null);
   const [err, setErr] = useState('');
+  const inspector = useRef<{ tabId: number; detach: () => void } | null>(null);
+  const pending = useRef(false);
 
-  useEffect(() => {
-    if (!inspect || typeof chrome === 'undefined' || !chrome.runtime?.onConnect) return;
-    const detach = attachInspector(setHover);
-    return () => {
-      detach();
-      setHover(null);
-    };
-  }, [inspect]);
+  /** Stop reading the inspector Port; `turnOff` also tells the overlay (best effort). */
+  function stopInspector(turnOff: boolean) {
+    const cur = inspector.current;
+    if (!cur) return;
+    inspector.current = null;
+    cur.detach();
+    setHover(null);
+    if (turnOff) send('overlay.set', { tabId: cur.tabId, inspector: false }).catch(() => {});
+  }
+
+  // Leaving the Inspect view (or closing the panel) with the inspector on: stop the overlay too,
+  // or it keeps inspecting with no one listening.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: unmount only
+  useEffect(() => () => stopInspector(true), []);
 
   async function toggle(kind: 'grid' | 'inspector', on: boolean) {
-    if (!scan) return;
+    if (!scan || pending.current) return;
+    pending.current = true;
     setErr('');
     try {
       const tabId = await activeTabId();
       if (tabId === undefined) throw new Error('No active tab');
+      if (kind === 'inspector') {
+        stopInspector(false);
+        if (!on) setInspect(false);
+        // Listen before overlay.set: the overlay connects while handling it, and Chrome doesn't
+        // replay onConnect to a listener added afterwards.
+        else if (chrome.runtime?.onConnect)
+          inspector.current = { tabId, detach: attachInspector(setHover, tabId) };
+      }
       await send('overlay.set', {
         tabId,
         [kind]: on,
@@ -121,7 +136,10 @@ function Toolbar() {
       if (kind === 'grid') setGrid(on);
       else setInspect(on);
     } catch (e) {
+      if (kind === 'inspector') stopInspector(false);
       setErr(`Overlay unavailable on this page (${e instanceof Error ? e.message : String(e)})`);
+    } finally {
+      pending.current = false;
     }
   }
 
