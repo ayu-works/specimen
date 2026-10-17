@@ -6,7 +6,13 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 (CURRENT STATE: restart for a Claude Code update, then resume)
+## UPDATE 2026-10-17 13:10 (CURRENT STATE: three executors running)
+
+- **Orchestrator `specimen-6a`** (pane w1:p3); **PE `pe-ed`** (w1:pS). Build tab w1:tP: **spc-32-6d** (w1:p14, lane A), **spc-18-80** (w1:p15, lane B), **spc-19-02** (w1:p16, lane C). Worktrees worktrees/spc-32|18|19, branches exec/<ticket> from 77ac925. Kickoffs in this session's scratchpad (kickoff-spc-*.md). All three are In Progress in Linear.
+- Routing: L2's DESIGN.md backtick escape (designmd.ts cell()) → SPC-32; import-side filter → SPC-19. SPC-19 M2 bounds = contract: the PE sends one ruling (draft: v5 bump + bounds table + trim-on-upgrade), then the **owner's OK is needed** before that part is built.
+- Reviews: PE lens A on each; fresh lens B on each (security for 32 and 18).
+
+## UPDATE 2026-10-17
 
 - **Owner (2026-10-17): resume Sprint 3 by priority, three bugs at a time** (3 executors; owner-approved). First three: SPC-32 (lane A), SPC-18 (lane B), SPC-19 (lane C). Lanes, Owns and the next-in-line order are in plan.md "Resume 2026-10-17".
 - The owner asked to restart the PE and the orchestrator to pick up a Claude Code update. pe-99 was exited and a fresh PE **pe-ed** runs in pane w1:pS on Claude Code 2.1.302 (launched from `docs/sprint/kickoffs/pe.md`).
