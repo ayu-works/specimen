@@ -125,7 +125,7 @@ e2e (Playwright, local servers only):
 - ARCHITECTURE §8 `css.fetch` row updated. `pnpm gate` green.
 
 - PR #37. Lens A r1 (pe-8a): APPROVED, 0C/0H/0M, 1 LOW folded in 292804a (an unsupported page is judged by its
-  scheme only); the fold was approved too. pe-8a handed over, so a fresh PE does any later fold checks.
+  scheme only); the fold was approved too. pe-8a handed over; the new PE is pe-4d. After lens B, send the head commit to pe-4d and specimen-6a.
 
 ## Next
 - Lens B review: fold its findings, then send the diff back to the reviewer and to the new PE.
