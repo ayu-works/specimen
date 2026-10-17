@@ -45,3 +45,19 @@
 `Unsupported page`. So `Unsupported page: file:///Users/x/webstore-notes.html` gets the chrome:// / Web Store text
 instead of "only websites". Only the wording is wrong. Fix (if wanted): check `Unsupported page` first, and map it
 by its URL's scheme (`chrome:` or `chrome-extension:` → the restricted text; anything else → only websites).
+
+## Fold check (pe-4d, 2026-10-17): lens B r1 fold @ 64a0ee9, APPROVED (1 optional LOW)
+- **H1:** the `split('{')` pass gives the same segments as `/[^{}]*\{/g` (each `{` back to the previous `}`; `{{`
+  gives two empty selectors in both). The `walkText` `;` cache still holds the first `;` ≥ `i` (no `;` in
+  [i', semi) ⇒ none in [i, semi)), so its behaviour is unchanged. Probe with 9 more hostile 2 MB shapes the table
+  lacks (a 2 MB selector before `{`: theme, `:hover`, plain; a 2 MB `@media` prelude; `@` with no `;`; an open quote;
+  200k `.dark a{}`; a decl block with no `;`): each runs in 36–238 ms, with no warnings.
+- **M1:** with the `sameUrl` line mutated out, the new navigation test goes red. All NoShot/`noShotReason` texts are fixed.
+- **M3:** `fetch failed` has left the wire type and `FIXED_REASONS`, and is now only the sampler's own fixed text.
+  The contract matches the owner OK.
+- L1 (one aggregate warning, ≤ 3 host names), L3, L4, L5: fine. `scanFailures` + `cssom` 75/75 on 64a0ee9.
+
+### L1 (optional). `inFront` skips the URL check when `tab.url` is hidden
+`if (tab.url && !sameUrl(...))` lets the shot through when Chrome hides the URL. Today `captureVisibleTab` would
+fail on such a page anyway (no host access ⇒ no capture), so this has no effect now. **Fix:** fail closed with
+`if (!tab.url || !sameUrl(tab.url, url))`. A page we could scan always has a visible URL, so this costs nothing.
