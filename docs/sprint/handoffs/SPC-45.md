@@ -103,3 +103,5 @@ committed event can't satisfy it, tested). (c) The accepted residuals go in the 
 
 ## Next / how to resume
 - PR is open against exec/spc-44; fold in review files from `docs/sprint/reviews/SPC-45-*.md` with new commits.
+- 2026-10-17: PR #48 open. Lens A r1 (pe-b2): APPROVED, 0 findings, committed. CI reports no checks on this branch
+  (the PR's base is exec/spc-44, not main). Waiting for lens B.
