@@ -13,7 +13,7 @@ delimiter. My guess is that it splits, but this is the measurement.
 ### Measurement first
 - **Parser:** `mdast-util-from-markdown` + `micromark-extension-gfm-table` + `mdast-util-gfm-table` as
   **devDependencies of `packages/core` only** (the same table tokenizer that remark-gfm uses, without the rest
-  of unified/remark; `remark-gfm` itself is fine instead if you prefer). No runtime deps. All are 2023 v2 releases.
+  of unified/remark; `remark-gfm` itself is fine instead if you prefer). No runtime deps. (Correction: `micromark-extension-gfm-table@2.1.2` is from 2026-09-11.)
 - **Input:** real generator output: `generateDesignMd()` on the `landing-basic` fixture with `cssVariables`
   set to the probe values below (the CSS-variable table puts the name and value in `code()` cells), plus
   `table()` directly for plain-text cells.
@@ -98,5 +98,14 @@ across `code()` and `cell()`); HTML `<code>` + `&#124;` (DESIGN.md is read raw b
 - devDeps pinned exactly in `packages/core` only. Build: 29620131 → 29620151 bytes (+20, the `cell()` change).
 - T2.05 row in `docs/TESTING.md`. `pnpm gate` green locally (gitleaks not installed locally: skipped; CI scans).
 
+## Lens B r1 (2026-10-17): 1 MEDIUM, 3 LOW
+- **M1 (accepted):** my premise was wrong. Measured by lens B on GitHub's renderer (cmark-gfm): it treats `\|` as an
+  escaped pipe however many backslashes come before it, then strips one `\`. It never split the old output, and old
+  code cells were exact there. Only micromark (remark/MDX/Docusaurus) pairs backslashes and splits. So option 1 gives
+  one cell in both, but on GitHub code cells go from exact to doubled. Re-asked pe-b2 (see Next).
+- L1 (agents read escaped cells), L3 (plain cells render page-derived markdown): pre-existing, follow-up tickets.
+- L2: a transitive (`mdast-util-to-markdown@2.2.0`) is about 14 days old; no change. Corrected: `micromark-extension-gfm-table@2.1.2`
+  is from 2026-09-11, not 2023.
+
 ## Next / how to resume
-- PR #51 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-36-a-r1.md`). Waiting on lens B; fold findings as they arrive.
+- PR #51 open. Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-36-a-r1.md`). Lens B r1 in `docs/sprint/reviews/SPC-36-b-r1.md`. Waiting on pe-b2 to re-decide M1: keep option 1 (comment fixed) or option 1b (lossless plain-text fallback inside `cell()`).
