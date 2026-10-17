@@ -126,7 +126,9 @@ answer finishes.
 - `pnpm gate` green (the one Biome warning is `lib/chatScrub.ts`, already on main).
 
 ## Next
-- PR #31 open. Lens A r1 APPROVED (2 optional LOWs: L1 duplicate-id comment, L2 interrupt per chunk), to fold together with lens B's findings in one new commit, then send the diff to pe-ed. Waiting on lens B + security.
+- PR #31 at e1158e6 (+ this doc commit). Lens A APPROVED, including the fold check of e1158e6. Lens B r1 folded (H1, L1, L2);
+  L3 and the worker crash during a load were handed to the orchestrator as follow-ups. Waiting on the orchestrator for a
+  lens B r2 (if wanted) and the owner's merge. Nothing else open.
 
 ## Review r1 (folded in one commit after 3ae1b68)
 - **Lens B H1 (fixed):** each running job gets an `abandon` reject. `disposeEngine(reason)` fires it, and `create()` and

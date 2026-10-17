@@ -39,3 +39,17 @@ contract. Or stop the existing job too, so the host and the client agree.
 This sends one worker message per chunk until the stream ends. In practice the stream ends within one or two
 chunks, so the cost is negligible. **Fix (optional):** interrupt at most once per N chunks, or only when no
 interrupt is pending. Not needed for merge.
+
+## Fold check (e1158e6, on top of 3ae1b68): APPROVED
+- **Lens B H1 re-checked.** `disposeEngine` rejects the running job's `gone` before it terminates the worker.
+  `create()` and every `next()` race `gone`, so an unload, a delete, another model's load or a worker
+  `error`/`messageerror` ends the chat with a fixed-text `error` (not `done`), and `finally` frees `running` and
+  the chain. Rejections of the abandoned `create`/`next` promises are handled by the race, and `gone` has its own
+  catch, so nothing is left unhandled. The `worker === w` guard stops a stale worker's late error from disposing
+  a newer engine. On this head, `llmHost` + `councilHost` + `council` pass 57/57 (I ran them).
+- **Lens B L2 (sender check).** `port.sender.url.startsWith(chrome.runtime.getURL(''))`. The only connector is
+  `webllm.ts`, which runs in extension pages (side panel, options), and the council attaches in-page, not via
+  `onConnect`. A content script's sender URL is the web page's, so it is refused. Correct.
+- **My L1:** comment added. **My L2:** left as is; accepted.
+- Known gap, filed by the orchestrator: a worker crash *during a load* still leaves `CreateWebWorkerMLCEngine`
+  pending, so `loadPromise` never settles. This is not a regression; it is the same as on main.
