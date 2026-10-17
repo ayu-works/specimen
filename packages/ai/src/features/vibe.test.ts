@@ -47,6 +47,15 @@ describe('vibe', () => {
     expect(p.calls).toHaveLength(1);
   });
 
+  it('T3.35 asks for a budget a thinking model can use, capped at a quarter of a small context (SPC-46)', async () => {
+    const big = createMockProvider({ text: JSON_OUT, contextTokens: 1_000_000 });
+    await vibe(big, scan, null);
+    expect(big.calls[0]?.maxTokens).toBe(1200);
+    const small = createMockProvider({ text: JSON_OUT, contextTokens: 4096 });
+    await vibe(small, scan, null);
+    expect(small.calls[0]?.maxTokens).toBe(1024);
+  });
+
   it('is text-only when no screenshot is given', async () => {
     const p = createMockProvider({ vision: true, text: JSON_OUT });
     expect((await vibe(p, scan, null)).usedImage).toBe(false);

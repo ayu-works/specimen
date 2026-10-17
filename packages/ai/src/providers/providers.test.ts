@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TRUNCATED_TEXT } from '../errors';
+import { MID_STREAM_TEXT, TRUNCATED_TEXT } from '../errors';
 import { getPreset } from '../presets';
 import { drain, hangingResponse, sseResponse } from '../testing/testUtils';
 import type { ChatRequest, LLMProvider } from '../types';
 import { ProviderError } from '../types';
 import { createAnthropic } from './anthropic';
 import { createGemini } from './gemini';
+import { CUT_SHORT_TEXT, FILTERED_TEXT } from './http';
 import { buildOpenAIRequest, createOpenAICompat } from './openaiCompat';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -207,7 +208,7 @@ describe('gemini', () => {
       sseResponse([
         'data: {"candidates":[{"content":{"parts":[{"text":"Hel"}]}}]}\n\n',
         'data: {"candidates":[{"content":{"par',
-        'ts":[{"text":"lo"},{"text":"!"}]}}]}\n\n',
+        'ts":[{"text":"lo"},{"text":"!"}]},"finishReason":"STOP"}]}\n\n',
         'data: not-json\n\n',
       ]),
     );
@@ -252,13 +253,11 @@ describe('empty and missing bodies (M1)', () => {
     });
   }
 
-  it('T3.02 events with no text (and no [DONE]) still end quietly, as an empty answer', async () => {
+  it('T3.02 events with no text, no finish_reason and no [DONE] reject as cut off (SPC-46)', async () => {
     stubFetch(() => sseResponse(['data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n']));
-    expect(
-      await drain(
-        createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: 'k' }).chat(REQ),
-      ),
-    ).toBe('');
+    await expect(
+      drain(createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: 'k' }).chat(REQ)),
+    ).rejects.toMatchObject({ kind: 'other', message: CUT_SHORT_TEXT });
   });
 });
 
@@ -448,21 +447,166 @@ describe('a reply cut off at the token limit (SPC-41)', () => {
     ],
     ['T3.04 gemini: finishReason "STOP"', gem, [gemChunk('Hel'), gemChunk('lo', 'STOP')]],
     // Other stop reasons are not a token-limit cut-off: an exact-value match must not widen.
-    ...['tool_calls', 'content_filter'].map((r): [string, () => LLMProvider, string[]] => [
+    ...['tool_calls'].map((r): [string, () => LLMProvider, string[]] => [
       `T3.02 openaiCompat: finish_reason "${r}"`,
       oai,
       [oaiChunk('Hel', null), oaiChunk('lo', r), 'data: [DONE]\n\n'],
     ]),
-    ...['stop_sequence', 'tool_use', 'refusal'].map((r): [string, () => LLMProvider, string[]] => [
-      `T3.03 anthropic: stop_reason "${r}"`,
-      ant,
-      [antText('Hel'), antText('lo'), ...antStop(r)],
-    ]),
-    ...['SAFETY', 'RECITATION'].map((r): [string, () => LLMProvider, string[]] => [
+    ...['stop_sequence', 'tool_use', 'pause_turn'].map(
+      (r): [string, () => LLMProvider, string[]] => [
+        `T3.03 anthropic: stop_reason "${r}"`,
+        ant,
+        [antText('Hel'), antText('lo'), ...antStop(r)],
+      ],
+    ),
+    ...['OTHER', 'LANGUAGE'].map((r): [string, () => LLMProvider, string[]] => [
       `T3.04 gemini: finishReason "${r}"`,
       gem,
       [gemChunk('Hel'), gemChunk('lo', r)],
     ]),
+  ];
+  for (const [name, make, chunks] of whole) {
+    it(`${name} still ends as a whole reply`, async () => {
+      stubFetch(() => sseResponse(chunks));
+      const { seen, error } = await run(make());
+      expect(error).toBeUndefined();
+      expect(seen.join('')).toBe('Hello');
+    });
+  }
+});
+
+describe('a stream with no stop reason, or stopped by a filter or a provider error (SPC-46)', () => {
+  const KEY = 'sk-ant-very-secret-key';
+  const oai = () => createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: KEY });
+  const ant = () => createAnthropic({ baseUrl: '', model: '', apiKey: KEY });
+  const gem = () => createGemini({ baseUrl: '', model: '', apiKey: KEY });
+  const oaiChunk = (content: string | null, finish: string | null) =>
+    `data: ${JSON.stringify({ choices: [{ delta: content === null ? {} : { content }, finish_reason: finish }] })}\n\n`;
+  const antText = (text: string) =>
+    `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}\n\n`;
+  const antStop = (stop_reason: string) => [
+    `data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason } })}\n\n`,
+    'data: {"type":"message_stop"}\n\n',
+  ];
+  const gemChunk = (text: string | null, finishReason?: string) =>
+    `data: ${JSON.stringify({ candidates: [{ content: { parts: text === null ? [] : [{ text }] }, finishReason }] })}\n\n`;
+
+  async function run(p: LLMProvider) {
+    const seen: string[] = [];
+    let error: unknown;
+    try {
+      for await (const d of p.chat(REQ)) seen.push(d);
+    } catch (e) {
+      error = e;
+    }
+    return { seen, error };
+  }
+  function expectFixed(error: unknown, message: string) {
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).toMatchObject({ kind: 'other', message });
+    const e = error as ProviderError;
+    expect(e.cause).toBeUndefined();
+    for (const s of [e.message, String(e), JSON.stringify(e), e.stack ?? '']) {
+      expect(s).not.toContain(KEY);
+    }
+  }
+
+  type Case = [string, () => LLMProvider, string[], string, string];
+  const failing: Case[] = [
+    // L1: the stream closed cleanly before the provider said it was done.
+    [
+      'T3.02 openaiCompat: text then EOF with no finish_reason and no [DONE]',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', null)],
+      'Hello',
+      CUT_SHORT_TEXT,
+    ],
+    [
+      'T3.03 anthropic: text then EOF with no message_stop',
+      ant,
+      [antText('Hel'), antText('lo')],
+      'Hello',
+      CUT_SHORT_TEXT,
+    ],
+    [
+      'T3.04 gemini: text then EOF with no finishReason',
+      gem,
+      [gemChunk('Hel'), gemChunk('lo')],
+      'Hello',
+      CUT_SHORT_TEXT,
+    ],
+    // L2: a filter stop, after the chunk's own text, once; later chunks are ignored.
+    [
+      'T3.02 openaiCompat: finish_reason "content_filter"',
+      oai,
+      [
+        oaiChunk('Hel', null),
+        oaiChunk('lo', 'content_filter'),
+        oaiChunk('!', null),
+        'data: [DONE]\n\n',
+      ],
+      'Hello',
+      FILTERED_TEXT,
+    ],
+    [
+      'T3.03 anthropic: stop_reason "refusal"',
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop('refusal'), antText('!')],
+      'Hello',
+      FILTERED_TEXT,
+    ],
+    ...['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY'].map(
+      (r): Case => [
+        `T3.04 gemini: finishReason "${r}"`,
+        gem,
+        [gemChunk('Hel'), gemChunk('lo', r), gemChunk('!', 'STOP')],
+        'Hello',
+        FILTERED_TEXT,
+      ],
+    ),
+    [
+      'T3.04 gemini: a prompt blocked by promptFeedback.blockReason (no candidates)',
+      gem,
+      [`data: ${JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } })}\n\n`],
+      '',
+      FILTERED_TEXT,
+    ],
+    // L2: a provider-side error stop.
+    ...['error', 'insufficient_system_resource'].map(
+      (r): Case => [
+        `T3.02 openaiCompat: finish_reason "${r}"`,
+        oai,
+        [oaiChunk('Hel', null), oaiChunk('lo', r), 'data: [DONE]\n\n'],
+        'Hello',
+        MID_STREAM_TEXT,
+      ],
+    ),
+  ];
+  for (const [name, make, chunks, text, message] of failing) {
+    it(`${name} rejects with fixed text after the partial text`, async () => {
+      stubFetch(() => sseResponse(chunks));
+      const { seen, error } = await run(make());
+      expect(seen.join('')).toBe(text);
+      expectFixed(error, message);
+    });
+  }
+
+  const whole: [string, () => LLMProvider, string[]][] = [
+    [
+      'T3.02 openaiCompat: [DONE] with no finish_reason (Ollama-style local server)',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', null), 'data: [DONE]\n\n'],
+    ],
+    [
+      'T3.02 openaiCompat: finish_reason "stop" with no [DONE]',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', 'stop')],
+    ],
+    [
+      'T3.04 gemini: finishReason "STOP" then a trailing chunk with none',
+      gem,
+      [gemChunk('Hel'), gemChunk('lo', 'STOP'), gemChunk(null)],
+    ],
   ];
   for (const [name, make, chunks] of whole) {
     it(`${name} still ends as a whole reply`, async () => {
