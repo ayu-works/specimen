@@ -20,18 +20,39 @@ export const TOO_LONG_TEXT =
 const IMAGE_REJECTED =
   /content must be a string|image_url|unsupported content|(?:does not|doesn't|cannot|can't|unable to) (?:support|accept|process|read|handle) (?:images?|image (?:input|content)|vision|multi-?modal)|(?:images?|image (?:input|content)|vision|multi-?modal)(?: input| content)? (?:is|are) not supported|not (?:a )?(?:vision|multi-?modal)(?: model)?/i;
 
-const RATE_TEXT =
+export const RATE_TEXT =
   'The provider is rate-limiting requests. Wait a minute and try again, or pick a smaller model.';
+/** No credit left on the account (SPC-30): waiting won't help, so callers never retry it. */
+export const OUT_OF_CREDIT_TEXT =
+  'Your provider account is out of credit. Add credit or billing with the provider, then try again.';
+
+/**
+ * Billing codes (OpenAI and hosts that copy its error shape). OpenAI's out-of-credit message
+ * ("You exceeded your current quota…") is not matched: Gemini's per-minute limit uses the same words.
+ */
+const CREDIT_CODE = /^(?:insufficient_quota|billing_hard_limit_reached)$/;
+/** Anthropic (400) and xAI (403) say it only in the message. */
+const CREDIT_TEXT =
+  /credit balance is too low|insufficient (?:balance|credits?|funds)|(?:out of|no) credits\b|doesn't have any credits|billing hard limit/i;
+
+/** True when an error object's string `code` or `type` is a billing code. */
+function creditCode(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const { code, type } = e as Record<string, unknown>;
+  return [code, type].some((v) => typeof v === 'string' && CREDIT_CODE.test(v));
+}
 
 /** Map an HTTP failure to a friendly ProviderError. The body is read only to classify it. */
 export async function httpError(res: Response): Promise<ProviderError> {
   let detail = '';
+  let billing = false;
   try {
     const text = await res.text();
     try {
       const j = JSON.parse(text) as { error?: { message?: unknown } | string; message?: unknown };
       const m = typeof j.error === 'string' ? j.error : (j.error?.message ?? j.message);
       detail = typeof m === 'string' ? m : '';
+      billing = creditCode(j.error);
     } catch {
       detail = text;
     }
@@ -39,6 +60,14 @@ export async function httpError(res: Response): Promise<ProviderError> {
     /* body unreadable */
   }
   detail = detail.replace(/\s+/g, ' ').trim().slice(0, 500);
+  // Before auth (xAI sends 403) and before rate (OpenAI sends 429).
+  if (
+    res.status === 402 ||
+    billing ||
+    ([400, 403, 429].includes(res.status) && CREDIT_TEXT.test(detail))
+  ) {
+    return new ProviderError('other', OUT_OF_CREDIT_TEXT);
+  }
   if (res.status === 401 || res.status === 403) {
     return new ProviderError('auth', "Invalid API key, or the key can't use this model.");
   }
@@ -80,10 +109,12 @@ export async function httpError(res: Response): Promise<ProviderError> {
 
 /**
  * Map an `{error: …}` event inside a 200 stream. Only the event's `type` / `code` / `status`
- * fields are looked at, to tell a rate limit or overload (so callers can back off) from the rest.
+ * fields are looked at, to tell a rate limit or overload (so callers can back off) and an
+ * out-of-credit account from the rest.
  */
 export function streamError(err: unknown): ProviderError {
   const e = (err && typeof err === 'object' ? err : {}) as Record<string, unknown>;
+  if (creditCode(e)) return new ProviderError('other', OUT_OF_CREDIT_TEXT);
   const hint = [e.type, e.code, e.status].map((v) => String(v ?? '')).join(' ');
   if (/rate[_ -]?limit|overload|exhausted|\b429\b|\b529\b/i.test(hint))
     return new ProviderError('rate', RATE_TEXT);

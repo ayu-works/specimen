@@ -4,6 +4,8 @@ export {
   IMAGE_REJECTED_TEXT,
   MID_STREAM_TEXT,
   mapThrown,
+  OUT_OF_CREDIT_TEXT,
+  RATE_TEXT,
   scrubLegacyProviderText,
   streamError,
   TRUNCATED_TEXT,
