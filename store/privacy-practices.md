@@ -25,9 +25,6 @@ Creates one hidden document, with the reason WORKERS, that runs the optional loc
 **unlimitedStorage**
 The local Library (scans, thumbnails, chats) is kept in IndexedDB, and optional local model weights (0.7 to 5.2 GB) are kept in Cache Storage. Both exceed the default quota.
 
-**debugger (optional)**
-Requested at runtime only when the user clicks a capture that needs it: emulating a phone-width viewport or the dark color scheme to measure the mobile layout or dark theme. It is attached to the scanned tab for a few seconds and then detached. It is not granted at install.
-
 **Host permission `<all_urls>` (optional)**
 Requested once, on the user's first scan. Opening the side panel from the toolbar does not grant activeTab, and Specimen needs to read the page being scanned, take a thumbnail, and fetch that page's own stylesheets so the measurements are complete. The user can revoke it at any time. There are no host permissions at install and no content scripts declared in the manifest.
 

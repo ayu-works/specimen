@@ -19,12 +19,12 @@ export interface Extras {
   /** The tab that was scanned; dark capture and "Add another page" use it. */
   tabId: number | null;
   hints: RawHints | null;
-  /** `wide` = Chrome kept the popup wider than a phone and the debugger permission isn't held. */
+  /** `wide` = Chrome kept the popup wider than a phone, so nothing was captured. */
   mobile: 'idle' | 'running' | 'done' | 'failed' | 'wide' | 'skipped';
-  /** Why the mobile capture was `skipped` (full screen, page changed, debugger busy, opened as a tab). */
+  /** Why the mobile capture was `skipped` (full screen, or opened as a tab). */
   mobileSkip: MobileSkipReason | null;
-  /** `offer` = the page only reacts to the OS setting: needs the one-time debugger permission. */
-  theme: 'idle' | 'running' | 'measured' | 'none' | 'offer' | 'failed';
+  /** `system` = the page's other scheme only follows the OS setting: not measured, derived. */
+  theme: 'idle' | 'running' | 'measured' | 'none' | 'system' | 'failed';
   page: 'idle' | 'running';
   /** Short plain-language note for the last failure or result. */
   note: string | null;

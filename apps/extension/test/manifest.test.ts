@@ -17,6 +17,9 @@ describe('manifest', () => {
       ['activeTab', 'scripting', 'sidePanel', 'storage', 'offscreen', 'unlimitedStorage'].sort(),
     );
     expect(m.optional_host_permissions).toEqual(['<all_urls>']);
+    // No `debugger` (SPC-44): Chrome refuses it as optional, and nothing needs it.
+    expect(m.optional_permissions).toBeUndefined();
+    expect(JSON.stringify(m)).not.toContain('debugger');
     expect(m.host_permissions).toBeUndefined();
     expect(m.content_scripts).toBeUndefined();
     expect(m.side_panel?.default_path).toBe('sidepanel.html');
