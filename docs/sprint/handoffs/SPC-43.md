@@ -2,7 +2,7 @@
 
 Executor session: `spc-43-b9` · Branch `exec/spc-43` (from origin/main b01ea77) · PE `pe-b2` · Orchestrator `specimen-75`, then `specimen-5c`
 
-Status: **BUILT, `pnpm gate` green, PR open.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
+Status: **PR #47 open; lens A r1 APPROVED by pe-b2 (0 findings, `docs/sprint/reviews/SPC-43-a-r1.md`). CI gate red only from a gitleaks hit in commit 37da9be on origin/exec/spc-41 (not on this branch); re-run CI after spc-41 force-pushes. Waiting for lens B.** Plan APPROVED by pe-b2 2026-10-17 (own-echo re-list accepted).
 PE build notes, all done: (a) the sender channel is `unref()`ed (no hang in vitest); (b) `updateScan` on a missing row
 sends no ping, tested with the throwing writers and the duplicates-only import; (c) a superseded re-list makes no
 object URLs, a newer one revokes the previous list's, and a re-list in flight at unmount makes none (generation
