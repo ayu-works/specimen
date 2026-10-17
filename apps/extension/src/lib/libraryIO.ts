@@ -1,6 +1,6 @@
 /** `.specimen.json` export / import (ARCHITECTURE §9). Thumbnails are never exported. */
 import { filterCssVariables } from '@specimen/core';
-import { BOUNDS, type DesignScan, migrate } from '@specimen/core/schema';
+import { BOUNDS, cutText, type DesignScan, migrate } from '@specimen/core/schema';
 import { importScans, libraryErrorText } from './db';
 
 export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
@@ -12,7 +12,8 @@ export function buildExport(scans: DesignScan[]): string {
       favorite: _f,
       ...rest
     } = s as DesignScan & { tags?: unknown; favorite?: unknown };
-    return rest;
+    // An old over-long id is listed by its stored key; export it as the v5 id it becomes.
+    return { ...rest, id: cutText(rest.id, BOUNDS.text) };
   });
   return JSON.stringify({ format: 'specimen', version: 1, scans: clean }, null, 2);
 }

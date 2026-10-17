@@ -456,6 +456,24 @@ describe('an old row whose id is over the v5 bound (lens B M2)', () => {
     expect(await db.scans.get(cut)).toMatchObject({ title: 'Merged', favorite: true, tags: ['t'] });
   });
 
+  it('T4.02 exporting it writes the cut id, so the backup imports (PE fold L-a)', async () => {
+    await seed();
+    const file = fileOf(buildExport(await listScans()));
+    await db.scans.clear();
+    expect(await importFile(file)).toMatchObject({ imported: 1, skipped: 0 });
+    expect(await db.scans.get(long.slice(0, 1000))).toBeDefined();
+  });
+
+  it('T4.01 a re-key never overwrites another scan already at the cut id (PE fold L-b)', async () => {
+    await seed();
+    const cut = long.slice(0, 1000);
+    await saveScan(scanOf(cut, { title: 'Other' }), null);
+    await expect(updateScan(long, { title: 'Renamed' })).rejects.toThrow(/already has this id/);
+    expect(await db.scans.get(cut)).toMatchObject({ title: 'Other' });
+    expect(await db.scans.get(long)).toBeDefined();
+    expect((await db.chats.get(long))?.messages).toHaveLength(1);
+  });
+
   it('T4.01 a merge-style replace of the never-edited row re-keys it instead of adding a copy', async () => {
     await seed();
     await replaceStoredScan({ ...scanOf(long), title: 'Merged' });

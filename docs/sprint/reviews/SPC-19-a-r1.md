@@ -59,3 +59,27 @@ keep the detail out of the UI.
 - **L2 fixed.** The title input has `maxLength={BOUNDS.title}`.
 - **L3 declined.** The reason is accepted: the text is not a secret, and it is the only clue for an unknown
   failure. `trim.ts` and `migrations.ts` are unchanged.
+
+## Lens-B fold check: ad19fe6 (pe-8a, 2026-10-17): APPROVED, 2 optional LOWs
+Checked `git diff 0851801..ad19fe6` for `db.ts`, `schema/trim.ts` and `schema/index.ts`. `migrations.ts` and
+`bounds.ts` are unchanged.
+- **trim `cutText`:** correct. It cuts to `max - 1` when unit `max - 1` is a high surrogate, so a pair is never split.
+  The walk uses it, so v1–v4 trimming is unchanged except at that edge.
+- **M2 re-key:** correct. `toStored` keeps the stored key, so the panel can address the row. `findRow` falls back to
+  the cut id only for ids over the bound. `putReplacing` runs inside one rw transaction over scans, thumbs and chats,
+  so a failed put or delete rolls back the move. `chatsReady` is awaited outside the transaction, as it must be.
+- **M1:** the stored-side compare now filters with `BOUNDS.cssVariables`, the same as the import, so the 400-var
+  backup is no longer mis-keyed. **L2:** BulkError `failures[0]` is read.
+- **Can the tests fail?** I ran ad19fe6's `test/library.test.ts` with `db.ts` reverted to 0851801: 5 failed (T4.01 ×3,
+  T4.02, T4.03) and 26 passed.
+
+**L-a (optional). The export can carry an over-bound id.** `toStored` returns the 1500-char key as `id`, with
+`schemaVersion` 5, and `buildExport` writes it as is. Re-importing that file runs strict v5 validation, so the scan
+is skipped: an export → import round trip loses a row that was never edited. Fix: in `buildExport`,
+`id: cutText(s.id, BOUNDS.text)`.
+
+**L-b (optional). A re-key can overwrite another scan.** `putReplacing` puts at the cut id without checking for an
+existing row. Two over-long v4 ids that share their first 1000 chars, or a v5 row whose id equals the cut, collide,
+and the other scan, with its thumbnail and chat, is silently replaced. Both cases need a crafted import. Fix: if
+`row.id !== key` and `db.scans.get(row.id)` exists, keep the row under its old key (do not re-key), or derive the
+id from the content as the import does (`<cut>-<sha48>`).

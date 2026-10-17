@@ -178,6 +178,9 @@ parents it touches), not the whole input. Output identical to today for valid in
   - L1 (vibe.ts bounds): not folded. vibe.ts is SPC-32's file and SPC-33 owns the Vibe save, so it's routed to the
     orchestrator for SPC-33.
 
+- pe-8a fold check of ad19fe6: APPROVED, plus 2 optional LOWs, both folded. L-a: `buildExport` writes the cut id.
+  L-b: `putReplacing` throws rather than overwrite another row at the cut id.
+
 ## Next
 - Reviews (PE lens A, lens B, security). Fold findings as new commits.
 - Follow-ups not in this PR: Vibe.tsx silent save (PE filing); caching migrated rows in `listScans`; Library

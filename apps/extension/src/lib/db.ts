@@ -170,6 +170,9 @@ async function findRow(id: string): Promise<StoredScan | undefined> {
  * upgrade cut an over-long v4 id, the row moves to its new key, with its thumbnail and chat.
  */
 async function putReplacing(key: string, row: StoredScan): Promise<void> {
+  if (row.id !== key && (await db.scans.get(row.id)))
+    // Two old ids sharing their first 1000 chars (a crafted import): never overwrite the other scan.
+    throw new Error('another scan in your Library already has this id');
   await db.scans.put(row);
   if (row.id === key) return;
   await db.scans.delete(key);
