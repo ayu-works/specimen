@@ -278,6 +278,21 @@ describe('T3.05 out of credit is its own fixed text, not a rate limit (SPC-30)',
     expect(
       await httpError(body(400, { message: 'x', code: 'billing_hard_limit_reached' })),
     ).toMatchObject(OUT);
+    // No active billing (new account, card removed): OpenAI sends it as a 429 too.
+    const inactive = {
+      message: 'Your account is not active, please check your billing details on our website.',
+      type: 'billing_not_active',
+      code: 'billing_not_active',
+    };
+    expect(await httpError(body(429, inactive))).toMatchObject(OUT);
+  });
+
+  it('a gateway that flattens the error still gets out of credit by code', async () => {
+    expect(await httpError(body(429, 'insufficient_quota'))).toMatchObject(OUT);
+    const flat = new Response(JSON.stringify({ code: 'insufficient_quota', message: QUOTA_MSG }), {
+      status: 429,
+    });
+    expect(await httpError(flat)).toMatchObject(OUT);
   });
 
   it('a 402 is out of credit, even with an unreadable body', async () => {
@@ -346,6 +361,9 @@ describe('T3.05 out of credit is its own fixed text, not a rate limit (SPC-30)',
     expect(streamError({ code: 'insufficient_quota', type: 'insufficient_quota' })).toMatchObject(
       OUT,
     );
+    expect(streamError({ code: 'billing_not_active' })).toMatchObject(OUT);
+    // OpenRouter reports a mid-stream error with a numeric code.
+    expect(streamError({ code: 402, message: 'Insufficient credits' })).toMatchObject(OUT);
     expect(streamError({ type: 'rate_limit_exceeded' }).kind).toBe('rate');
     expect(streamError({ status: 'RESOURCE_EXHAUSTED' }).kind).toBe('rate');
   });

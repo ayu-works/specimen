@@ -1,6 +1,6 @@
 import type { DesignScan } from '@specimen/core/schema';
 import { describe, expect, it } from 'vitest';
-import { OUT_OF_CREDIT_TEXT, TRUNCATED_TEXT } from '../errors';
+import { httpError, OUT_OF_CREDIT_TEXT, TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan, loadInjectionStrings } from '../testing/testUtils';
 import { type ChatRequest, type LLMProvider, ProviderError } from '../types';
@@ -252,7 +252,16 @@ describe('critique panel engine', () => {
   });
 
   it('T3.21 an out-of-credit account stops the run at once with that text, no retry (SPC-30)', async () => {
-    const p = failing([undefined, new ProviderError('other', OUT_OF_CREDIT_TEXT), undefined]);
+    // Driven from OpenAI's real 429 body, so a regression in httpError to 'rate' shows up here too.
+    const quota = await httpError(
+      new Response(
+        JSON.stringify({
+          error: { type: 'insufficient_quota', code: 'insufficient_quota', message: 'x' },
+        }),
+        { status: 429 },
+      ),
+    );
+    const p = failing([undefined, quota, undefined]);
     const seen: CritiqueTurn[] = [];
     const r = await runCritique(p, scan, {
       retryDelaysMs: [1, 1, 1],

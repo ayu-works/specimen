@@ -30,13 +30,14 @@ export const OUT_OF_CREDIT_TEXT =
  * Billing codes (OpenAI and hosts that copy its error shape). OpenAI's out-of-credit message
  * ("You exceeded your current quota…") is not matched: Gemini's per-minute limit uses the same words.
  */
-const CREDIT_CODE = /^(?:insufficient_quota|billing_hard_limit_reached)$/;
+const CREDIT_CODE = /^(?:insufficient_quota|billing_hard_limit_reached|billing_not_active)$/;
 /** Anthropic (400) and xAI (403) say it only in the message. */
 const CREDIT_TEXT =
   /credit balance is too low|insufficient (?:balance|credits?|funds)|(?:out of|no) credits\b|doesn't have any credits|billing hard limit/i;
 
-/** True when an error object's string `code` or `type` is a billing code. */
+/** True when an error object's string `code` or `type`, or a bare string error, is a billing code. */
 function creditCode(e: unknown): boolean {
+  if (typeof e === 'string') return CREDIT_CODE.test(e.trim());
   if (!e || typeof e !== 'object') return false;
   const { code, type } = e as Record<string, unknown>;
   return [code, type].some((v) => typeof v === 'string' && CREDIT_CODE.test(v));
@@ -52,7 +53,8 @@ export async function httpError(res: Response): Promise<ProviderError> {
       const j = JSON.parse(text) as { error?: { message?: unknown } | string; message?: unknown };
       const m = typeof j.error === 'string' ? j.error : (j.error?.message ?? j.message);
       detail = typeof m === 'string' ? m : '';
-      billing = creditCode(j.error);
+      // Gateways may flatten the error: `{error: "insufficient_quota"}` or a top-level `code`.
+      billing = creditCode(j.error) || creditCode(j);
     } catch {
       detail = text;
     }
@@ -114,7 +116,9 @@ export async function httpError(res: Response): Promise<ProviderError> {
  */
 export function streamError(err: unknown): ProviderError {
   const e = (err && typeof err === 'object' ? err : {}) as Record<string, unknown>;
-  if (creditCode(e)) return new ProviderError('other', OUT_OF_CREDIT_TEXT);
+  // OpenRouter sends a numeric 402 code mid-stream.
+  if (creditCode(e) || e.code === 402 || e.status === 402)
+    return new ProviderError('other', OUT_OF_CREDIT_TEXT);
   const hint = [e.type, e.code, e.status].map((v) => String(v ?? '')).join(' ');
   if (/rate[_ -]?limit|overload|exhausted|\b429\b|\b529\b/i.test(hint))
     return new ProviderError('rate', RATE_TEXT);

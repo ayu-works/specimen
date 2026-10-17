@@ -109,9 +109,16 @@ optional one in the PR body.
   timeout in T5.03 (mobile capture window, unrelated, busy machine) and passed 54/54 on rerun; check-ids green.
 
 - PR #52 open (base exec/spc-41). Lens A r1 (pe-b2): APPROVED, 0 findings (docs/sprint/reviews/SPC-30-a-r1.md).
+- Lens B r1 (docs/sprint/reviews/SPC-30-b-r1.md): 0C 0H 1M 4L, all folded. M1 `billing_not_active` added to
+  CREDIT_CODE; L1 a flattened `{error:"insufficient_quota"}` or top-level `code` is checked; L2 a numeric 402
+  mid-stream code is out of credit; L3 the council test starts from a real 429 body via httpError; L4 full stops
+  in the TESTING.md rows. Gate green on the whole run (secrets skipped locally, no gitleaks).
+- Out of scope (lens B notes, follow-up candidates): Anthropic HTTP 529 vs stream 529 retry mismatch;
+  OpenRouter 403 "Key limit exceeded" and Gemini 403 "requires billing" shown as invalid key; mid-stream image
+  rejection still MID_STREAM_TEXT (pe-b2 note).
 
 ## Next
-- Lens B review; fold its findings. No merge without the owner (run mode: one final "merge all").
+- pe-b2 fold check. No merge without the owner (run mode: one final "merge all").
 
 ## How to resume
 Read this file, then `git log exec/spc-41..exec/spc-30`.
