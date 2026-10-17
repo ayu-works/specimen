@@ -14,7 +14,7 @@ A checklist for the maintainer.
 5. Privacy policy URL: use `https://<site>/privacy` once the website is live. Until then use the GitHub file: https://github.com/ayu-works/specimen/blob/main/PRIVACY.md (merge it to `main` first). Update the dashboard when the site is live.
 6. **Distribution** tab: visibility Public, regions All regions, pricing Free.
 7. Click **Submit for review**. Choose to publish automatically after approval, or to publish manually.
-8. Review usually takes from a few days to about a week. A first submission, or one with optional host and `debugger` permissions, can take longer. Watch the email on your developer account for questions.
+8. Review usually takes from a few days to about a week. A first submission, or one with an optional host permission, can take longer. Watch the email on your developer account for questions.
 9. After approval, replace the placeholder `https://chromewebstore.google.com/detail/specimen/TODO` in `README.md` with the real listing URL.
 
 ## If review rejects it

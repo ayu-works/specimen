@@ -62,35 +62,67 @@ test.describe('Phase 5 capture and fidelity flows (full extension)', () => {
     expect(swErrors).toEqual([]);
   });
 
-  test('T5.03 mobile capture is a true phone width, or no mobile variant is stored', async ({
+  test('T5.03 mobile capture: the outcome the host popup width dictates, with no debugger', async ({
     context,
     extensionId,
     swErrors,
   }) => {
-    const { panel } = await scanPage(context, extensionId, fixtures, 'landing-basic', {
+    const { panel, url } = await scanPage(context, extensionId, fixtures, 'landing-basic', {
       mobile: true,
     });
     const captures = panel.getByTestId('captures');
-    // Either the capture finished ("Mobile captured · NNNpx") or it was refused as too wide.
     await expect(captures).toContainText(/Mobile\s*(captured|not captured)/, { timeout: 30_000 });
     const text = await captures.innerText();
     const [saved] = await storedScans(panel);
 
-    const m = /captured[^\n]*?(\d+)px/.exec(text);
-    if (saved?.variants?.mobile) {
-      // A mobile variant must never come from a desktop-width window.
-      const width = saved.variants.mobile.viewportWidth;
-      expect(width, 'recorded viewport width').toBeDefined();
-      expect(width).toBeLessThanOrEqual(480);
-      expect(Number(m?.[1])).toBe(width);
-      expect(saved.variants.mobile.blueprint?.length).toBeGreaterThan(0);
-      // Emulation (debugger is pre-granted in the E2E build) yields exactly 390px, but some hosts
-      // (Linux/xvfb) honour a narrow popup such as 408px, so emulation never runs there.
-      expect(width).toBeGreaterThanOrEqual(390);
+    // An oracle independent of the code under test: how wide does this host really make a
+    // 390x844 popup? (The e2e build holds <all_urls>, so the test can read the page's width.)
+    const oracle = await panel.evaluate(async (u) => {
+      const win = await chrome.windows.create({
+        url: u,
+        type: 'popup',
+        width: 390,
+        height: 844,
+        focused: false,
+      });
+      const tabId = win?.tabs?.[0]?.id as number;
+      try {
+        for (let i = 0; i < 100; i++) {
+          if ((await chrome.tabs.get(tabId)).status === 'complete') break;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => window.innerWidth,
+        });
+        return res?.result as number;
+      } finally {
+        if (win?.id !== undefined) await chrome.windows.remove(win.id);
+      }
+    }, url);
+    expect(oracle, 'the oracle measured a width').toBeGreaterThan(0);
+    if (process.env.CI) {
+      expect(
+        oracle,
+        'host kept the popup wide; the capture path was not exercised',
+      ).toBeLessThanOrEqual(480);
+    }
+
+    // Exactly one outcome is right, and the oracle (not the code under test) picks it.
+    const phone = oracle <= 480;
+    const width = saved?.variants?.mobile?.viewportWidth;
+    expect(width, phone ? 'a phone-width popup is captured' : 'a wide popup stores no mobile').toBe(
+      phone ? oracle : undefined,
+    );
+    if (phone) {
+      expect(saved?.variants?.mobile?.blueprint?.length).toBeGreaterThan(0);
+      expect(text).toMatch(new RegExp(`captured[^\\n]*${oracle}px`));
     } else {
       expect(text).toMatch(/not captured \(Chrome kept the window too wide\)/);
-      await expect(panel.getByRole('button', { name: 'Capture with permission' })).toBeVisible();
     }
+    // No debugger anywhere (SPC-44): no permission button, whatever the host did.
+    await expect(panel.getByRole('button', { name: 'Capture with permission' })).toHaveCount(0);
     expect(swErrors).toEqual([]);
   });
 

@@ -2,7 +2,6 @@ import { extract } from '@specimen/core';
 import type { DesignScan, RawPage } from '@specimen/core/schema';
 import { libraryErrorText, saveScan } from './db';
 import { send } from './messaging';
-import { tabEmulationIdle } from './tabEmulation';
 
 const SITE_ACCESS =
   'Specimen needs permission to read the page you scan. Click Scan again and choose Allow.';
@@ -65,8 +64,6 @@ export interface ScanTabOptions {
  * scan; it comes back as `saveError` so the panel can say so.
  */
 export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
-  // A mobile capture may have a phone override on this tab: never record that as the desktop.
-  await tabEmulationIdle();
   const res = await send('scan.run', {
     tabId,
     opts: opts.noScreenshot ? { noScreenshot: true } : undefined,
