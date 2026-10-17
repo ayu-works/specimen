@@ -6,7 +6,16 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 13:10 (CURRENT STATE: three executors running)
+## UPDATE 2026-10-17 ~13:45 (CURRENT STATE)
+
+- PE is now **pe-8a** (w1:pS; pe-ed handed over at its context limit, pe.md 7772a06). Orchestrator specimen-6a.
+- **#31 SPC-18 MERGED** 11074ac (the owner said merge), Done; spc-18 pane/worktree removed. Follow-ups filed: SPC-34 (finish_reason 'length', contract), SPC-35 (crash during load), SPC-36 (\| in cells).
+- **#32 SPC-32** (spc-32-6d, w1:p14): lens A approved; lens B r1 folded (dc682a8); the PE found a mid-title brand leak (M2) → fold in progress (cap 32 + segment tokens). Then pe-8a checks it → owner.
+- **#33 SPC-19** (spc-19-02, w1:p16): DesignScan v5 (owner OK'd); lens A approved incl. the fold 0851801; lens B reviewer running (w1:p19, tab review).
+- **SPC-35** (spc-35-d6, w1:p1A, lane B): plan waiting on pe-8a.
+- Why SPC-35 was picked next: SPC-20 and SPC-28 touch scanFlow.ts (held by #33); SPC-21 runs last.
+
+## UPDATE 2026-10-17 13:10
 
 - **Orchestrator `specimen-6a`** (pane w1:p3); **PE `pe-ed`** (w1:pS). Build tab w1:tP: **spc-32-6d** (w1:p14, lane A), **spc-18-80** (w1:p15, lane B), **spc-19-02** (w1:p16, lane C). Worktrees worktrees/spc-32|18|19, branches exec/<ticket> from 77ac925. Kickoffs in this session's scratchpad (kickoff-spc-*.md). All three are In Progress in Linear.
 - Routing: L2's DESIGN.md backtick escape (designmd.ts cell()) → SPC-32; import-side filter → SPC-19. SPC-19 M2 bounds = contract: the PE sends one ruling (draft: v5 bump + bounds table + trim-on-upgrade), then the **owner's OK is needed** before that part is built.
