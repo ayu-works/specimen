@@ -2,6 +2,7 @@
  * Local library (ARCHITECTURE §9): IndexedDB via Dexie, db `specimen`.
  * Everything stays on the device; scans are re-validated through `migrate()` on every read.
  */
+import { filterCssVariables } from '@specimen/core';
 import { BOUNDS, type DesignScan, DesignScanSchema, migrate } from '@specimen/core/schema';
 import Dexie, { type EntityTable } from 'dexie';
 
@@ -236,7 +237,9 @@ export async function importScans(scans: DesignScan[]): Promise<ImportWrite> {
       if (!row) continue;
       let key: string | null = null;
       try {
-        key = contentKey(migrate(row));
+        // Compared as an import would store it: rows imported before the filter keep extra variables.
+        const s = migrate(row);
+        key = contentKey({ ...s, cssVariables: filterCssVariables(s.cssVariables) });
       } catch {
         /* unreadable: its id is taken, its content matches nothing */
       }

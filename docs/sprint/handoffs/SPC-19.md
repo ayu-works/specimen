@@ -163,6 +163,9 @@ parents it touches), not the whole input. Output identical to today for valid in
   Hex is deliberately not trimmed (a long hex must be rejected, not cut into a valid one).
 - `pnpm gate` green locally (gitleaks not installed here; CI scans).
 
+- PE lens A r1: APPROVED, 0C/0H/0M/3L. Folded L1 (stored side filtered before comparing) and L2 (title input
+  maxLength). L3 not taken: the raw storage message is the only clue for an unknown failure and isn't secret.
+
 ## Next
 - Reviews (PE lens A, lens B, security). Fold findings as new commits.
 - Follow-ups not in this PR: Vibe.tsx silent save (PE filing); caching migrated rows in `listScans`; Library

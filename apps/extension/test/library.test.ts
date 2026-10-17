@@ -327,6 +327,16 @@ describe('Library writes are atomic and idempotent (audit H6, M14)', () => {
     expect(await db.scans.get('huge5')).toBeUndefined();
   });
 
+  it('T4.03 a row imported before the variable filter still counts as a duplicate (PE r1 L1)', async () => {
+    const s = scanOf('pre', {
+      scannedAt: 9,
+      cssVariables: { '--brand': '#5e6ad2', '--zz-misc': '1' },
+    });
+    await db.scans.put({ ...s, tags: [] });
+    expect(await importFile(exportOf([s]))).toEqual({ imported: 0, duplicates: 1, skipped: 0 });
+    expect(await db.scans.count()).toBe(1);
+  });
+
   it('T4.03 a clashing id at the length bound still gets a valid id', async () => {
     const id = 'i'.repeat(1000);
     await saveScan(scanOf(id, { scannedAt: 1 }), null);

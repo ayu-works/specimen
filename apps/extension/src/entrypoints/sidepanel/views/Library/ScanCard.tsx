@@ -1,5 +1,6 @@
 import { firstHex } from '@specimen/core';
 import type { ColorRole } from '@specimen/core/schema';
+import { BOUNDS } from '@specimen/core/schema';
 import { MoreHorizontal, Star } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { deleteScans, libraryErrorText, type StoredScan, updateScan } from '@/lib/db';
@@ -163,6 +164,7 @@ export function ScanCard({
             }}
             placeholder={edit === 'tags' ? 'tag, another tag' : 'Title'}
             aria-label={edit === 'tags' ? 'Tags, comma separated' : 'Title'}
+            maxLength={edit === 'title' ? BOUNDS.title : undefined}
             className="h-7 min-w-0 rounded border border-border bg-background px-1.5 text-xs"
           />
         ) : (
