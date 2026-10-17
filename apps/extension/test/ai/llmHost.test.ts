@@ -790,3 +790,27 @@ describe('llm Port protocol (host)', () => {
     await nextChatRuns();
   });
 });
+
+describe('llm host without a usable GPU (audit H13)', () => {
+  const cases: [string, () => Promise<unknown>][] = [
+    ['requestAdapter resolves null (WebGPU present, no adapter)', async () => null],
+    [
+      'requestAdapter throws',
+      async () => {
+        throw new Error('GPU process crashed');
+      },
+    ],
+  ];
+  for (const [name, requestAdapter] of cases) {
+    it(`T3.11 ${name}: load errors 'unsupported', status says gpu false, no worker`, async () => {
+      vi.stubGlobal('navigator', { gpu: { requestAdapter } });
+      const c = open();
+      c.send({ type: 'load', modelId: DEFAULT_GEMMA });
+      expect(await c.waitFor((e) => e.type === 'error')).toMatchObject({ kind: 'unsupported' });
+      c.send({ type: 'status' });
+      expect(await c.waitFor((e) => e.type === 'status')).toMatchObject({ gpu: false });
+      expect(state.log).not.toContain('worker');
+      expect(state.creates).toEqual([]);
+    });
+  }
+});
