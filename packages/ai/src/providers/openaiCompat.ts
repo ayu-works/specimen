@@ -72,7 +72,8 @@ export function createOpenAICompat(
         if (typeof text === 'string' && text) yield text;
         // The last text can share the chunk with the finish reason, so it goes out first.
         const finish = json.choices?.[0]?.finish_reason;
-        if (finish == null) continue;
+        // Some servers (LocalAI) send `""` on every chunk until the real reason.
+        if (finish == null || finish === '') continue;
         finished = true;
         const reason = String(finish);
         if (CUT_OFF.has(reason)) throw new ProviderError('other', TRUNCATED_TEXT);

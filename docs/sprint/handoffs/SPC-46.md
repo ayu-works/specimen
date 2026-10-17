@@ -108,8 +108,20 @@ T3.35 only (append "SPC-46" text; no new IDs).
 - Lens A r1 (pe-b2): APPROVED, 0 C/H/M, 1 LOW (4k Gemma vibe cap 1024 is tight). Folded as an owner manual step in the
   PR body (no code change, no re-review needed).
 
+- Lens B r1 (0 C/0 H/2 M/4 L), folded:
+  - **M1** (the vibe cap of 1200 is small for Gemini 2.5 Pro thinking): not changed here. SPC-55 (stacked on this branch) raises it to
+    `min(5000, ctx/4)` (owner decision, via specimen-5c), so vibe.ts stays as lens A approved it.
+  - **M2** (the owner's MID_STREAM vibe error; a router's in-stream 400 doesn't trigger the text-only retry): out of scope, as the
+    reviewer says. The fix is in `errors.ts` `streamError` (SPC-30's lane) or `vibe.ts` (SPC-55): **follow-up**.
+  - **L2** fixed: openaiCompat skips `finish_reason: ""` (LocalAI), so it isn't taken as a finish; tests cover `""`→EOF (cut off) and `""`→`stop` (whole).
+  - **L3** fixed: added whole-reply negatives for a usage-only chunk (`choices: []`) after `stop`, both before `[DONE]` and
+    before a clean EOF, plus an OpenRouter `: PROCESSING` comment.
+  - **L1** (a JSON whitespace runaway is longer with a bigger cap): no fix; it costs latency only and still ends as TRUNCATED. Belongs with SPC-55's cap.
+  - **L4** (council/Ask show the generic line for a filter stop or a cut-short stream): **follow-up**, already listed (critique.ts + exporting the constants).
+  - Pre-existing note (an OpenAI reasoning model's `max_tokens` 400 maps to TOO_LONG_TEXT): **follow-up** ticket, not #54.
+
 ## Next
-- Lens B review: fold findings with new commits.
+- pe-b2 fold check.
 
 ## How to resume
 Read this file, `gh pr diff 45`, and `docs/sprint/reviews/SPC-41-b-r1.md` (L1/L2/L4).

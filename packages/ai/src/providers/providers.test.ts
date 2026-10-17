@@ -522,6 +522,13 @@ describe('a stream with no stop reason, or stopped by a filter or a provider err
       CUT_SHORT_TEXT,
     ],
     [
+      'T3.02 openaiCompat: finish_reason "" on each chunk, then EOF (not a finish)',
+      oai,
+      [oaiChunk('Hel', ''), oaiChunk('lo', '')],
+      'Hello',
+      CUT_SHORT_TEXT,
+    ],
+    [
       'T3.03 anthropic: text then EOF with no message_stop',
       ant,
       [antText('Hel'), antText('lo')],
@@ -596,6 +603,31 @@ describe('a stream with no stop reason, or stopped by a filter or a provider err
       'T3.02 openaiCompat: [DONE] with no finish_reason (Ollama-style local server)',
       oai,
       [oaiChunk('Hel', null), oaiChunk('lo', null), 'data: [DONE]\n\n'],
+    ],
+    [
+      'T3.02 openaiCompat: finish_reason "" on each chunk, then "stop"',
+      oai,
+      [oaiChunk('Hel', ''), oaiChunk('lo', ''), oaiChunk(null, 'stop'), 'data: [DONE]\n\n'],
+    ],
+    [
+      'T3.02 openaiCompat: "stop", a usage-only chunk (choices: []), then [DONE]',
+      oai,
+      [
+        ': OPENROUTER PROCESSING\n\n',
+        oaiChunk('Hel', null),
+        oaiChunk('lo', 'stop'),
+        `data: ${JSON.stringify({ choices: [], usage: { total_tokens: 9 } })}\n\n`,
+        'data: [DONE]\n\n',
+      ],
+    ],
+    [
+      'T3.02 openaiCompat: "stop", a usage-only chunk, then EOF with no [DONE]',
+      oai,
+      [
+        oaiChunk('Hel', null),
+        oaiChunk('lo', 'stop'),
+        `data: ${JSON.stringify({ choices: [], x_groq: { usage: { total_tokens: 9 } } })}\n\n`,
+      ],
     ],
     [
       'T3.02 openaiCompat: finish_reason "stop" with no [DONE]',
