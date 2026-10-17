@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan, loadInjectionStrings } from '../testing/testUtils';
 import { ProviderError } from '../types';
@@ -17,6 +18,16 @@ const ORIGINAL = [
 ].join('\n');
 
 describe('polishPrompt', () => {
+  it('T3.07 a rewrite cut off at the length limit keeps the original, with the cut-off reason', async () => {
+    const p = createMockProvider({
+      chunks: [ORIGINAL.slice(0, 40)],
+      error: new ProviderError('other', TRUNCATED_TEXT),
+      errorAfter: 1,
+    });
+    const r = await polishPrompt(p, scan, ORIGINAL);
+    expect(r).toEqual({ text: ORIGINAL, polished: false, reason: TRUNCATED_TEXT });
+  });
+
   it('T3.07 accepts a faithful rewrite and marks it polished', async () => {
     const rewrite = [
       '# Design system',

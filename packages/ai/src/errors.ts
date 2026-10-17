@@ -11,6 +11,8 @@ import { ProviderError } from './types';
 export const IMAGE_REJECTED_TEXT = "This model can't read images.";
 export const MID_STREAM_TEXT = 'The provider reported an error mid-response.';
 export const HTTP_FAILED_TEXT = 'The provider request failed.';
+/** A reply that stopped at the token limit; the council matches this exact text (SPC-34). */
+export const TRUNCATED_TEXT = 'The answer hit the length limit and was cut off.';
 export const TOO_LONG_TEXT =
   'The request is too long for this model. Ask a shorter question, or pick a model with a larger context.';
 

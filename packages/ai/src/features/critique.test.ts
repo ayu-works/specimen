@@ -1,10 +1,12 @@
 import type { DesignScan } from '@specimen/core/schema';
 import { describe, expect, it } from 'vitest';
+import { TRUNCATED_TEXT } from '../errors';
 import { createMockProvider } from '../testing/mockProvider';
 import { loadFixtureScan, loadInjectionStrings } from '../testing/testUtils';
 import { type ChatRequest, type LLMProvider, ProviderError } from '../types';
 import {
   CRITIQUE_ERRORS,
+  CRITIQUE_TRUNCATED,
   type CritiqueTurn,
   clipContext,
   critiquePlan,
@@ -231,6 +233,49 @@ describe('critique panel engine', () => {
     expect(r.verdict).toBeNull();
     expect(JSON.stringify([r, seen])).not.toContain(leak);
     expect(JSON.stringify([r, seen])).not.toContain('boom');
+  });
+
+  it('T3.21 a reply cut off at the length limit stops the run with its own fixed text, no retry', async () => {
+    const cut = new ProviderError('other', TRUNCATED_TEXT);
+    const p = failing([undefined, cut, undefined]);
+    const r = await runCritique(p, scan, { retryDelaysMs: [1, 1, 1] });
+    expect(r.status).toBe('error');
+    expect(p.calls).toHaveLength(2);
+    expect(r.turns.map((t) => t.status)).toEqual(['done', 'error']);
+    expect(r.turns[1]?.error).toBe(CRITIQUE_TRUNCATED);
+    expect(r.turns[1]?.content).toBe('some ');
+    expect(r.error).toBe(CRITIQUE_TRUNCATED);
+    expect(r.verdict).toBeNull();
+    // Only the constant itself: another 'other' error keeps the generic text.
+    const q = failing([new ProviderError('other', `${TRUNCATED_TEXT} (x)`)]);
+    expect((await runCritique(q, scan)).error).toBe(CRITIQUE_ERRORS.other);
+  });
+
+  it('T3.21 a cut-off summary is never parsed into a verdict, even when its text would parse', async () => {
+    let n = 0;
+    const p: LLMProvider = {
+      ...numbered(),
+      async *chat() {
+        n++;
+        if (n < 7) {
+          yield `turn ${n} cites 16px.`;
+          return;
+        }
+        yield 'Verdict: Solid base.\nWorks:\n- Accent #0d9488\nChange:\n- Raise muted';
+        throw new ProviderError('other', TRUNCATED_TEXT);
+      },
+    };
+    expect(parseVerdict('Verdict: Solid base.\nWorks:\n- Accent #0d9488')).not.toBeNull();
+    const r = await runCritique(p, scan);
+    expect(n).toBe(7);
+    expect(r.status).toBe('error');
+    expect(r.turns[6]).toMatchObject({
+      kind: 'summary',
+      status: 'error',
+      error: CRITIQUE_TRUNCATED,
+    });
+    expect(r.verdict).toBeNull();
+    expect(r.summaryText).toBeUndefined();
   });
 
   it('T3.21 a rate limit is retried after a backoff and the run continues', async () => {

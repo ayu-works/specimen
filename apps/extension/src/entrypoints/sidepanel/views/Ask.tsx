@@ -140,10 +140,14 @@ export function Ask() {
             )}
           >
             {m.error ? (
-              <span className="flex items-center gap-2 text-destructive">
-                <Mascot size={32} mood="sad" />
-                {m.error}
-              </span>
+              <>
+                {/* Text that streamed before the error (e.g. an answer cut off at the length limit). */}
+                {m.content && <span className="mb-2 block">{m.content}</span>}
+                <span className="flex items-center gap-2 text-destructive">
+                  <Mascot size={32} mood="sad" />
+                  {m.error}
+                </span>
+              </>
             ) : m.content ? (
               m.content
             ) : (

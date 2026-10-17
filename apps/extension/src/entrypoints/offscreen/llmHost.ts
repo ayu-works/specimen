@@ -245,6 +245,9 @@ async function runChat(job: Job, req: ChatRequest): Promise<void> {
         kind: 'other',
         message: 'The answer was cut short. Try again.',
       });
+    } else if (finish === 'length') {
+      // Stopped at max_tokens: the client must not take the text for a whole reply (SPC-34).
+      send(port, { type: 'done', id, truncated: true });
     } else send(port, { type: 'done', id });
   } catch (e) {
     send(

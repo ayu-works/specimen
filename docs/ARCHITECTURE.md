@@ -304,7 +304,7 @@ Typed with a small helper (`apps/extension/src/lib/messaging.ts`, a discriminate
 | `overlay.set` | sidepanel → background → content | `{ grid?: boolean; inspector?: boolean; highlight?: { tokenId, selectorHints } }` |
 | `inspector.hover` | content → sidepanel (Port `inspector`) | `{ rect, styles, matchedTokens }` (stream) |
 | `offscreen.ensure` | sidepanel → background | `{}` → `{ ok }` |
-| Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id}` \| `error{id,kind,message}` · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
+| Port `llm` | sidepanel / options ↔ offscreen | `load{modelId}` → `progress{p,text}`… `ready` · `chat{id,req}` → `delta{id,text}`… `done{id,truncated?}` \| `error{id,kind,message}` (`truncated: true` = the model stopped at `maxTokens`; the client throws `ProviderError('other', TRUNCATED_TEXT)` after the deltas, SPC-34) · `abort{id}` · `unload` · `delete{modelId}` → `deleted` · `status{modelId?}` → `status{loaded?,loading?,p?,gpu,cached?}`. The caller sends `offscreen.ensure` first, because a Port to a missing document fails |
 | `mcp.push` (P6) | sidepanel → ws | `{ scan }` |
 
 ---

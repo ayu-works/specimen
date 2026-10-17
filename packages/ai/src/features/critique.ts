@@ -1,6 +1,6 @@
 import { computeA11y } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
-import { mapThrown } from '../errors';
+import { mapThrown, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, LLMProvider, ProviderErrorKind } from '../types';
 import { safe, safeStream } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
@@ -98,6 +98,10 @@ export const CRITIQUE_ERRORS: Record<Exclude<ProviderErrorKind, 'aborted'>, stri
   unsupported: "This provider can't run the critique panel.",
   other: 'The provider returned an error. Try again, or pick another model in Settings.',
 };
+
+/** A reply cut off at the token limit (`TRUNCATED_TEXT`): the run stops with no verdict, no retry. */
+export const CRITIQUE_TRUNCATED =
+  'A reply hit the length limit and was cut off, so the council stopped. Try again, or use fewer reviewers or rounds.';
 
 /** `empty` = the model returned no text (a reasoning model can spend its whole budget thinking). */
 export type TurnStatus =
@@ -636,6 +640,7 @@ async function runTurn(
         emit();
         continue;
       }
+      if (err.message === TRUNCATED_TEXT) return fail(CRITIQUE_TRUNCATED);
       return fail(CRITIQUE_ERRORS[err.kind]);
     }
     turn.status = !raw.trim() ? 'empty' : !turn.content.trim() ? 'filtered' : 'done';

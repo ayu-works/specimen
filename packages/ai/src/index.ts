@@ -6,11 +6,13 @@ export {
   mapThrown,
   scrubLegacyProviderText,
   streamError,
+  TRUNCATED_TEXT,
 } from './errors';
 export { type AskTurn, ask, askSystemPrompt } from './features/ask';
 export {
   CRITIQUE_ERRORS,
   CRITIQUE_LIMITS,
+  CRITIQUE_TRUNCATED,
   type CritiqueOptions,
   type CritiquePlan,
   type CritiqueResult,
