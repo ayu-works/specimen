@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '../src/components/toast';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
 import { Library } from '../src/entrypoints/sidepanel/views/Library';
@@ -28,7 +29,12 @@ const rows = async (id: string) => ({
 });
 
 async function renderLibrary() {
-  render(<Library />);
+  render(
+    <>
+      <Library />
+      <Toaster />
+    </>,
+  );
   await waitFor(() => expect(screen.getAllByTestId('library-card')).toHaveLength(3));
 }
 
@@ -183,5 +189,90 @@ describe('Library delete (component, SPC-39)', () => {
     await waitFor(() => expect(names()).not.toContain('Linear'));
     expect(screen.queryByRole('button', { name: /Export \(/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Export' })).toBeTruthy();
+  });
+  it('T4.12 after a delete, focus moves to the card now in its place, with a toast', async () => {
+    await renderLibrary();
+    const order = names();
+    const first = order[0] as string;
+    const second = order[1] as string;
+    fireEvent.click(screen.getByRole('button', { name: `Delete ${first}` }));
+    await waitFor(() => expect(names()).not.toContain(first));
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(`Delete ${second}`),
+    );
+    expect(screen.getByRole('status').textContent).toBe(`Deleted "${first}"`);
+  });
+
+  it('T4.12 a failed delete is also toasted', async () => {
+    const fail = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    db.scans.hook('deleting', fail);
+    try {
+      await renderLibrary();
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Linear' }));
+      await waitFor(() =>
+        expect(screen.getByRole('status').textContent).toMatch(/^Could not delete that scan/),
+      );
+    } finally {
+      db.scans.hook('deleting').unsubscribe(fail);
+    }
+  });
+
+  it('T4.12 deleting the open scan stops calling it saved', async () => {
+    const open = await db.scans.get('2');
+    useStore.getState().openScan(open as NonNullable<typeof open>, 'saved');
+    await renderLibrary();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Linear' }));
+    await waitFor(() => expect(useStore.getState().origin).toBe('tab'));
+    expect(useStore.getState().saveError).toBe('it was deleted from your Library');
+    expect(useStore.getState().scan?.id).toBe('2');
+  });
+
+  it('T4.12 deleting another scan leaves the open one alone', async () => {
+    const open = await db.scans.get('2');
+    useStore.getState().openScan(open as NonNullable<typeof open>, 'saved');
+    await renderLibrary();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Cal.com scheduling' }));
+    await waitFor(() => expect(names()).not.toContain('Cal.com scheduling'));
+    expect(useStore.getState().origin).toBe('saved');
+    expect(useStore.getState().saveError).toBeNull();
+  });
+
+  it('T4.12 the menu: focus goes to the first item, arrows move, Escape returns to ⋯', async () => {
+    await renderLibrary();
+    const more = within(card('Linear')).getByRole('button', { name: 'More actions' });
+    fireEvent.click(more);
+    const menu = screen.getByRole('menu');
+    const items = within(menu).getAllByRole('menuitem');
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items.at(-1));
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(document.activeElement?.textContent).toBe('Delete');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(more);
+  });
+
+  it('T4.12 the menu closes when focus leaves its card row', async () => {
+    await renderLibrary();
+    fireEvent.click(within(card('Linear')).getByRole('button', { name: 'More actions' }));
+    const items = screen.getAllByRole('menuitem');
+    // Moving between items keeps it open.
+    act(() => items[1]?.focus());
+    expect(screen.getByRole('menu')).toBeTruthy();
+    // Tabbing on to the next card closes it.
+    act(() =>
+      within(card('Cal.com scheduling'))
+        .getByRole('button', { name: /^Delete / })
+        .focus(),
+    );
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

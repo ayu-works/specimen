@@ -2,9 +2,11 @@ import { firstHex } from '@specimen/core';
 import type { ColorRole } from '@specimen/core/schema';
 import { BOUNDS } from '@specimen/core/schema';
 import { MoreHorizontal, Star, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react';
+import { toast } from '@/components/toast';
 import { deleteScans, libraryErrorText, type StoredScan, updateScan } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { useStore } from '../../store';
 
 const SWATCH_ROLES: ColorRole[] = ['background', 'surface', 'textPrimary', 'accent', 'border'];
 
@@ -35,6 +37,8 @@ interface Props {
   onRescan: () => void;
   onCheck: () => void;
   onChanged: () => void;
+  /** This card's scan was deleted (called before `onChanged`). */
+  onDeleted: () => void;
   /** A rename, tag, favourite or delete that could not be stored. */
   onError: (message: string) => void;
 }
@@ -48,27 +52,42 @@ export function ScanCard({
   onRescan,
   onCheck,
   onChanged,
+  onDeleted,
   onError,
 }: Props) {
   const [menu, setMenu] = useState(false);
   const [edit, setEdit] = useState<'title' | 'tags' | null>(null);
   const [draft, setDraft] = useState('');
   const box = useRef<HTMLDivElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const name = scan.title || scan.host;
 
   useEffect(() => {
     if (!menu) return;
+    // A menu on the last row opens below the fold: bring all of it into view, then focus its first item.
+    list.current?.scrollIntoView?.({ block: 'nearest' });
+    list.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
     const close = (e: PointerEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setMenu(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenu(false);
+      if (e.key !== 'Escape') return;
+      setMenu(false);
+      more.current?.focus();
     };
+    // Focus leaving the row closes the menu, so it never hides the next card's controls.
+    const blur = (e: FocusEvent) => {
+      if (!box.current?.contains(e.relatedTarget as Node | null)) setMenu(false);
+    };
+    const row = box.current;
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', onKey);
+    row?.addEventListener('focusout', blur);
     return () => {
       document.removeEventListener('pointerdown', close);
       document.removeEventListener('keydown', onKey);
+      row?.removeEventListener('focusout', blur);
     };
   }, [menu]);
 
@@ -83,7 +102,10 @@ export function ScanCard({
     try {
       await work();
     } catch (e) {
-      onError(`Could not ${what}: ${libraryErrorText(e)}.`);
+      const message = `Could not ${what}: ${libraryErrorText(e)}.`;
+      onError(message);
+      // The alert sits at the top of the Library; the toast is seen from a card far down the list.
+      toast(message);
     }
     onChanged();
   }
@@ -119,11 +141,40 @@ export function ScanCard({
   async function remove() {
     setMenu(false);
     if (!window.confirm(`Delete "${name}" from your Library?`)) return;
-    await write('delete that scan', () => deleteScans([scan.id]));
+    await write('delete that scan', async () => {
+      await deleteScans([scan.id]);
+      // The open scan has no Library row now: stop calling it saved, and say later saves go nowhere.
+      if (useStore.getState().scan?.id === scan.id) {
+        useStore.setState({ origin: 'tab', saveError: 'it was deleted from your Library' });
+      }
+      onDeleted();
+      toast(`Deleted "${name}"`);
+    });
   }
 
-  const itemCls = 'block w-full px-3 py-1.5 text-left text-xs hover:bg-muted';
-  const iconCls = 'rounded p-0.5 hover:bg-muted';
+  /** Arrow keys, Home and End move between the menu's items. */
+  function moveFocus(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown'
+        ? (at + 1) % items.length
+        : e.key === 'ArrowUp'
+          ? (at - 1 + items.length) % items.length
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? items.length - 1
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    items[next]?.focus();
+  }
+
+  const itemCls =
+    'block w-full px-3 py-1.5 text-left text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
+  const iconCls =
+    'inline-flex size-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
   return (
     <div
       className={cn(
@@ -137,7 +188,7 @@ export function ScanCard({
         type="button"
         onClick={onOpen}
         aria-label={`Open ${name}`}
-        className="block aspect-[16/10] w-full overflow-hidden rounded-t-[inherit] bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block aspect-[16/10] w-full overflow-hidden rounded-t-[7px] bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {thumb ? (
           <img src={thumb} alt="" className="size-full object-cover object-top" />
@@ -190,7 +241,7 @@ export function ScanCard({
                 {formatDate(scan.scannedAt)}
               </div>
             </div>
-            <div className="flex shrink-0">
+            <div className="flex shrink-0 gap-1">
               <button
                 type="button"
                 aria-label={`Delete ${name}`}
@@ -201,6 +252,7 @@ export function ScanCard({
                 <Trash2 size={14} />
               </button>
               <button
+                ref={more}
                 type="button"
                 aria-label="More actions"
                 aria-expanded={menu}
@@ -212,12 +264,15 @@ export function ScanCard({
             </div>
             {menu && (
               <div
+                ref={list}
                 role="menu"
+                onKeyDown={moveFocus}
                 className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-border bg-background py-1 shadow-lg"
               >
                 <button
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   className={itemCls}
                   onClick={() => begin('title')}
                 >
@@ -226,18 +281,26 @@ export function ScanCard({
                 <button
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   className={itemCls}
                   onClick={() => begin('tags')}
                 >
                   Tags
                 </button>
-                <button type="button" role="menuitem" className={itemCls} onClick={toggleFavorite}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  className={itemCls}
+                  onClick={toggleFavorite}
+                >
                   {scan.favorite ? 'Unfavorite' : 'Favorite'}
                 </button>
                 {scan.host !== 'composed' && (
                   <button
                     type="button"
                     role="menuitem"
+                    tabIndex={-1}
                     className={itemCls}
                     onClick={() => {
                       setMenu(false);
@@ -250,6 +313,7 @@ export function ScanCard({
                 <button
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   className={itemCls}
                   onClick={() => {
                     setMenu(false);
@@ -261,6 +325,7 @@ export function ScanCard({
                 <button
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   className={cn(itemCls, 'text-destructive')}
                   onClick={remove}
                 >

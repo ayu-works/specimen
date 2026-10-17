@@ -39,6 +39,10 @@ export function Library() {
   const [error, setError] = useState<string | null>(null);
   const [overCap, setOverCap] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  /** Index of a card just deleted: focus goes to the card now in its place (or the one before). */
+  const refocus = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -80,6 +84,15 @@ export function Library() {
       [s.host, s.title, s.url, ...s.tags].some((v) => v.toLowerCase().includes(q)),
     );
   }, [scans, query]);
+
+  useEffect(() => {
+    const at = refocus.current;
+    if (at === null || !shown) return;
+    refocus.current = null;
+    const cards = grid.current?.querySelectorAll('[data-testid="library-card"]') ?? [];
+    const card = cards[Math.min(at, cards.length - 1)];
+    (card?.querySelector<HTMLElement>('button[aria-label^="Delete "]') ?? search.current)?.focus();
+  }, [shown]);
 
   async function open(s: StoredScan) {
     // The saved thumbnail stands in for the screenshot so vision models can still look.
@@ -207,6 +220,7 @@ export function Library() {
                 className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
               <input
+                ref={search}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search host, title, tag"
@@ -265,8 +279,8 @@ export function Library() {
       {scans.length > 0 && shown.length === 0 && (
         <p className="py-6 text-center text-muted-foreground">No scans match "{query}".</p>
       )}
-      <div className="grid grid-cols-2 gap-2">
-        {shown.map((s) => (
+      <div ref={grid} className="grid grid-cols-2 gap-2">
+        {shown.map((s, i) => (
           <ScanCard
             key={s.id}
             scan={s}
@@ -283,6 +297,9 @@ export function Library() {
             onRescan={() => void rescan(s)}
             onCheck={() => void checkBuild(s)}
             onChanged={() => void reload()}
+            onDeleted={() => {
+              refocus.current = i;
+            }}
             onError={setError}
           />
         ))}

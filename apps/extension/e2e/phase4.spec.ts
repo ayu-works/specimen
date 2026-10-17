@@ -99,8 +99,8 @@ test.describe('Phase 4 library flows (full extension)', () => {
       await press(panel.getByRole('button', { name: 'Re-scan' }));
       await expect.poll(() => storedScans(panel)).toBe(i + 2);
     }
-    // The narrowest side panel: a card is at its smallest here.
-    await panel.setViewportSize({ width: 320, height: 900 });
+    // The narrowest side panel: a card is at its smallest here. Short, so the last row reaches the fold.
+    await panel.setViewportSize({ width: 320, height: 520 });
     await goTab(panel, 'Library');
     const cards = panel.getByTestId('library-card');
     await expect(cards).toHaveCount(3);
@@ -109,11 +109,29 @@ test.describe('Phase 4 library flows (full extension)', () => {
     // card 1 is the right column.
     for (const index of [0, 1, 2]) {
       const card = cards.nth(index);
+      // The card's bottom at the bottom of the viewport: a menu opening below it starts off screen.
+      await card.evaluate((el) => el.scrollIntoView({ block: 'end' }));
       await card.getByRole('button', { name: 'More actions' }).click();
       const items = panel.getByRole('menuitem');
       await expect(items.last()).toHaveText('Delete');
+      await expect(items.first()).toBeFocused();
+      // Only the page may scroll. A clipping box that was scrolled to show the menu (an
+      // overflow-hidden box still scrolls from script) would hide the clip from the checks below.
+      const scrolled = await panel.getByRole('menu').evaluate((menu) => {
+        const out: string[] = [];
+        for (
+          let el = menu.parentElement;
+          el && el !== document.scrollingElement;
+          el = el.parentElement
+        ) {
+          if (el.scrollTop !== 0 || el.scrollLeft !== 0) out.push(`${el.tagName}.${el.className}`);
+        }
+        return out;
+      });
+      expect(scrolled, `scrolled boxes on card ${index}`).toEqual([]);
+      // No manual scrolling: opening the menu must bring every item into view by itself.
       for (const item of await items.all()) {
-        await item.scrollIntoViewIfNeeded();
+        await expect(item).toBeInViewport({ ratio: 1 });
         const box = await item.boundingBox();
         expect(box).not.toBeNull();
         if (!box) continue;
@@ -129,6 +147,7 @@ test.describe('Phase 4 library flows (full extension)', () => {
       }
       await panel.keyboard.press('Escape');
       await expect(panel.getByRole('menu')).toHaveCount(0);
+      await expect(card.getByRole('button', { name: 'More actions' })).toBeFocused();
     }
 
     // The visible Delete: confirm removes the card.

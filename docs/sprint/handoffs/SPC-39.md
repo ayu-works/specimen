@@ -2,7 +2,7 @@
 
 Executor session: `spc-39-52` · Branch `exec/spc-39` (from origin/main 2bac238) · Lane A · PE `pe-8a`, then `pe-4d` · Orchestrator `specimen-6a`
 
-Status: **BUILT, `pnpm gate` green, PR open, waiting for reviews.** Plan APPROVED by pe-8a 2026-10-17 (Q1 no bulk
+Status: **r1 reviews folded (lens A pe-4d 0C/0H/1M/0L; lens B 0C/0H/5M/5L), waiting for r2.** Was: BUILT, PR #38 open. Plan APPROVED by pe-8a 2026-10-17 (Q1 no bulk
 delete; Q2 T4.12 C + T4.13 E OK; Q3 files free). Build notes from the approval (on SPC-39), all done: the failing-delete
 test asserts the thumb and chat rows survive; the confirm shows the title as plain text; the e2e hit test covers a
 left-column card and the last row.
@@ -99,8 +99,23 @@ Not touched: `db.ts` (`deleteScans` is already one transaction over scans/thumbs
   test catches the clip.
 - `pnpm gate` green (209 extension tests, 52 e2e, check-ids 112).
 
+## Review round 1 (folded in one commit, as specimen-6a asked)
+| Finding | What I did |
+|---|---|
+| A-M1 T4.13 passed with `overflow-hidden` back (script scrolls the card) | Removed `scrollIntoViewIfNeeded`; T4.13 now asserts no box between the menu and the page scroller has scrollTop/scrollLeft ≠ 0. **Mutation run** (`overflow-hidden` re-added to the card root, `node scripts/e2e.mjs e2e/phase4.spec.ts -g T4.13`): **red** ("scrolled boxes on card 0"). Real code: green. |
+| B-M1 open menu covers the next card, stays open when focus leaves | A `focusout` listener on the title row (while the menu is open) closes it when focus leaves the row. Test. |
+| B-M2 18px targets, no gap | Icons are `size-6` (24px) with `gap-1`. |
+| B-M3 focus lost after Escape / delete | Escape refocuses ⋯. After a delete, Library focuses the trash of the card now at the deleted index (or the previous one, or the search box). A `Deleted "<title>"` toast is shown. Tests (C + E). |
+| B-M4 last-row menu opens below the fold; T4.13 hid it | On open, the menu is scrolled into view (`block: 'nearest'`). T4.13 now places each card at the viewport bottom (320×520) and asserts `toBeInViewport({ratio: 1})` for every item with no manual scroll. |
+| B-M5 deleting the open scan still says "Saved scan"; later saves silently go nowhere | After a successful delete of the open scan: `origin: 'tab'` and `saveError: 'it was deleted from your Library'`, so the banner goes and the Scan tab says "Not saved to Library: it was deleted from your Library…". Tests (open scan / other scan). |
+| B-L1 delete error only at the top | `write()` failures are also toasted. Test. |
+| B-L2 focus rings | `focus-visible:ring-2 ring-ring` on the icons; menu items use an inset ring plus `bg-muted`. |
+| B-L3 `role="menu"` with no keyboard model | Focus goes to the first item on open; ArrowUp/Down, Home and End move between items; items are `tabIndex={-1}` (Tab leaves the menu, which closes it). Test. |
+| B-L4 two panels don't refresh each other | **Not done** (predates the PR): a follow-up for the orchestrator (a `BroadcastChannel` ping from `deleteScans`/`updateScan`). |
+| B-L5 thumbnail radius 1px too big | `rounded-t-[7px]` (the card is the default `rounded-lg`, 8px; no radius tokens in `tailwind.css`). |
+
 ## Next
-- Fold the lens A (pe-4d) and lens B review findings; owner's manual test; owner merges.
+- r2 reviews; owner's manual test; owner merges.
 
 ## How to resume
 Read this file; branch `exec/spc-39`; `pnpm i`; continue from "Next".
