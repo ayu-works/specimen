@@ -84,4 +84,5 @@ then go back and scan again → normal card).
 - `pnpm gate` green on 2026-10-17 (gitleaks not installed locally, so `secrets` skipped; CI runs it).
 
 ## Next / how to resume
-- Wait for the reviews (PE lens A + a lens-B reviewer); fold findings in new commits.
+- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-38-a-r1.md`).
+- Waiting for the lens-B review; fold findings in new commits.
