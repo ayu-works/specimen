@@ -15,9 +15,40 @@ export interface ScanOpts {
   noScreenshot?: boolean;
 }
 
+/** Most cross-origin stylesheets fetched per round (the sampler and the background share it). */
+export const CSS_FETCH_MAX_URLS = 24;
+
+/**
+ * Why the background returned no text for a stylesheet. A closed set of fixed strings: nothing
+ * from the network (status text, error messages) ever reaches a warning.
+ */
+export type CssSkipReason =
+  | 'no site access'
+  | 'not http(s)'
+  | `HTTP ${number}`
+  | 'network error'
+  | 'over the 24-stylesheet limit';
+
+/** One stylesheet's answer: its text, why it was skipped, or `null` (skipped, reason unknown). */
+export type CssFetchEntry = string | { skipped: CssSkipReason } | null;
+
+const FIXED_REASONS = new Set<string>([
+  'no site access',
+  'not http(s)',
+  'network error',
+  'over the 24-stylesheet limit',
+]);
+
+/** The entry's skip reason when it is one of the fixed set, else null. */
+export function skipReasonOf(entry: unknown): CssSkipReason | null {
+  const r = (entry as { skipped?: unknown } | null)?.skipped;
+  if (typeof r !== 'string') return null;
+  return FIXED_REASONS.has(r) || /^HTTP [1-5]\d\d$/.test(r) ? (r as CssSkipReason) : null;
+}
+
 export interface MessageMap {
   'scan.run': { req: { tabId: number; opts?: ScanOpts }; res: ScanResult };
-  'css.fetch': { req: { urls: string[] }; res: { texts: (string | null)[] } };
+  'css.fetch': { req: { urls: string[] }; res: { texts: CssFetchEntry[] } };
   // Declared for later phases; the background answers these with "not implemented".
   'overlay.set': {
     req: {

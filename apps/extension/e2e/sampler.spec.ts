@@ -31,14 +31,19 @@ async function sample(page: Page, url: string, opts: { validate?: boolean } = {}
 }
 
 /** A throwaway server for the cross-origin stylesheet tests. */
-function listen(handler: (url: string) => { type: string; body: string }): Promise<{
+function listen(
+  handler: (
+    url: string,
+    headers: import('node:http').IncomingHttpHeaders,
+  ) => { type: string; body: string; status?: number },
+): Promise<{
   origin: string;
   host: string;
   close: () => Promise<void>;
 }> {
   const server: Server = createServer((req, res) => {
-    const out = handler(req.url ?? '/');
-    res.writeHead(200, { 'content-type': out.type });
+    const out = handler(req.url ?? '/', req.headers);
+    res.writeHead(out.status ?? 200, { 'content-type': out.type });
     res.end(out.body);
   });
   return new Promise((resolve) => {
@@ -341,6 +346,83 @@ extTest.describe('full extension', () => {
         expect(raw.rootVars['--xo-color']).toBe('#123456');
         expect(raw.mediaQueries).toContain('(min-width: 999px)');
         expect(raw.fontFaces.some((f: { family: string }) => f.family === 'XO Font')).toBe(true);
+      } finally {
+        await page.close();
+        await css.close();
+      }
+    },
+  );
+  extTest(
+    'T1.11 a tab that is not in front: scanned and saved, with no thumbnail of another tab',
+    async ({ context, extensionId }) => {
+      const url = `${fixtures.url}/landing-basic.html`;
+      const target = await context.newPage();
+      await target.goto(url);
+      const panel = await context.newPage();
+      await panel.addInitScript((u) => {
+        const orig = chrome.tabs.query.bind(chrome.tabs);
+        // biome-ignore lint/suspicious/noExplicitAny: test shim
+        (chrome.tabs as any).query = async () => orig({ url: u });
+      }, url);
+      await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+      await panel.evaluate(() => chrome.storage.local.set({ 'settings.captureMobile': false }));
+      await panel.bringToFront(); // the scanned tab stays behind the panel
+      await panel
+        .getByRole('button', { name: /Scan this page/ })
+        .evaluate((b) => (b as HTMLElement).click());
+      await expect(panel.getByTestId('scan-result')).toBeVisible({ timeout: 20_000 });
+      await expect(panel.getByRole('alert')).toHaveCount(0);
+      await expect(panel.getByAltText('Page thumbnail')).toHaveCount(0);
+      const rows = await panel.evaluate(
+        () =>
+          new Promise<{ scans: { meta: { warnings: string[] } }[]; thumbs: number }>(
+            (resolve, reject) => {
+              const req = indexedDB.open('specimen');
+              req.onerror = () => reject(req.error);
+              req.onsuccess = () => {
+                const tx = req.result.transaction(['scans', 'thumbs']);
+                const scans = tx.objectStore('scans').getAll();
+                const thumbs = tx.objectStore('thumbs').count();
+                tx.oncomplete = () => resolve({ scans: scans.result, thumbs: thumbs.result });
+              };
+            },
+          ),
+      );
+      expect(rows.scans).toHaveLength(1);
+      expect(rows.thumbs).toBe(0);
+      expect(rows.scans[0]?.meta.warnings).toContain(
+        'screenshot unavailable: the tab was not in front',
+      );
+    },
+  );
+
+  extTest(
+    'T1.12 real background: a 404 stylesheet is named as such, and a 20k-deep sheet does not fail the scan',
+    async ({ context, extensionId }) => {
+      // Chrome's own renderer crashes on a 20k-deep sheet, so the page gets a plain one and only
+      // the background's fetch (not a stylesheet load) gets the hostile text.
+      const deep = `${'@media a{'.repeat(20_000)}${'}'.repeat(20_000)}:root{--after-deep:#abcdef}`;
+      const css = await listen((u, h) => {
+        if (u.startsWith('/missing.css')) return { type: 'text/plain', body: 'nope', status: 404 };
+        const body = h['sec-fetch-dest'] === 'style' ? ':root{--after-deep:#abcdef}' : deep;
+        return { type: 'text/css', body };
+      });
+      const xo = css.origin.replace('127.0.0.1', 'localhost');
+      const page = await listen(() => ({
+        type: 'text/html',
+        body: `<!doctype html><html><head><title>xo</title><link rel="stylesheet" href="${xo}/missing.css"><link rel="stylesheet" href="${xo}/deep.css"></head><body><h1>Hello</h1></body></html>`,
+      }));
+      try {
+        const { result } = await scan(context, extensionId, `${page.origin}/`);
+        expect(result.ok, JSON.stringify(result).slice(0, 300)).toBe(true);
+        const { raw } = result.data;
+        expect(() => RawPageSchema.parse(raw)).not.toThrow();
+        expect(raw.warnings).toContain(
+          `cross-origin stylesheet skipped: ${xo.replace('http://', '')} (HTTP 404)`,
+        );
+        expect(raw.rootVars['--after-deep']).toBe('#abcdef');
+        expect(raw.warnings.some((w: string) => w.includes('unreadable'))).toBe(false);
+        expect(raw.samples.length).toBeGreaterThan(0);
       } finally {
         await page.close();
         await css.close();

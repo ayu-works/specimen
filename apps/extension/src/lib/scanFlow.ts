@@ -4,12 +4,31 @@ import { libraryErrorText, saveScan } from './db';
 import { send } from './messaging';
 import { tabEmulationIdle } from './tabEmulation';
 
+const SITE_ACCESS =
+  'Specimen needs permission to read the page you scan. Click Scan again and choose Allow.';
+
+/** Turn a scan error (ours or Chrome's) into a sentence the panel can show. */
 export function friendlyScanError(msg: string): string {
-  if (/Unsupported page|chrome:\/\/|chrome-extension:\/\/|extensions gallery|webstore/i.test(msg))
+  const page = /^Unsupported page: (.*)$/.exec(msg)?.[1];
+  // Judge an unsupported page by its scheme only: a file path may contain any word.
+  if (page !== undefined && !/^chrome(-extension)?:\/\//i.test(page))
+    return 'Specimen can only scan websites (http or https). Open one and try again.';
+  if (page !== undefined || /chrome:\/\/|chrome-extension:\/\/|extensions gallery/i.test(msg))
     return "Can't scan chrome:// pages or the Chrome Web Store. Open a regular website and try again.";
   if (/No active tab/.test(msg)) return 'No active tab to scan.';
-  if (/declined/.test(msg))
-    return 'Specimen needs permission to read the page you scan. Click Scan again and choose Allow.';
+  if (/declined|user gesture|Cannot access contents|Missing host permission/i.test(msg))
+    return SITE_ACCESS;
+  if (/No tab with id|tab was closed/i.test(msg))
+    return 'The tab was closed before the scan finished.';
+  if (
+    /Receiving end does not exist|Could not establish connection|no response for|message (port|channel) closed/i.test(
+      msg,
+    )
+  )
+    return "Specimen's background worker stopped. Click Scan again.";
+  if (/showing error page/i.test(msg)) return "This page didn't load. Reload it and scan again.";
+  if (/sampler returned no result/.test(msg))
+    return "Couldn't read this page. Reload it and scan again.";
   return `Scan failed: ${msg}`;
 }
 
@@ -103,15 +122,4 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
   return { ...out, favicon: fresh?.favIconUrl ?? null };
 }
 
-/** Same page, ignoring hash, query order and a trailing slash. */
-export function sameUrl(a: string | undefined, b: string | undefined): boolean {
-  if (!a || !b) return false;
-  try {
-    const x = new URL(a);
-    const y = new URL(b);
-    const path = (u: URL) => u.pathname.replace(/\/+$/, '') || '/';
-    return x.origin === y.origin && path(x) === path(y) && x.search === y.search;
-  } catch {
-    return a === b;
-  }
-}
+export { sameUrl } from './sameUrl';

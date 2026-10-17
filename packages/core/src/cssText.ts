@@ -23,6 +23,12 @@ export interface ParsedCss {
 }
 
 const ROOT_SELECTOR = /(^|[\s,>+~])(:root|html|body)(?![\w-])/i;
+/**
+ * Deepest `@media`/`@supports`/... nesting we follow. A hostile sheet nested 20k deep would
+ * otherwise blow the stack (and cost depth × length); blocks past the cap are skipped.
+ */
+export const MAX_NESTING = 32;
+
 const CONTAINER_AT_RULES = new Set([
   'media',
   'supports',
@@ -155,7 +161,7 @@ function parseImportTarget(prelude: string): string | null {
   return (m[2] ?? m[4] ?? '').trim() || null;
 }
 
-function walk(css: string, out: ParsedCss): void {
+function walk(css: string, out: ParsedCss, depth: number): void {
   let i = 0;
   while (i < css.length) {
     // Find the next `{` or `;` at top level — whichever ends the prelude.
@@ -191,14 +197,17 @@ function walk(css: string, out: ParsedCss): void {
       const m = prelude.match(/^@([\w-]+)\s*([\s\S]*)$/);
       const name = (m?.[1] ?? '').toLowerCase();
       const rest = (m?.[2] ?? '').trim();
-      if (name === 'media') {
+      const container = CONTAINER_AT_RULES.has(name);
+      if (container && depth >= MAX_NESTING) {
+        // too deep: skip the whole block
+      } else if (name === 'media') {
         if (rest) out.mediaQueries.push(rest.replace(/\s+/g, ' '));
-        walk(body, out);
+        walk(body, out, depth + 1);
       } else if (name === 'font-face') {
         const ff = fontFaceFrom(body);
         if (ff) out.fontFaces.push(ff);
-      } else if (CONTAINER_AT_RULES.has(name)) {
-        walk(body, out);
+      } else if (container) {
+        walk(body, out, depth + 1);
       }
       // other at-rules (@keyframes, @page, @property...) are ignored
     } else if (prelude && selectorHitsRoot(prelude)) {
@@ -235,6 +244,6 @@ function fontFaceFrom(body: string): ParsedFontFace | null {
 
 export function parseCssText(text: string): ParsedCss {
   const out: ParsedCss = { vars: {}, mediaQueries: [], fontFaces: [], imports: [] };
-  walk(stripComments(text), out);
+  walk(stripComments(text), out, 0);
   return out;
 }
