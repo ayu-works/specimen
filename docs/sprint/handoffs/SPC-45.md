@@ -115,5 +115,6 @@ committed event can't satisfy it, tested). (c) The accepted residuals go in the 
   - **L1:** a read answer is ignored for `last` if an event for our tab arrived while it was in flight.
   - **M2** (the "Reload it…/Click Scan again" texts after the tab is closed), **L2** (Library re-scan drops
     `saveError`), **L3** (two concurrent re-scans share panel state): all need `Library/index.tsx`, which SPC-43's open
-    PR owns. Proposed to the orchestrator as follow-ups, not done here.
+    PR owns. Orchestrator chose a follow-up: **SPC-48** (blocked by SPC-43 and SPC-45). Not done here.
   - The 3 new cases fail on the pre-fix code; 33/33 pass.
+- Next: pe-b2's fold check on 360890b; fold any findings with new commits.

@@ -20,3 +20,13 @@ cleanup), `test/rescanUrl.test.ts` (T5.14), three T5.12 cases, and TESTING.md. 3
 - **The SPC-28 logic is unchanged:** the `ready` gate, `loaded()` and the abandoned-read resolve are as approved. The
   only move is that `last` is recorded before the `ready` check.
 - **The tests can fail:** on the base branch, `rescanUrl` never calls `tabs.remove`, and a committed-but-loading page rejects.
+
+## r1 fold check of lens B r1 (360890b, pe-b2): APPROVED, 0 C/H/M, 1 LOW
+H1 (`scanWithin` 20 s cap + `scanTab` signal), M1 (`COMMITTED_MIN_MS` 5 s, reset when a `pendingUrl` reappears) and L1
+(a read doesn't overwrite an event that arrived while it was in flight) are right. 37/37 green here (rescanUrl,
+waitForTabLoad, scanSave).
+- **L1 (optional):** the abort is checked once, after `scan.run` answers and before `extract`. If the 20 s cap fires
+  while `saveScan` is already running, the save still commits but `rescanUrl` rejects and closes the tab. The scan
+  is then in the Library while the panel says "took too long". The window is a few ms of IndexedDB. Fix: once `saveScan`
+  has started, let it finish and let that result win (e.g. `scanWithin` races only up to the save point), or accept it
+  and note it. No re-review needed.
