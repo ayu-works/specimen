@@ -25,14 +25,20 @@ export function isStopWord(w: string): boolean {
   return STOP.has(foldText(w).toLowerCase());
 }
 
-// Unicode folding (SPC-31). Brands and text are both matched on a "skeleton": per code point NFKD
-// with combining marks and format characters (\p{Cf}) dropped, plus the full case folds NFKD lacks. Case is kept, so the case
-// boundaries below still work: `ZÉNTRIXBlue` → `ZENTRIXBlue`, `Straße` → `Strasse`, `İ` → `I`,
-// `Ｚｅｎ` → `Zen`, `ﬁ` → `fi`. Cross-script look-alikes (Cyrillic `е`) are not folded.
+// Unicode folding (SPC-31). Brands and text are both matched on a "skeleton": letters, digits and
+// spaces get NFKD with the generic combining diacritics (Script=Inherited) dropped, plus the full
+// case folds NFKD lacks; format characters (\p{Cf}: soft hyphen, zero-width space) are dropped. Case
+// is kept, so the case boundaries below still work: `ZÉNTRIXBlue` → `ZENTRIXBlue`, `Straße` →
+// `Strasse`, `İ` → `I`, `Ｚｅｎ` → `Zen`, `ﬁ` → `fi`. Symbols stay as they are, so `™` (NFKD `TM`) is
+// still a boundary, and script vowel signs (Devanagari `ा`, Thai) are spelling, so they stay too.
+// Cross-script look-alikes (Cyrillic `е`) are not folded.
 const FOLD_EXTRA: Record<string, string> = { ß: 'ss', ẞ: 'SS', ς: 'σ', ı: 'i' };
 const FOLDS = new Map<string, string>();
 const FOLDS_MAX = 4096;
 const NON_ASCII = /\P{ASCII}/u;
+const FOLDABLE = /[\p{L}\p{M}\p{Nd}\p{Zs}]/u;
+const DIACRITIC = /(?=\p{M})\p{Script=Inherited}/gu;
+const isMark = (c: string | undefined) => !!c && /\p{M}/u.test(c);
 
 function foldChar(c: string): string {
   if (c.charCodeAt(0) < 0x80) return c;
@@ -40,8 +46,8 @@ function foldChar(c: string): string {
   if (extra !== undefined) return extra;
   let f = FOLDS.get(c);
   if (f === undefined) {
-    // Marks and invisible format characters (soft hyphen, zero-width space, joiners) have width 0.
-    f = c.normalize('NFKD').replace(/[\p{M}\p{Cf}]/gu, '');
+    // Diacritics and invisible format characters have width 0.
+    f = /\p{Cf}/u.test(c) ? '' : FOLDABLE.test(c) ? c.normalize('NFKD').replace(DIACRITIC, '') : c;
     if (FOLDS.size >= FOLDS_MAX) FOLDS.clear();
     FOLDS.set(c, f);
   }
@@ -439,8 +445,9 @@ function stripFolded(line: string, patterns: RegExp[]): string {
       const first = src[m.index] ?? 0;
       const last = src[end - 1] ?? first;
       for (let i = first; i <= last; i++) gone[i] = 1;
-      // Combining marks (no skeleton of their own) after the cut belong to it.
-      for (let i = last + 1; i < cps.length && !width[i]; i++) gone[i] = 1;
+      // Diacritics after the cut belong to it; format characters there (a closing bidi control,
+      // a joiner) stay. Inside the cut, both go.
+      for (let i = last + 1; i < cps.length && !width[i] && isMark(cps[i]); i++) gone[i] = 1;
       cut = true;
     }
     if (cut) ({ sk, src } = build());

@@ -100,7 +100,15 @@ the key choice: the existing case-sensitive camel/acronym/digit-hump boundaries,
   now fold to width 0 like marks; tests for text, title, `containsBrand`, and ZWJ emoji next to a brand.
 
 ## Next
-- Lens B review; fold findings. Then ask pe-b2 for ONE fold check covering ccf1c50 + the lens B fixes (orchestrator, 2026-10-17).
+- Lens B r1 folded (all 4): H1 only letters/marks/digits/spaces are NFKD-folded, so ™/℠/Ⅱ/㎒/№ stay boundaries
+  (regression from main fixed); M1 only Script=Inherited diacritics are dropped, so Indic vowel signs stay; L1 the
+  trailing sweep after a cut takes marks only, not bidi controls/joiners; L2 symbol tests (™ ℠ Ⅱ ㎒ № … ½).
+  Lens A already approved ccf1c50, so pe-b2's fold check covers the lens B commit only.
+- Not covered (separate decision): Indic/Thai brands aren't tokenised at all, since `words` splits on marks (same as
+  main).
+
+## Next
+- pe-b2 fold check of the lens B commit.
 
 ## How to resume
 Read this file, `packages/core/src/generate/sanitize.ts`, `packages/core/test/sanitizeFold.test.ts`.

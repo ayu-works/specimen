@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { GENERATORS, PROMPT_TARGETS } from '../src/generate';
-import { containsBrand, createStreamSanitizer, sanitize } from '../src/generate/sanitize';
+import { GENERATORS, generateDesignMd, PROMPT_TARGETS } from '../src/generate';
+import {
+  brandTokens,
+  containsBrand,
+  createStreamSanitizer,
+  sanitize,
+} from '../src/generate/sanitize';
 import type { DesignScan } from '../src/schema';
 import { scanOf } from './helpers';
 
@@ -69,6 +74,34 @@ describe('ethics guardrail: Unicode folding (SPC-31)', () => {
     expect(sanitize(`Zentrix${family} here`, scan)).toBe(`${family} here`);
     expect(sanitize(`${family}Zentrix here`, scan)).toBe(`${family} here`);
     expect(sanitize(`soft\u00adware ${family}`, scan)).toBe(`soft\u00adware ${family}`);
+  });
+
+  it('T2.03 a symbol NFKD spells as letters stays a boundary (lens B H1, L2)', () => {
+    expect(brandTokens(on('example.org', 'Zentrix™ | Design'))).toContain('zentrix');
+    expect(sanitize('use Zentrix here', on('example.org', 'Zentrix™ | Design'))).toBe('use here');
+    const scan = on('example.org', 'Zentrix');
+    for (const sym of ['™', '℠', 'Ⅱ', '㎒', '№', '…', '½']) {
+      expect(fold(sanitize(`ZENTRIX${sym} rocks`, scan)), sym).not.toContain('zentrix');
+      expect(sanitize(`ZENTRIX${sym} rocks`, scan), sym).toBe(`${sym} rocks`);
+    }
+    const md = generateDesignMd(
+      on('example.org', 'Zentrix™', {
+        cssVariables: { '--zentrix-blue': '#123456', '--space-4': '16px' },
+      }),
+    ).content;
+    expect(md).not.toMatch(/zentrix/i);
+    expect(md).toContain('`--space-4`');
+  });
+
+  it('T2.03 script vowel signs are spelling, not accents: other Indic words are kept (lens B M1)', () => {
+    const scan = on('example.org', 'टाटा मोटर्स');
+    expect(sanitize('टिटि मिटर्स and more', scan)).toBe('टिटि मिटर्स and more');
+  });
+
+  it('T2.03 bidi controls and joiners after a cut stay (lens B L1)', () => {
+    const scan = on('example.org', 'Zentrix');
+    expect(sanitize('\u202eZentrix\u202c tail', scan)).toBe('\u202e\u202c tail');
+    expect(sanitize('Zentrix\u200d\u{1F469} x', scan)).toBe('\u200d\u{1F469} x');
   });
 
   it('T2.03 removal takes exactly the original characters', () => {
