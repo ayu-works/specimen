@@ -1,6 +1,6 @@
 import { BOUNDS, cutText, type DesignScan } from '@specimen/core/schema';
 import { z } from 'zod';
-import { IMAGE_REJECTED_TEXT } from '../errors';
+import { IMAGE_REJECTED_TEXT, MID_STREAM_TEXT, TOO_LONG_TEXT } from '../errors';
 import { type LLMProvider, ProviderError } from '../types';
 import { collect, safe } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
@@ -23,8 +23,12 @@ const RAW_KEYWORDS = 4 * MAX_KEYWORDS;
 /**
  * Output cap. The reply is ~100 tokens, but thinking models (Gemini 2.5, gpt-oss) count their
  * thinking against it, so it is generous; at most a quarter of a small context (like critique).
+ * A model whose max output is lower rejects it with a 400, and vibe retries with `SMALL_MAX_TOKENS`.
  */
-const MAX_TOKENS = 1200;
+const MAX_TOKENS = 10_000;
+const SMALL_MAX_TOKENS = 4096;
+/** `httpError`'s generic 400; Gemini's "maxOutputTokens value of 10000 …" lands here, not on TOO_LONG. */
+const HTTP_400_PREFIX = 'The provider rejected the request (HTTP 400)';
 
 /**
  * Sanitized `text` within `max` chars (the v5 bound), so `updateScan` accepts it. Only a bounded
@@ -90,21 +94,21 @@ export async function vibe(
   signal?: AbortSignal,
 ): Promise<Vibe & { model: string; usedImage: boolean }> {
   const data = wrapPageData(compactScan(scan), pageDataBudget(provider.capabilities.contextTokens));
-  const maxTokens = Math.min(MAX_TOKENS, Math.floor(provider.capabilities.contextTokens / 4));
-  const run = (withImage: boolean) =>
+  const quarter = Math.floor(provider.capabilities.contextTokens / 4);
+  const run = (a: { withImage: boolean; json: boolean; maxTokens: number }) =>
     collect(
       provider,
       scan,
       {
-        system: withImage ? SYSTEM_IMAGE : SYSTEM_TEXT,
-        json: true,
+        system: a.withImage ? SYSTEM_IMAGE : SYSTEM_TEXT,
+        json: a.json,
         temperature: 0.4,
-        maxTokens,
+        maxTokens: a.maxTokens,
         messages: [
           {
             role: 'user',
             content:
-              withImage && screenshotDataUrl
+              a.withImage && screenshotDataUrl
                 ? [
                     { type: 'text', text: 'Describe the vibe of this page.' },
                     { type: 'text', text: data },
@@ -118,20 +122,48 @@ export async function vibe(
       signal,
     );
 
-  let usedImage = provider.capabilities.vision && !!screenshotDataUrl;
+  /*
+   * Each remedy runs at most once, so there are at most 3 calls; the last error is rethrown as is.
+   * - cap down: a 400 for the output cap (a model with a smaller max output); it sticks after.
+   * - content: an image rejected (HTTP 400) → text-only; an error mid-stream (Groq's JSON-mode
+   *   `json_validate_failed`, or an image rejected mid-stream) → text-only and JSON off.
+   * Stop, rate limits and a cut-off reply are never retried.
+   */
+  const attempt = {
+    withImage: provider.capabilities.vision && !!screenshotDataUrl,
+    json: true,
+    maxTokens: Math.min(MAX_TOKENS, quarter),
+  };
+  let cappedDown = false;
+  let contentRetried = false;
   let raw: string;
-  try {
-    raw = await run(usedImage);
-  } catch (e) {
-    const rejected =
-      usedImage &&
-      e instanceof ProviderError &&
-      e.kind === 'other' &&
-      e.message === IMAGE_REJECTED_TEXT;
-    if (!rejected) throw e;
-    usedImage = false;
-    raw = await run(false);
+  for (;;) {
+    try {
+      raw = await run(attempt);
+      break;
+    } catch (e) {
+      if (!(e instanceof ProviderError) || e.kind !== 'other') throw e;
+      const small = Math.min(SMALL_MAX_TOKENS, quarter);
+      if (
+        !cappedDown &&
+        (e.message === TOO_LONG_TEXT || e.message.startsWith(HTTP_400_PREFIX)) &&
+        small < attempt.maxTokens
+      ) {
+        cappedDown = true;
+        attempt.maxTokens = small;
+      } else if (!contentRetried && e.message === IMAGE_REJECTED_TEXT && attempt.withImage) {
+        contentRetried = true;
+        attempt.withImage = false;
+      } else if (!contentRetried && e.message === MID_STREAM_TEXT) {
+        contentRetried = true;
+        attempt.withImage = false;
+        attempt.json = false;
+      } else {
+        throw e;
+      }
+    }
   }
+  const usedImage = attempt.withImage;
 
   const parsed = VibeSchema.safeParse(extractJson(raw));
   const result: Vibe = parsed.success
