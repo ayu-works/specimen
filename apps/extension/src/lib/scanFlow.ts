@@ -9,10 +9,12 @@ const SITE_ACCESS =
 
 /** Turn a scan error (ours or Chrome's) into a sentence the panel can show. */
 export function friendlyScanError(msg: string): string {
-  if (/chrome:\/\/|chrome-extension:\/\/|extensions gallery|webstore/i.test(msg))
-    return "Can't scan chrome:// pages or the Chrome Web Store. Open a regular website and try again.";
-  if (/Unsupported page/.test(msg))
+  const page = /^Unsupported page: (.*)$/.exec(msg)?.[1];
+  // Judge an unsupported page by its scheme only: a file path may contain any word.
+  if (page !== undefined && !/^chrome(-extension)?:\/\//i.test(page))
     return 'Specimen can only scan websites (http or https). Open one and try again.';
+  if (page !== undefined || /chrome:\/\/|chrome-extension:\/\/|extensions gallery/i.test(msg))
+    return "Can't scan chrome:// pages or the Chrome Web Store. Open a regular website and try again.";
   if (/No active tab/.test(msg)) return 'No active tab to scan.';
   if (/declined|user gesture|Cannot access contents|Missing host permission/i.test(msg))
     return SITE_ACCESS;

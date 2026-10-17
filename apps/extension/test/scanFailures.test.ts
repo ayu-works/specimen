@@ -88,6 +88,8 @@ describe('friendlyScanError (audit H8)', () => {
     ['The extensions gallery cannot be scripted.', RESTRICTED],
     ['Unsupported page: file:///Users/x/a.html', /only scan websites \(http or https\)/],
     ['Unsupported page: about:blank', /only scan websites/],
+    ['Unsupported page: file:///Users/x/webstore.html', /only scan websites/],
+    ['Unsupported page: chrome-extension://abc/x.html', RESTRICTED],
     ['No active tab', 'No active tab to scan.'],
     ['Site access declined', SITE_ACCESS],
     ['This function must be called during a user gesture', SITE_ACCESS],
