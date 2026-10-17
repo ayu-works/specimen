@@ -11,6 +11,7 @@ Short and plain: one or two lines per item.
 ## Decisions taken for you (standing OK: "go with the recommended")
 - **SPC-44 — remove the `debugger` permission (option B, you OK'd it directly).** Dark-mode and exact-mobile capture never worked for real users (Chrome refuses the permission at click time). We remove them and keep the permission-free fallbacks. Trade-off: some sites get estimated dark colours, and mobile scans may be a little wider than 390px.
 
+- **SPC-41: every cloud AI provider now flags a cut-off reply** (PE recommendation). Before, only local Gemma did. Trade-off: a very long answer shows a "cut off" note instead of looking complete.
 - **Privacy page wording:** the website still lists `debugger` until SPC-23 ships, so all site/ changes go out in one Netlify deploy. Harmless: it lists a permission we no longer ask for.
 
 ## For your next Chrome Web Store upload
