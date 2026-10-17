@@ -104,7 +104,7 @@ the key choice: the existing case-sensitive camel/acronym/digit-hump boundaries,
   (regression from main fixed); M1 only Script=Inherited diacritics are dropped, so Indic vowel signs stay; L1 the
   trailing sweep after a cut takes marks only, not bidi controls/joiners; L2 symbol tests (™ ℠ Ⅱ ㎒ № … ½).
   Lens A already approved ccf1c50, so pe-b2's fold check covers the lens B commit only.
-- Not covered (separate decision): Indic/Thai brands aren't tokenised at all, since `words` splits on marks (same as
+- Not covered (SPC-50): Indic/Thai brands aren't tokenised at all, since `words` splits on marks (same as
   main).
 
 - pe-b2 fold check of affb36e: APPROVED (2026-10-17). Reviews done.
