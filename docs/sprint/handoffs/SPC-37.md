@@ -149,7 +149,10 @@ quickly: the second download finishes and the model works in Ask.
     queued load, a Port that closes while its load waits, and `expectIdle` in the other-model test. Plus one for L2.
   - Proof: the M1, L1 (×2) and L2 tests fail on the old code (old card / 3ff3afd's llmHost); the crash and
     closed-Port tests are guards.
-- Next: gate + CI green → fold check by pe-b2.
+- Gate + CI green at a6feb5b. Fold check by pe-b2: APPROVED (51/51 green). Note, no change needed: if
+  `client.remove` succeeds but `markDownloaded` fails, the card returns to 'ready' with an error while the weights
+  are gone; the next load reports the model isn't downloaded, so it recovers. Lens A is done.
+- Next: the owner's "merge all". Follow-up: a shared fake web-llm/Worker test helper after #40 merges.
 - Follow-up: extract the shared fake web-llm/Worker harness after #40 merges.
 
 ## How to resume
