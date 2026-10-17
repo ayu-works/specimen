@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TRUNCATED_TEXT } from '../errors';
 import { getPreset } from '../presets';
 import { drain, hangingResponse, sseResponse } from '../testing/testUtils';
 import type { ChatRequest, LLMProvider } from '../types';
@@ -340,6 +341,135 @@ describe('abort', () => {
         throw new DOMException('Aborted', 'AbortError');
       });
       await expect(drain(make().chat(REQ))).rejects.toMatchObject({ kind: 'aborted' });
+    });
+  }
+});
+
+describe('a reply cut off at the token limit (SPC-41)', () => {
+  const KEY = 'sk-ant-very-secret-key';
+  const oai = () => createOpenAICompat({ baseUrl: 'https://x/v1', model: 'm', apiKey: KEY });
+  const ant = () => createAnthropic({ baseUrl: '', model: '', apiKey: KEY });
+  const gem = () => createGemini({ baseUrl: '', model: '', apiKey: KEY });
+  const oaiChunk = (content: string | null, finish: string | null) =>
+    `data: ${JSON.stringify({ choices: [{ delta: content === null ? {} : { content }, finish_reason: finish }] })}\n\n`;
+  const antText = (text: string) =>
+    `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}\n\n`;
+  const antStop = (stop_reason: string) => [
+    `data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason } })}\n\n`,
+    'data: {"type":"message_stop"}\n\n',
+  ];
+  const gemChunk = (text: string | null, finishReason?: string) =>
+    `data: ${JSON.stringify({ candidates: [{ content: { parts: text === null ? [] : [{ text }] }, finishReason }] })}\n\n`;
+
+  /** Collect the deltas and the error, like a caller that keeps the partial text. */
+  async function run(p: LLMProvider) {
+    const seen: string[] = [];
+    let error: unknown;
+    try {
+      for await (const d of p.chat(REQ)) seen.push(d);
+    } catch (e) {
+      error = e;
+    }
+    return { seen, error };
+  }
+  function expectTruncated(error: unknown) {
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).toMatchObject({ kind: 'other', message: TRUNCATED_TEXT });
+    const e = error as ProviderError;
+    expect(e.cause).toBeUndefined();
+    for (const s of [e.message, String(e), JSON.stringify(e), e.stack ?? '']) {
+      expect(s).not.toContain(KEY);
+    }
+  }
+
+  const cut: [string, () => LLMProvider, string[], string][] = [
+    [
+      'T3.02 openaiCompat: the last text and finish_reason "length" in one chunk',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', 'length'), 'data: [DONE]\n\n'],
+      'Hello',
+    ],
+    [
+      'T3.02 openaiCompat: an empty-delta chunk with finish_reason "length" after the text',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', null), oaiChunk(null, 'length'), 'data: [DONE]\n\n'],
+      'Hello',
+    ],
+    [
+      'T3.02 openaiCompat: Mistral\'s finish_reason "model_length" (context window full)',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', 'model_length'), 'data: [DONE]\n\n'],
+      'Hello',
+    ],
+    [
+      'T3.03 anthropic: stop_reason "max_tokens"',
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop('max_tokens')],
+      'Hello',
+    ],
+    [
+      'T3.03 anthropic: stop_reason "model_context_window_exceeded"',
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop('model_context_window_exceeded')],
+      'Hello',
+    ],
+    [
+      'T3.04 gemini: finishReason "MAX_TOKENS" on the chunk with the last text',
+      gem,
+      [gemChunk('Hel'), gemChunk('lo', 'MAX_TOKENS')],
+      'Hello',
+    ],
+    [
+      'T3.04 gemini: finishReason "MAX_TOKENS" then a chunk with no text (one throw, no lost text)',
+      gem,
+      [gemChunk('Hel'), gemChunk('lo', 'MAX_TOKENS'), gemChunk(null, 'MAX_TOKENS'), gemChunk('!')],
+      'Hello',
+    ],
+  ];
+  for (const [name, make, chunks, text] of cut) {
+    it(`${name} rejects with TRUNCATED_TEXT after the partial text`, async () => {
+      stubFetch(() => sseResponse(chunks));
+      const { seen, error } = await run(make());
+      expect(seen.join('')).toBe(text);
+      expectTruncated(error);
+    });
+  }
+
+  const whole: [string, () => LLMProvider, string[]][] = [
+    [
+      'T3.02 openaiCompat: finish_reason "stop"',
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', null), oaiChunk(null, 'stop'), 'data: [DONE]\n\n'],
+    ],
+    [
+      'T3.03 anthropic: stop_reason "end_turn"',
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop('end_turn')],
+    ],
+    ['T3.04 gemini: finishReason "STOP"', gem, [gemChunk('Hel'), gemChunk('lo', 'STOP')]],
+    // Other stop reasons are not a token-limit cut-off: an exact-value match must not widen.
+    ...['tool_calls', 'content_filter'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.02 openaiCompat: finish_reason "${r}"`,
+      oai,
+      [oaiChunk('Hel', null), oaiChunk('lo', r), 'data: [DONE]\n\n'],
+    ]),
+    ...['stop_sequence', 'tool_use', 'refusal'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.03 anthropic: stop_reason "${r}"`,
+      ant,
+      [antText('Hel'), antText('lo'), ...antStop(r)],
+    ]),
+    ...['SAFETY', 'RECITATION'].map((r): [string, () => LLMProvider, string[]] => [
+      `T3.04 gemini: finishReason "${r}"`,
+      gem,
+      [gemChunk('Hel'), gemChunk('lo', r)],
+    ]),
+  ];
+  for (const [name, make, chunks] of whole) {
+    it(`${name} still ends as a whole reply`, async () => {
+      stubFetch(() => sseResponse(chunks));
+      const { seen, error } = await run(make());
+      expect(error).toBeUndefined();
+      expect(seen.join('')).toBe('Hello');
     });
   }
 });

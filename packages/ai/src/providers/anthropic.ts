@@ -1,5 +1,5 @@
 import { parseDataUrl } from '../dataUrl';
-import { streamError } from '../errors';
+import { streamError, TRUNCATED_TEXT } from '../errors';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
 import { ProviderError } from '../types';
 import { postSse, trimSlash } from './http';
@@ -7,6 +7,8 @@ import { postSse, trimSlash } from './http';
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 export const ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-5-5';
 const DEFAULT_MAX_TOKENS = 2048;
+/** Stop reasons that mean the output hit a limit, not where the model meant to stop. */
+const CUT_OFF = new Set(['max_tokens', 'model_context_window_exceeded']);
 
 function toContent(content: string | ContentPart[]): unknown {
   if (typeof content === 'string') return content;
@@ -60,7 +62,7 @@ export function createAnthropic(cfg: ProviderConfig): LLMProvider {
       for await (const ev of postSse(url, headers, body, signal)) {
         let json: {
           type?: string;
-          delta?: { type?: string; text?: unknown };
+          delta?: { type?: string; text?: unknown; stop_reason?: unknown };
           error?: unknown;
         };
         try {
@@ -73,6 +75,9 @@ export function createAnthropic(cfg: ProviderConfig): LLMProvider {
           const t = json.delta.text;
           if (typeof t === 'string' && t) yield t;
         }
+        // Every text delta comes before message_delta.
+        if (json.type === 'message_delta' && CUT_OFF.has(String(json.delta?.stop_reason)))
+          throw new ProviderError('other', TRUNCATED_TEXT);
         if (json.type === 'message_stop') return;
       }
       // Anthropic always ends with message_stop; without it the answer was cut off.

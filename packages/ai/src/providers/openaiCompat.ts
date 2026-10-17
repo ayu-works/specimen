@@ -1,10 +1,13 @@
-import { streamError } from '../errors';
+import { streamError, TRUNCATED_TEXT } from '../errors';
 import { PRESETS, type Preset } from '../presets';
 import type { ChatRequest, ContentPart, LLMProvider, ProviderConfig } from '../types';
+import { ProviderError } from '../types';
 import { postSse, trimSlash } from './http';
 
 /** Presets served by the OpenAI-compatible adapter (ARCHITECTURE §7). */
 export const OPENAI_COMPAT_PRESETS: readonly Preset[] = PRESETS.filter((p) => p.kind === 'openai');
+/** Finish reasons for a reply cut at a limit; Mistral says `model_length` when the context is full. */
+const CUT_OFF = new Set(['length', 'model_length']);
 
 function toContent(content: string | ContentPart[]): unknown {
   if (typeof content === 'string') return content;
@@ -51,7 +54,10 @@ export function createOpenAICompat(
       const { url, headers, body } = buildOpenAIRequest(cfg, req);
       for await (const ev of postSse(url, headers, body, signal)) {
         if (ev.data === '[DONE]') return;
-        let json: { choices?: { delta?: { content?: unknown } }[]; error?: unknown };
+        let json: {
+          choices?: { delta?: { content?: unknown }; finish_reason?: unknown }[];
+          error?: unknown;
+        };
         try {
           json = JSON.parse(ev.data);
         } catch {
@@ -60,6 +66,9 @@ export function createOpenAICompat(
         if (json.error) throw streamError(json.error);
         const text = json.choices?.[0]?.delta?.content;
         if (typeof text === 'string' && text) yield text;
+        // The last text can share the chunk with the finish reason, so it goes out first.
+        if (CUT_OFF.has(String(json.choices?.[0]?.finish_reason)))
+          throw new ProviderError('other', TRUNCATED_TEXT);
       }
     },
   };

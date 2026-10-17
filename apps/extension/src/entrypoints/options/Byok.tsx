@@ -1,4 +1,11 @@
-import { getPreset, listModels, PRESETS, ProviderError, pickModel } from '@specimen/ai';
+import {
+  getPreset,
+  listModels,
+  PRESETS,
+  ProviderError,
+  pickModel,
+  TRUNCATED_TEXT,
+} from '@specimen/ai';
 import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -135,14 +142,19 @@ export function Byok({
       });
       const ctl = new AbortController();
       let got = false;
-      for await (const _ of provider.chat(
-        // Reasoning models (e.g. gpt-oss) spend their first tokens thinking, so allow a few.
-        { messages: [{ role: 'user', content: 'Reply with one word.' }], maxTokens: 32 },
-        ctl.signal,
-      )) {
-        got = true;
-        ctl.abort();
-        break;
+      try {
+        for await (const _ of provider.chat(
+          // Reasoning models (e.g. gpt-oss) spend their first tokens thinking, so allow a few.
+          { messages: [{ role: 'user', content: 'Reply with one word.' }], maxTokens: 32 },
+          ctl.signal,
+        )) {
+          got = true;
+          ctl.abort();
+          break;
+        }
+      } catch (e) {
+        // Thinking can use up all 32 tokens: the reply stops at the limit, but the key works.
+        if (!(e instanceof ProviderError && e.message === TRUNCATED_TEXT)) throw e;
       }
       setMsg({
         ok: true,
