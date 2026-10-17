@@ -29,6 +29,23 @@ let loadPromise: Promise<void> | null = null;
 /** Ends the pending load when the engine goes away (unload, delete, worker crash): like `Job.abandon`. */
 let abandonLoad: ((e: Error) => void) | null = null;
 let lastP = 0;
+const UNLOADED = 'The local model was unloaded. Try again.';
+const DELETED = 'The local model was deleted. Download it again to use it.';
+
+/**
+ * One `load()` call, from its start until it settles. An unload (or a delete of its model) that lands
+ * before the load body runs cancels it: `cancelled` is set and `gone` rejects, which ends whatever the
+ * load is waiting on at once (SPC-37).
+ */
+interface LoadReq {
+  modelId: string;
+  cancelled?: Error;
+  gone: Promise<never>;
+  cancel: (e: Error) => void;
+}
+const pending = new Set<LoadReq>();
+/** The cache delete in flight per model: a load of that model waits for it instead of refilling it. */
+const deleting = new Map<string, Promise<void>>();
 /** WebLLM runs one generation at a time; chain requests. */
 let chatChain: Promise<void> = Promise.resolve();
 
@@ -112,7 +129,7 @@ function dropPort(port: chrome.runtime.Port): void {
  * crashed worker leaves the pending load and the running chat's `create()`/`next()` pending for
  * ever. Abandon them first.
  */
-function disposeEngine(reason = 'The local model was unloaded. Try again.'): void {
+function disposeEngine(reason = UNLOADED): void {
   abandonLoad?.(new Error(reason));
   running?.abandon?.(new Error(reason));
   try {
@@ -126,27 +143,67 @@ function disposeEngine(reason = 'The local model was unloaded. Try again.'): voi
   loadedId = undefined;
 }
 
+/** Cancel the loads that haven't reached the load body yet: all of them, or one model's. */
+function cancelLoads(reason: string, modelId?: string): void {
+  for (const req of pending) {
+    if (modelId !== undefined && req.modelId !== modelId) continue;
+    req.cancelled ??= new Error(reason);
+    req.cancel(req.cancelled);
+  }
+}
+
 async function load(modelId: string): Promise<void> {
   if (!gemmaById(modelId)) throw new Error(`Unknown model: ${modelId}`);
-  if (loadedId === modelId && engine) return;
-  if (loadPromise && loadingId === modelId) return loadPromise;
-  if (loadPromise) await loadPromise.catch(() => {});
-  if (!(await hasGpu())) throw new Error('WebGPU is not available (navigator.gpu)');
+  let cancel: (e: Error) => void = () => {};
+  const gone = new Promise<never>((_, reject) => {
+    cancel = reject;
+  });
+  gone.catch(() => {});
+  const req: LoadReq = { modelId, gone, cancel };
+  pending.add(req);
+  try {
+    return await loadOnce(req);
+  } finally {
+    pending.delete(req);
+  }
+}
+
+async function loadOnce(req: LoadReq): Promise<void> {
+  const { modelId } = req;
+  // Every wait races the cancel, so an unload or delete ends this load at once, not when the wait ends.
+  const wait = <T>(p: Promise<T>) => Promise.race([p, req.gone]);
+  for (;;) {
+    const del = deleting.get(modelId);
+    if (del) await wait(del.catch(() => {}));
+    else if (loadedId === modelId && engine) return;
+    else if (loadPromise && loadingId === modelId) return loadPromise;
+    else if (loadPromise) await wait(loadPromise.catch(() => {}));
+    else break;
+  }
+  if (!(await wait(hasGpu()))) throw new Error('WebGPU is not available (navigator.gpu)');
+  if (req.cancelled) throw req.cancelled;
   // Another load may have started during the await: join or wait for it instead of starting a second.
-  if (loadPromise || (loadedId === modelId && engine)) return load(modelId);
+  if (loadPromise || (loadedId === modelId && engine)) return loadOnce(req);
 
   loadingId = modelId;
   lastP = 0;
+  // Dispose before this load's abandon is set (disposing calls it), and set it before the body
+  // runs: an unload or delete in the gap then rejects this load before it makes a Worker.
+  disposeEngine();
+  let abandoned: Error | undefined;
+  const gone = new Promise<never>((_, reject) => {
+    abandonLoad = (e) => {
+      abandoned ??= e;
+      reject(e);
+    };
+  });
+  gone.catch(() => {});
   loadPromise = (async () => {
     // Run the body after `loadPromise` is set: a synchronous throw (say `new Worker`) would
     // otherwise reach `finally` first and leave a settled `loadPromise` behind for good.
     await null;
     try {
-      disposeEngine();
-      const gone = new Promise<never>((_, reject) => {
-        abandonLoad = reject;
-      });
-      gone.catch(() => {});
+      if (abandoned) throw abandoned;
       const w = new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' });
       worker = w;
       const crashed = () => {
@@ -267,6 +324,9 @@ async function runChat(job: Job, req: ChatRequest): Promise<void> {
 async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void> {
   switch (msg.type) {
     case 'status': {
+      const waiting = [...pending].some(
+        (r) => !r.cancelled && (msg.modelId === undefined || r.modelId === msg.modelId),
+      );
       const cached =
         msg.modelId && gemmaById(msg.modelId)
           ? await hasModelInCache(msg.modelId, buildAppConfig()).catch(() => false)
@@ -274,8 +334,10 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
       send(port, {
         type: 'status',
         loaded: loadedId,
-        loading: loadPromise !== null,
-        p: loadPromise ? lastP : undefined,
+        // A load of this model waiting for a delete or the GPU check counts too, so a reopened
+        // card rejoins it. Not another model's: the card would start its own download (lens B L2).
+        loading: loadPromise !== null || waiting,
+        p: loadPromise ? lastP : waiting ? 0 : undefined,
         gpu: await hasGpu(),
         cached,
       });
@@ -312,25 +374,45 @@ async function handle(port: chrome.runtime.Port, msg: LlmRequest): Promise<void>
       return;
     }
     case 'unload':
+      cancelLoads(UNLOADED);
       disposeEngine();
       return;
-    case 'delete':
+    case 'delete': {
+      const { modelId } = msg;
+      // A load still running would write the shards back after the delete: stop it first.
+      cancelLoads(DELETED, modelId);
+      if (loadedId === modelId || loadingId === modelId) disposeEngine(DELETED);
+      // Two deletes of one model run one after the other; a load waits for the last one.
+      const prev = deleting.get(modelId);
+      const run = (async () => {
+        await prev?.catch(() => {});
+        await deleteModelAllInfoInCache(modelId, buildAppConfig());
+      })();
+      deleting.set(modelId, run);
       try {
-        // A load still running would write the shards back after the delete: stop it first.
-        if (loadedId === msg.modelId || loadingId === msg.modelId) {
-          disposeEngine('The local model was deleted. Download it again to use it.');
-        }
-        await deleteModelAllInfoInCache(msg.modelId, buildAppConfig());
-        send(port, { type: 'deleted', modelId: msg.modelId });
+        await run;
+        send(port, { type: 'deleted', modelId });
       } catch (e) {
         send(port, { type: 'error', ...classify(e) });
+      } finally {
+        if (deleting.get(modelId) === run) deleting.delete(modelId);
       }
+    }
   }
 }
 
-/** True while a model is loaded or loading, or any client is connected: do not close the document. */
+/**
+ * True while a model is loaded or loading (a load waiting for a delete or the GPU check counts), a
+ * cache delete runs, or any client is connected. Tests use it to check that the host drained.
+ */
 export function llmBusy(): boolean {
-  return loadedId !== undefined || loadPromise !== null || ports.size > 0;
+  return (
+    loadedId !== undefined ||
+    loadPromise !== null ||
+    pending.size > 0 ||
+    deleting.size > 0 ||
+    ports.size > 0
+  );
 }
 
 /** Serve one `llm` Port: a real one from `onConnect`, or an in-page one (the council host). */

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { libraryErrorText, replaceStoredScan } from '@/lib/db';
 import { ensureSiteAccess, friendlyScanError, sameUrl, scanTab } from '@/lib/scanFlow';
-import { loadMobilePref, runMediaCapture, runMobileCapture, saveMobilePref } from '../extras';
+import { loadMobilePref, runMobileCapture, saveMobilePref } from '../extras';
 import { openOffer } from '../restore';
 import { runTabScan } from '../runScan';
 import { useStore } from '../store';
@@ -106,9 +106,7 @@ function Captures({ scan }: { scan: DesignScan }) {
       </label>
       {mine && extras.mobile === 'running' && (
         <p role="status" className="text-[11px] text-muted-foreground">
-          {extras.mobileSkip === 'fullscreen' || extras.mobileSkip === 'attach'
-            ? 'Capturing mobile… this page shows at phone width for a moment.'
-            : 'Capturing mobile… a small window opens for a moment.'}
+          Capturing mobile… a small window opens for a moment.
         </p>
       )}
       {mobile && extras.mobile !== 'running' && (
@@ -124,12 +122,8 @@ function Captures({ scan }: { scan: DesignScan }) {
           <Row label="Mobile">
             <span data-testid="mobile-wide">not captured (Chrome kept the window too wide)</span>
           </Row>
-          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
-            Capture with permission
-          </Button>
           <p className="text-[11px] text-muted-foreground">
-            Capturing needs a one-time permission, and Chrome shows a "debugging this browser" bar
-            for a few seconds.
+            Turn off Also capture mobile to skip this window on later scans.
           </p>
         </>
       )}
@@ -140,17 +134,9 @@ function Captures({ scan }: { scan: DesignScan }) {
               {extras.mobileSkip === 'fullscreen' ? 'skipped in full screen' : 'not captured'}
             </span>
           </Row>
-          {extras.mobileSkip === 'tabbed' ? (
-            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan)}>
-              Try again
-            </Button>
-          ) : (
-            // Emulates in the scanned tab when still in full screen; asks for the one-time
-            // `debugger` permission only if it isn't held yet.
-            <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan, true)}>
-              {extras.mobileSkip === 'fullscreen' ? 'Capture in this tab' : 'Try again'}
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={() => void runMobileCapture(scan)}>
+            Try again
+          </Button>
         </>
       )}
       {!mobile &&
@@ -170,17 +156,12 @@ function Captures({ scan }: { scan: DesignScan }) {
           {theme === 'measured' && <span>found · captured from the site</span>}
           {theme === 'none' && <span>not found</span>}
           {theme === 'failed' && <span>unavailable</span>}
-          {theme === 'offer' && (
-            <button type="button" className="underline" onClick={() => void runMediaCapture(scan)}>
-              capture
-            </button>
-          )}
+          {theme === 'system' && <span>follows your system setting · not measured</span>}
         </Row>
       )}
-      {theme === 'offer' && (
+      {theme === 'system' && (
         <p className="text-[11px] text-muted-foreground">
-          This site follows your system setting. Capturing needs a one-time permission, and Chrome
-          shows a "debugging this browser" bar for a few seconds.
+          Specimen can't switch your system setting, so this mode is derived from the measured one.
         </p>
       )}
       {scan.host !== 'composed' && (
@@ -236,6 +217,8 @@ export function Scan() {
   }, [scanId]);
 
   const scanning = status === 'scanning';
+  // A failed scan keeps the last one in the store (Generate and Inspect still use it): say it is that one.
+  const stale = status === 'error' && !!scan;
   return (
     <div className="flex flex-col gap-3">
       {!scan && (
@@ -275,11 +258,29 @@ export function Scan() {
           className="flex items-start gap-2 rounded-md border border-destructive/40 p-2 text-destructive"
         >
           {scan && <Mascot size={32} mood="sad" />}
-          <span className="min-w-0">{error}</span>
+          <span className="min-w-0">
+            {error}
+            {stale && <span className="block">The card below is your previous scan.</span>}
+          </span>
         </div>
       )}
       {scan && (
-        <Card className="flex flex-col gap-2.5" data-testid="scan-result">
+        <Card
+          className={`flex flex-col gap-2.5${stale ? ' border-dashed' : ''}`}
+          data-testid="scan-result"
+          data-stale={stale ? 'true' : undefined}
+          aria-labelledby={stale ? 'previous-scan' : undefined}
+          role={stale ? 'region' : undefined}
+        >
+          {stale && (
+            <p
+              id="previous-scan"
+              data-testid="previous-scan"
+              className="rounded border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
+            >
+              Previous scan: {scan.host}. The last scan failed.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {/* Only a brief reaction: at rest the favicon alone identifies the scan. */}
             {(scanning || cheer) && (
@@ -326,13 +327,15 @@ export function Scan() {
             </details>
           )}
           <Captures scan={scan} />
-          <Button onClick={() => setTab('generate')}>Generate prompt</Button>
+          <Button onClick={() => setTab('generate')}>
+            {stale ? 'Generate prompt (previous scan)' : 'Generate prompt'}
+          </Button>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setTab('inspect')}>
               Inspect
             </Button>
             <Button variant="outline" onClick={run} disabled={scanning}>
-              {scanning ? 'Scanning…' : 'Re-scan'}
+              {scanning ? 'Scanning…' : stale ? 'Scan this page' : 'Re-scan'}
             </Button>
           </div>
         </Card>

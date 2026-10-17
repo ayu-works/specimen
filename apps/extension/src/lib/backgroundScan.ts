@@ -34,34 +34,6 @@ async function downscale(dataUrl: string): Promise<string> {
   return `data:image/jpeg;base64,${toBase64(new Uint8Array(await out.arrayBuffer()))}`;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Run `fn` with `prefers-color-scheme` emulated through the DevTools protocol. Needs the optional
- * `debugger` permission (requested from the side panel). Chrome shows its "debugging this
- * browser" bar while attached; we always restore and detach.
- */
-async function withColorSchemeEmulation<T>(
-  tabId: number,
-  scheme: 'dark' | 'light',
-  fn: () => Promise<T>,
-): Promise<T> {
-  const dbg = (chrome as { debugger?: typeof chrome.debugger }).debugger;
-  if (!dbg) throw new Error('Debugger permission not granted');
-  const target = { tabId };
-  await dbg.attach(target, '1.3');
-  try {
-    await dbg.sendCommand(target, 'Emulation.setEmulatedMedia', {
-      features: [{ name: 'prefers-color-scheme', value: scheme }],
-    });
-    await sleep(400); // let transitions and media-query listeners settle
-    return await fn();
-  } finally {
-    await dbg.sendCommand(target, 'Emulation.setEmulatedMedia', { features: [] }).catch(() => {});
-    await dbg.detach(target).catch(() => {});
-  }
-}
-
 async function sample(tabId: number, opts: ScanOpts): Promise<ScanResult['raw']> {
   // Hand the options to the sampler, which runs in the same isolated world a moment later.
   await chrome.scripting.executeScript({
@@ -106,9 +78,7 @@ function noShotReason(e: unknown): string {
 export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanResult> {
   // Fails fast (before sampling) when the tab is already gone.
   await chrome.tabs.get(tabId);
-  const raw = opts.emulate
-    ? await withColorSchemeEmulation(tabId, opts.emulate, () => sample(tabId, opts))
-    : await sample(tabId, opts);
+  const raw = await sample(tabId, opts);
   if (opts.noScreenshot) return { raw, screenshot: '' };
   // The thumbnail is a nice-to-have: a failed capture must not fail the scan.
   try {

@@ -2,6 +2,11 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed
+- The optional `debugger` permission and the captures that used it (dark mode through system-setting emulation, and "Capture with permission" for mobile). Chrome does not allow `debugger` as an optional permission, so those buttons always failed. Mobile capture still uses a small window, and dark/light capture still uses the site's own theme switch; neither needs a permission. A site that only follows your system setting now says so instead of offering a capture.
+
 ## [1.0.0] - 2026-10-09
 First public release.
 

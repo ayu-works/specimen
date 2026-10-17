@@ -28,7 +28,7 @@ What you can do with it
 • Inspect the palette, type scale, spacing, shapes, components and layout, with a contrast check against WCAG AA.
 • Turn on a baseline grid, a live element inspector or an eyedropper.
 • Generate a prompt for any AI coding agent, or a DESIGN.md file. Copy it or download it.
-• Capture the mobile layout and the dark or light theme, and merge several pages of one site into a single scan.
+• Capture the mobile layout and the dark or light theme (on sites with a theme switch), and merge several pages of one site into a single scan.
 • Check a page you built against the original and get a prompt that fixes the differences.
 • Save every scan to a local Library. Search, tag, export and import. Compose a new design by mixing the colors of one scan with the type or spacing of another.
 

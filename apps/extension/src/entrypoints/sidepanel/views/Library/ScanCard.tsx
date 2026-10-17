@@ -13,6 +13,15 @@ const SWATCH_ROLES: ColorRole[] = ['background', 'surface', 'textPrimary', 'acce
 export const formatDate = (t: number) =>
   new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+const parseTags = (text: string) => [
+  ...new Set(
+    text
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean),
+  ),
+];
+
 export function Swatches({ scan }: { scan: StoredScan }) {
   return (
     <div className="flex gap-1">
@@ -58,6 +67,8 @@ export function ScanCard({
   const [menu, setMenu] = useState(false);
   const [edit, setEdit] = useState<'title' | 'tags' | null>(null);
   const [draft, setDraft] = useState('');
+  /** The value the edit started from: leaving it unchanged writes nothing, even if another panel changed the scan since. */
+  const [from, setFrom] = useState('');
   const box = useRef<HTMLDivElement>(null);
   const more = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -93,7 +104,9 @@ export function ScanCard({
 
   function begin(kind: 'title' | 'tags') {
     setMenu(false);
-    setDraft(kind === 'title' ? scan.title : scan.tags.join(', '));
+    const start = kind === 'title' ? scan.title : scan.tags.join(', ');
+    setDraft(start);
+    setFrom(start);
     setEdit(kind);
   }
 
@@ -119,17 +132,11 @@ export function ScanCard({
   async function store(kind: 'title' | 'tags' | null) {
     if (kind === 'title') {
       const title = draft.trim();
-      if (title && title !== scan.title) await updateScan(scan.id, { title });
+      if (title && title !== from.trim()) await updateScan(scan.id, { title });
     } else if (kind === 'tags') {
-      const tags = [
-        ...new Set(
-          draft
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-        ),
-      ];
-      await updateScan(scan.id, { tags });
+      const tags = parseTags(draft);
+      if (JSON.stringify(tags) !== JSON.stringify(parseTags(from)))
+        await updateScan(scan.id, { tags });
     }
   }
 

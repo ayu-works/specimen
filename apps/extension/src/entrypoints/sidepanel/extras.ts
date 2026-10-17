@@ -6,7 +6,6 @@ import {
   MobileSkippedError,
   type MobileSkipReason,
   MobileTooWideError,
-  requestDebugger,
 } from '@/lib/captureFlow';
 import { libraryErrorText, updateScan } from '@/lib/db';
 import { sameUrl } from '@/lib/scanFlow';
@@ -64,7 +63,10 @@ async function tabStillOnPage(tabId: number, url: string): Promise<boolean> {
   }
 }
 
-/** Try the page's own theme switch (no permission). Falls back to offering the media capture. */
+/**
+ * Try the page's own theme switch (no permission). A page whose other scheme only follows the OS
+ * setting (`@media (prefers-color-scheme)`) is reported as `system`: it keeps the derived variant.
+ */
 export async function runThemeCapture(
   scan: DesignScan,
   tabId: number,
@@ -80,76 +82,37 @@ export async function runThemeCapture(
   if (hasSwitch && (await tabStillOnPage(tabId, scan.url))) {
     patchExtras({ theme: 'running' });
     try {
-      const got = await captureTheme(scan, tabId, 'class');
+      const got = await captureTheme(scan, tabId);
       if (got && live(scan.id)) {
         await attach(current(scan.id) ?? scan, { [got.key]: got.variant });
         patchExtras({ theme: 'measured' });
         return;
       }
     } catch {
-      /* fall through to the media offer */
+      /* fall through: no measured variant */
     }
   }
   if (!live(scan.id)) return;
-  patchExtras({ theme: hints?.prefersScheme ? 'offer' : 'none' });
-}
-
-/** Click handler: request the optional `debugger` permission, then emulate the color scheme. */
-export async function runMediaCapture(scan: DesignScan): Promise<void> {
-  const { patchExtras, extras } = useStore.getState();
-  const tabId = extras.tabId;
-  if (tabId === null || !(await tabStillOnPage(tabId, scan.url))) {
-    patchExtras({ theme: 'offer', note: 'Switch back to the tab you scanned, then try again.' });
-    return;
-  }
-  patchExtras({ theme: 'running', note: null });
-  try {
-    if (!(await requestDebugger())) {
-      patchExtras({ theme: 'offer', note: 'Permission not granted. Nothing was captured.' });
-      return;
-    }
-    const got = await captureTheme(scan, tabId, 'media');
-    if (!live(scan.id)) return;
-    if (got) {
-      await attach(current(scan.id) ?? scan, { [got.key]: got.variant });
-      patchExtras({ theme: 'measured' });
-    } else patchExtras({ theme: 'none', note: 'The page looks the same in the other mode.' });
-  } catch (e) {
-    patchExtras({
-      theme: 'offer',
-      note: `Capture failed: ${e instanceof Error ? e.message : String(e)}`,
-    });
-  }
+  patchExtras({ theme: hints?.prefersScheme ? 'system' : 'none' });
 }
 
 /** What the user can do about each skipped mobile capture. */
 export const SKIP_NOTES: Record<MobileSkipReason, string> = {
-  fullscreen:
-    'Mobile capture is skipped in full screen. Exit full screen and capture again, or capture in this tab (it shows at phone width for a moment).',
-  navigated: 'Switch back to the page you scanned, then try again.',
-  attach: 'Close DevTools on this tab (or any other debugger), then try again.',
+  fullscreen: 'Mobile capture is skipped in full screen. Exit full screen, then try again.',
   tabbed: 'Chrome opened the mobile window as a tab, so nothing was captured. Try again.',
 };
 
 /**
- * Capture the mobile layout. `withPermission` runs inside a click handler: it requests the
- * optional `debugger` permission first so a too-wide popup can be emulated, and only then (a
- * click) may a full-screen capture emulate a phone in the scanned tab. The automatic capture never
- * touches the user's tab. A capture already running is never started twice.
+ * Capture the mobile layout in a temporary popup window. The user's own tab is never touched. A
+ * capture already running is never started twice.
  */
-export async function runMobileCapture(scan: DesignScan, withPermission = false): Promise<void> {
+export async function runMobileCapture(scan: DesignScan): Promise<void> {
   const { patchExtras, extras } = useStore.getState();
   if (extras.mobile === 'running') return;
-  const before = extras.mobile === 'skipped' ? 'skipped' : 'wide';
   patchExtras({ mobile: 'running', note: null });
   try {
-    if (withPermission && !(await requestDebugger())) {
-      patchExtras({ mobile: before, note: 'Permission not granted. Nothing was captured.' });
-      return;
-    }
     const mobile = await captureMobile(scan.url, scan, {
       tabId: useStore.getState().extras.tabId ?? undefined,
-      emulate: withPermission,
     });
     if (!live(scan.id)) return;
     await attach(current(scan.id) ?? scan, { mobile });
