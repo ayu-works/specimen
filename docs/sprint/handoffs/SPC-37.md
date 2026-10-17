@@ -133,7 +133,7 @@ quickly: the second download finishes and the model works in Ask.
 - `pnpm gate` green.
 
 ## Next
-- PR open → reviews (PE lens A + lens B) → fold findings.
+- Lens A r1: APPROVED, 0 findings (docs/sprint/reviews/SPC-37-a-r1.md). Waiting on lens B.
 - Follow-up: extract the shared fake web-llm/Worker harness after #40 merges.
 
 ## How to resume
