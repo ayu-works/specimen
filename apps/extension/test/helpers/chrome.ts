@@ -31,11 +31,65 @@ function area(name: string, listeners: Set<Listener>) {
   };
 }
 
+/** Chrome's message when a permission the manifest can't grant is requested (e.g. optional `debugger`). */
+export const NOT_IN_MANIFEST = 'Only permissions specified in the manifest may be requested.';
+
+export interface PermissionOpts {
+  /** What is already held. `'all'` (the default) grants everything, as before. */
+  held?: 'all' | { origins?: string[]; permissions?: string[] };
+  /** The user's answer to a prompt for something not held. Default `'grant'`. */
+  answer?: 'grant' | 'deny' | 'throw';
+  /** The rejection message for `answer: 'throw'` (default: {@link NOT_IN_MANIFEST}). */
+  error?: string;
+}
+
+interface PermissionQuery {
+  origins?: string[];
+  permissions?: string[];
+}
+
+/**
+ * Permissions that can say no. Deny is opt-in: with no options everything is held. Origins match
+ * exactly (or via a held `<all_urls>`); real Chrome also matches patterns (`https://*.x.com/*`
+ * covers `https://a.x.com/*`), which this stub does not. `remove` only affects the opt-in mode.
+ */
+function permissionsArea(opts: PermissionOpts = {}) {
+  const all = (opts.held ?? 'all') === 'all';
+  const fromOpts = opts.held && opts.held !== 'all' ? opts.held : {};
+  const held = {
+    origins: new Set(fromOpts.origins ?? []),
+    permissions: new Set(fromOpts.permissions ?? []),
+  };
+  const has = (q: PermissionQuery) =>
+    all ||
+    ((q.origins ?? []).every((o) => held.origins.has(o) || held.origins.has('<all_urls>')) &&
+      (q.permissions ?? []).every((p) => held.permissions.has(p)));
+  return {
+    held,
+    contains: vi.fn(async (q: PermissionQuery = {}) => has(q)),
+    request: vi.fn(async (q: PermissionQuery = {}) => {
+      if (has(q)) return true;
+      const answer = opts.answer ?? 'grant';
+      if (answer === 'throw') throw new Error(opts.error ?? NOT_IN_MANIFEST);
+      if (answer === 'deny') return false;
+      for (const o of q.origins ?? []) held.origins.add(o);
+      for (const p of q.permissions ?? []) held.permissions.add(p);
+      return true;
+    }),
+    remove: vi.fn(async (q: PermissionQuery = {}) => {
+      for (const o of q.origins ?? []) held.origins.delete(o);
+      for (const p of q.permissions ?? []) held.permissions.delete(p);
+      return true;
+    }),
+  };
+}
+
 /**
  * A small in-memory `chrome` for component tests: storage (local/session/sync with a shared
- * `onChanged`), permissions (everything granted), tabs, and a few runtime calls.
+ * `onChanged`), permissions (everything granted unless `opts.permissions` says otherwise), tabs,
+ * and a few runtime calls.
  */
-export function makeChrome() {
+export function makeChrome(opts: { permissions?: PermissionOpts } = {}) {
   const listeners = new Set<Listener>();
   const noEvent = { addListener: vi.fn(), removeListener: vi.fn() };
   return {
@@ -48,10 +102,7 @@ export function makeChrome() {
         removeListener: (l: Listener) => listeners.delete(l),
       },
     },
-    permissions: {
-      contains: vi.fn(async () => true),
-      request: vi.fn(async () => true),
-    },
+    permissions: permissionsArea(opts.permissions),
     runtime: {
       openOptionsPage: vi.fn(),
       sendMessage: vi.fn(async () => undefined),
@@ -69,8 +120,8 @@ export function makeChrome() {
 export type FakeChrome = ReturnType<typeof makeChrome>;
 
 /** Install a fresh fake `chrome` as the global and return it. */
-export function installChrome(): FakeChrome {
-  const c = makeChrome();
+export function installChrome(opts: { permissions?: PermissionOpts } = {}): FakeChrome {
+  const c = makeChrome(opts);
   vi.stubGlobal('chrome', c);
   return c;
 }

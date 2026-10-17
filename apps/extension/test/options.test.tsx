@@ -155,3 +155,57 @@ describe('Options: API key (component)', () => {
     }
   });
 });
+
+describe('Options: API key when the browser says no (audit H13)', () => {
+  const NOT_GRANTED =
+    'Saved, but the browser did not grant access to this provider. Press Test or Save again and choose Allow.';
+  const ORIGIN = 'https://api.anthropic.com/*';
+
+  it('T3.13 Save with host access denied: says so, and the key is still in storage.local only', async () => {
+    chrome = installChrome({ permissions: { held: {}, answer: 'deny' } });
+    renderByok();
+    typeKey();
+    click('Save');
+
+    await screen.findByText(NOT_GRANTED);
+    expect(chrome.permissions.request).toHaveBeenCalledWith({ origins: [ORIGIN] });
+    expect(chrome.permissions.held.origins.has(ORIGIN)).toBe(false);
+    expect(chrome.storage.local.data.get('secrets.anthropic')).toEqual({
+      v: 1,
+      enc: false,
+      key: KEY,
+    });
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+    expect((chrome.storage.local.data.get('settings.ai') as AiSettings).provider).toBe('byok');
+  });
+
+  it('T3.13 Save when the permission request throws: the same message, the key is saved', async () => {
+    chrome = installChrome({ permissions: { held: {}, answer: 'throw' } });
+    renderByok();
+    typeKey();
+    click('Save');
+
+    await screen.findByText(NOT_GRANTED);
+    expect(chrome.storage.local.data.get('secrets.anthropic')).toMatchObject({ key: KEY });
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+  });
+
+  it('T3.13 Test with host access denied: works, and says access was not granted', async () => {
+    chrome = installChrome({ permissions: { held: {}, answer: 'deny' } });
+    renderByok();
+    typeKey();
+    click('Test');
+    await screen.findByText(
+      /answered\. \(Browser access to this host was not granted; the call still succeeded\.\)/,
+    );
+  });
+
+  it('T3.13 an origin already granted is not asked again', async () => {
+    chrome = installChrome({ permissions: { held: { origins: [ORIGIN] }, answer: 'deny' } });
+    renderByok();
+    typeKey();
+    click('Save');
+    await screen.findByText('Saved.');
+    expect(chrome.permissions.request).not.toHaveBeenCalled();
+  });
+});
