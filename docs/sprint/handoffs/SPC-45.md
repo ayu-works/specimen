@@ -117,4 +117,7 @@ committed event can't satisfy it, tested). (c) The accepted residuals go in the 
     `saveError`), **L3** (two concurrent re-scans share panel state): all need `Library/index.tsx`, which SPC-43's open
     PR owns. Orchestrator chose a follow-up: **SPC-48** (blocked by SPC-43 and SPC-45). Not done here.
   - The 3 new cases fail on the pre-fix code; 33/33 pass.
-- Next: pe-b2's fold check on 360890b; fold any findings with new commits.
+- 2026-10-17: pe-b2 fold check on 360890b: APPROVED, plus 1 optional LOW (the cap could fire while saveScan runs →
+  saved but reported as failed). Fixed: the bound now covers only the `scan.run` answer (`ScanTabOptions.answerWithinMs`,
+  replacing the `signal`/`scanWithin` pair). Extract and save after the answer are never cut off. New T5.14 test:
+  answer at 19 s, save takes 10 s → success, tab stays (it fails on 360890b).

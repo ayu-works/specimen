@@ -57,8 +57,11 @@ export interface ScanTabOptions {
   save?: boolean;
   /** Skip the thumbnail. */
   noScreenshot?: boolean;
-  /** Once aborted, a scan that answers late is dropped (never saved) and rejects with the reason. */
-  signal?: AbortSignal;
+  /**
+   * Bound on the page's answer (`scan.run`), rejecting with the timeout text. A late answer is
+   * dropped; once the page has answered, extracting and saving are never cut off.
+   */
+  answerWithinMs?: number;
 }
 
 /**
@@ -66,11 +69,10 @@ export interface ScanTabOptions {
  * scan; it comes back as `saveError` so the panel can say so.
  */
 export async function scanTab(tabId: number, opts: ScanTabOptions = {}): Promise<ScanOutcome> {
-  const res = await send('scan.run', {
-    tabId,
-    opts: opts.noScreenshot ? { noScreenshot: true } : undefined,
-  });
-  if (opts.signal?.aborted) throw opts.signal.reason;
+  const res = await within(
+    send('scan.run', { tabId, opts: opts.noScreenshot ? { noScreenshot: true } : undefined }),
+    opts.answerWithinMs,
+  );
   const scan = extract(res.raw);
   let saveError: string | null = null;
   if (opts.save !== false) {
@@ -218,8 +220,8 @@ async function closeOwnTab(id: number): Promise<void> {
   }
 }
 
-/** Bound on the scan itself: a page that committed but never reaches DOMContentLoaded can hold the injection. */
-const RESCAN_SCAN_MS = 20000;
+/** Bound on the page's answer: a page that committed but never reaches DOMContentLoaded can hold the injection. */
+const RESCAN_ANSWER_MS = 20000;
 
 /**
  * Open `url` in a new foreground tab, wait for it to load, scan it, and return the result. On
@@ -233,7 +235,7 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
   try {
     await waitForTabLoad(id, { url, scanIfCommitted: true });
     await new Promise((r) => setTimeout(r, 800)); // let late-rendering content settle
-    const out = await scanWithin(id, RESCAN_SCAN_MS);
+    const out = await scanTab(id, { answerWithinMs: RESCAN_ANSWER_MS });
     const fresh = await chrome.tabs.get(id).catch(() => null);
     return { ...out, favicon: fresh?.favIconUrl ?? null };
   } catch (e) {
@@ -242,19 +244,15 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
   }
 }
 
-/** `scanTab`, rejecting with the timeout text after `ms`; a scan that answers later is never saved. */
-async function scanWithin(id: number, ms: number): Promise<ScanOutcome> {
-  const ctl = new AbortController();
+/** `p`, or a rejection with the timeout text after `ms` (no bound when `ms` is undefined). */
+async function within<T>(p: Promise<T>, ms: number | undefined): Promise<T> {
+  if (ms === undefined) return p;
   let bound: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<never>((_, reject) => {
-    bound = setTimeout(() => {
-      const err = new Error('The page took too long to load');
-      ctl.abort(err);
-      reject(err);
-    }, ms);
+    bound = setTimeout(() => reject(new Error('The page took too long to load')), ms);
   });
   try {
-    return await Promise.race([scanTab(id, { signal: ctl.signal }), limit]);
+    return await Promise.race([p, limit]);
   } finally {
     clearTimeout(bound);
   }

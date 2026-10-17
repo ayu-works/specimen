@@ -150,6 +150,19 @@ describe('rescanUrl closes the tab it opened on failure (SPC-45)', () => {
     expect(saveScan).not.toHaveBeenCalled();
   });
 
+  it('T5.14 the bound covers only the page answer: a slow save after it still succeeds', async () => {
+    const t = stubTabs(() => complete);
+    send.mockImplementation(
+      () => new Promise((r) => setTimeout(() => r({ raw: {}, screenshot: 'data:shot' }), 19000)),
+    );
+    saveScan.mockImplementation(() => new Promise((r) => setTimeout(r, 10000)));
+    const r = await settle(rescanUrl(PAGE), 60000);
+    expect(r.error).toBeUndefined();
+    expect(r.value).toMatchObject({ saveError: null });
+    expect(saveScan).toHaveBeenCalledTimes(1);
+    expect(t.remove).not.toHaveBeenCalled();
+  });
+
   it('T5.14 success: returns the scan and favicon, and leaves the tab open', async () => {
     const t = stubTabs(() => complete);
     const r = await settle(rescanUrl(PAGE));
