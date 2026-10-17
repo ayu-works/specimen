@@ -2,7 +2,7 @@
 
 Executor session: `spc-19-02` · Branch `exec/spc-19` (from origin/main 77ac925) · Lane C · PE `pe-ed`, then `pe-8a` · Orchestrator `specimen-6a`
 
-Status: **BUILT, PR open, waiting for reviews.** Plan APPROVED by pe-ed 2026-10-17 (answers below). M2 ruling:
+Status: **REVIEWS DONE (lens A approved through 67da52c, lens B folded). Waiting for the owner's manual test and merge.** Plan APPROVED by pe-ed 2026-10-17 (answers below). M2 ruling:
 `worktrees/pe/docs/sprint/reviews/SPC-19-m2-ruling.md`; owner OK relayed by specimen-6a 2026-10-17 (recorded on SPC-19).
 
 ## Plan (APPROVED by pe-ed 2026-10-17)
