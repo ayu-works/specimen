@@ -138,8 +138,11 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
   - L2 folded: TESTING.md T5.03 says a local green doesn't verify mobile capture; only CI is pinned.
   - L3 folded: `store/listing.md` says dark/light capture is "on sites with a theme switch".
 
+  - M1 closed: CI run 39044944108 on b673af2 is green, and its log reads `T5.03 oracle: a 390px popup is 390px wide
+    on this host`. T5.03 took the capture branch under xvfb.
+
 ## Next
-Confirm the CI `gate` on #43 is green (M1), then tell the lens-B reviewer.
+Waiting for pe-b2's fold check (realWindows fixture, L1 note) and lens B's sign-off. No merge: that's the owner's call.
 
 ## How to resume
 Read this file, `git log exec/spc-44`, and any `docs/sprint/reviews/SPC-44-*.md`. Worktree `worktrees/spc-44`.
