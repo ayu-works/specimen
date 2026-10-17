@@ -179,6 +179,21 @@ describe('ask', () => {
     expect(p.calls[0]?.messages).toHaveLength(13);
   });
 
+  it('T3.08 an answer cut off mid-way still reports its whole sanitized text before the error', async () => {
+    // One open line past the stream sanitizer's 512-char threshold: running snapshots lag behind it.
+    const line = 'The accent #0d9488 sits on white at 16px. '.repeat(20).slice(0, 700);
+    const p = createMockProvider({
+      chunks: line.match(/.{1,50}/gs) ?? [],
+      error: new ProviderError('other', TRUNCATED_TEXT),
+      errorAfter: 14,
+    });
+    const seen: string[] = [];
+    await expect(ask(p, scan, 'q', [], { onText: (t) => seen.push(t) })).rejects.toMatchObject({
+      message: TRUNCATED_TEXT,
+    });
+    expect(seen.at(-1)).toBe(line);
+  });
+
   it('T3.08 strips the website host and brand from answers', async () => {
     const p = createMockProvider({ text: `This is ${scan.host} and looks clean.` });
     const out = await ask(p, scan, 'What site is this?');

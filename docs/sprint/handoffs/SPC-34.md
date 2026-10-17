@@ -125,7 +125,19 @@ further contract change; I'd suggest a ticket.
   holds). `pnpm gate` green (gitleaks not installed locally: secrets skipped, CI scans).
 - Side effect: Ask now also shows streamed text above *any* error (it was hidden before). That text was
   already the sanitized snapshot and is still stored and still excluded from history.
-- Next: fold review findings (files under `docs/sprint/reviews/SPC-34-*`), new commit per fold.
+- Reviews r1: lens A (pe-8a) APPROVED, 0 findings. Lens B 0C/0H/1M/4L, contract matches.
+  - **M1 folded:** `Council.tsx` `TurnBody` shows an error turn's partial text above its error (matches Ask;
+    still no verdict: `Report` is gated on `done`). Test T3.33 (stored cut-off run → summary text + error, no
+    `council-report`). This also corrects the plan's "stays visible" claim, which was not true before this fold.
+  - **L1 folded:** `collect` sends one last full `safe(raw)` snapshot through `onText` before rethrowing (a guarded
+    call that never masks the error), so a cut-off Ask answer isn't missing up to ~255 chars of a long line. Test
+    T3.08. Not done: trimming a mid-word tail (the reviewer marked it optional; same weak case as the live stream).
+  - **L2 (no change):** before the CWS release, do one manual local Gemma council run on a dense page; if the
+    summary is cut off every time, open a ticket to tighten the local summary budget.
+  - **L3 (follow-up ticket suggested):** a *stopped* Ask answer is still replayed as whole history (existing).
+  - **L4 (no change):** Vibe now fails if Gemma rambles past a finished JSON object to 300 tokens; if seen,
+    pass `response_format` for `json` requests or fall back in vibe (separate ticket).
+- Next: fold check by the fresh PE; then wait for the owner's merge decision.
 - Resume: `git log origin/main..exec/spc-34`; tests: `pnpm --filter ./apps/extension exec vitest run
   test/ai/llmHost.test.ts test/ask.test.tsx` (run `wxt prepare` first) and `pnpm -F @specimen/ai test`.
 - Follow-up suggestion: same `TRUNCATED_TEXT` for the BYOK adapters (openaiCompat `length`, Anthropic
