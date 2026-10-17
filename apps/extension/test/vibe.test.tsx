@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { ProviderError } from '@specimen/ai';
 import { BOUNDS } from '@specimen/core/schema';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sampleScan } from '../src/entrypoints/sidepanel/dev/sampleScan';
 import { useStore } from '../src/entrypoints/sidepanel/store';
 import {
+  VIBE_GAP_MS,
   VIBE_TIMEOUT_MS,
   VIBE_TIMEOUT_TEXT,
   VibeCard,
@@ -256,15 +258,35 @@ describe('Vibe card: a model call that never settles times out (SPC-40)', () => 
     await describeVibe();
     const busy = await screen.findByRole('button', { name: /Looking/ });
     expect(busy.hasAttribute('disabled')).toBe(true);
-    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS - 1000);
+    // A wide margin: shouldAdvanceTime also moves the fake clock with real time.
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS / 2);
     expect(screen.getByRole('button', { name: /Looking/ })).toBeTruthy();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS / 2);
     await idleButton();
     expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
-    expect(toastSpy).toHaveBeenCalledWith(VIBE_TIMEOUT_TEXT);
+    // The line is on screen, so no toast repeats it.
+    expect(toastSpy).not.toHaveBeenCalled();
     expect(useStore.getState().scan?.vibe).toBeUndefined();
     // The call was told to stop.
     expect(h.signals[0]?.aborted).toBe(true);
+  });
+
+  it('T3.38 a provider that honours the abort still shows the timeout, not "Stopped"', async () => {
+    const provider = {
+      ...fakeProvider([]),
+      async *chat(_req: unknown, signal?: AbortSignal) {
+        await new Promise((_, reject) =>
+          signal?.addEventListener('abort', () => reject(new ProviderError('aborted', 'Stopped'))),
+        );
+        yield '';
+      },
+    };
+    renderCard([], provider);
+    await describeVibe();
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
+    await idleButton();
+    expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+    expect(screen.queryByText('Stopped')).toBeNull();
   });
 
   it('T3.38 a late reply after the timeout is dropped; a new run after it is shown and saved', async () => {
@@ -284,13 +306,48 @@ describe('Vibe card: a model call that never settles times out (SPC-40)', () => 
     await waitFor(() => expect(saved).toHaveLength(1));
     // Now the first call replies, late.
     h.lateReply();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
     expect(screen.queryByText('Late and loud.')).toBeNull();
     expect(useStore.getState().scan?.vibe?.summary).toBe('Second and calm.');
     expect(saved).toEqual([{ vibe: expect.objectContaining({ summary: 'Second and calm.' }) }]);
+    expect(screen.queryByText(VIBE_TIMEOUT_TEXT)).toBeNull();
   });
 
-  it('T3.38 a card remounted during the hang is busy, then idle at the timeout', async () => {
+  it('T3.38 slow but steady text is not cut off (the timer restarts on each piece)', async () => {
+    const pieces = ['{"summary":"Slow ', 'and ', 'steady', '.","keywords":', '["slow"]', '}'];
+    const provider = {
+      ...fakeProvider([]),
+      async *chat() {
+        for (const p of pieces) {
+          await new Promise((r) => setTimeout(r, VIBE_GAP_MS - 5000));
+          yield p;
+        }
+      },
+    };
+    renderCard([], provider);
+    await describeVibe();
+    // Well past the first-text timeout in total, but never a gap that long.
+    for (let i = 0; i < pieces.length; i++) await vi.advanceTimersByTimeAsync(VIBE_GAP_MS - 5000);
+    expect(await screen.findByText('Slow and steady.')).toBeTruthy();
+    expect(screen.queryByText(VIBE_TIMEOUT_TEXT)).toBeNull();
+  });
+
+  it('T3.38 text that stops mid-reply times out after the gap', async () => {
+    const provider = {
+      ...fakeProvider([]),
+      async *chat() {
+        yield '{"summary":"Half';
+        await new Promise(() => {});
+      },
+    };
+    renderCard([], provider);
+    await describeVibe();
+    await vi.advanceTimersByTimeAsync(VIBE_GAP_MS);
+    await idleButton();
+    expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+  });
+
+  it('T3.38 a card remounted during the hang is busy, then idle with the error at the timeout', async () => {
     const h = hangingProvider();
     const first = renderCard([], h.provider);
     await describeVibe();
@@ -300,8 +357,24 @@ describe('Vibe card: a model call that never settles times out (SPC-40)', () => 
     expect(button.hasAttribute('disabled')).toBe(true);
     await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
     await idleButton();
-    // The remounted card did not start the run, so only the toast reports it.
+    // The remounted card is on screen, so it shows the line and no toast repeats it.
+    expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+    expect(toastSpy).not.toHaveBeenCalled();
+  });
+
+  it('T3.38 a timeout while Inspect is closed is toasted and shown when the card comes back', async () => {
+    const h = hangingProvider();
+    const first = renderCard([], h.provider);
+    await describeVibe();
+    first.unmount(); // a tab switch
+    await vi.advanceTimersByTimeAsync(VIBE_TIMEOUT_MS);
     expect(toastSpy).toHaveBeenCalledWith(VIBE_TIMEOUT_TEXT);
+    render(card());
+    await idleButton();
+    expect(await screen.findByText(VIBE_TIMEOUT_TEXT)).toBeTruthy();
+    // Not on another scan.
+    useStore.setState({ scan: { ...sampleScan, id: 'other', vibe: undefined } });
+    await waitFor(() => expect(screen.queryByText(VIBE_TIMEOUT_TEXT)).toBeNull());
   });
 
   it('T3.38 a reply in time is shown, and the timeout later adds no error', async () => {

@@ -66,5 +66,20 @@ Not touched: `sidepanel/store.ts` (SPC-44), `council.test.tsx` (#41), `test/help
   also starts a second run after the timeout (pe-b2 note b). All four fail against the old `Vibe.tsx`.
 - `docs/TESTING.md`: T3.38 row.
 
+## Lens B r1 fold (2026-10-17, `docs/sprint/reviews/SPC-40-b-r1.md`)
+- **M1** message now names every cause: "No answer from the model (it may be busy or still loading). Try again in a
+  moment." (`VIBE_TIMEOUT_TEXT`).
+- **M2** stall timer like the council instead of a total cap: `VIBE_TIMEOUT_MS` 120 s to the first text, then
+  `VIBE_GAP_MS` 30 s between pieces. A thin wrapper around `provider.chat` in `Vibe.tsx` re-arms the timer on each
+  delta (`vibe()` and `packages/ai` untouched; `DEFAULT_STALL_MS` isn't exported, so the values are mirrored, not
+  imported). A `settled` flag stops a late reply's text from re-arming a finished run. Tests: slow but steady text
+  over 150 s is shown; text that stops mid-reply times out after the gap.
+- **L1** the latest run's error is module state (`lastErr`, by scan id), so a card remounted after a tab switch shows it.
+- **L2** the timeout is toasted only when no card is mounted or the scan isn't shown; a visible card shows the line only.
+- **L3** test for a provider that honours the abort (shows the timeout text, not "Stopped"); test 1 margin widened to
+  `VIBE_TIMEOUT_MS / 2`. Note: swapping `fail`/`abort` doesn't change the outcome (the provider's abort error reaches
+  `vibe()` asynchronously), so the comment says that instead of claiming the order matters.
+- Mutation-checked: removing the re-arm, the toast condition or the remount `setErr(lastErr)` each fails a T3.38 test.
+
 ## Next / how to resume
-- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Waiting on lens B; fold its findings; never merge.
+- Lens A r1 (pe-b2): APPROVED, 0 findings (`docs/sprint/reviews/SPC-40-a-r1.md`). Lens B r1 folded (above); waiting on pe-b2's fold check; never merge.
