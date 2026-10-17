@@ -5,6 +5,7 @@ import {
   type ScanOpts,
   type ScanResult,
 } from './messaging';
+import { sameUrl } from './sameUrl';
 
 const SAMPLER_FILE = '/content-scripts/sampler.js';
 const THUMB_WIDTH = 640;
@@ -79,11 +80,25 @@ async function sample(tabId: number, opts: ScanOpts): Promise<ScanResult['raw']>
   return raw;
 }
 
-export /** The tab, if it is the active tab of its window; throws otherwise. */
-async function inFront(tabId: number): Promise<chrome.tabs.Tab> {
-  const tab = await chrome.tabs.get(tabId);
-  if (!tab.active) throw new Error('the tab was not in front');
+export /** Why a thumbnail was not taken: fixed texts, never Chrome's message (it can hold the URL). */
+class NoShot extends Error {}
+
+/** The tab, if it is in front of its window and still on the scanned page; throws otherwise. */
+async function inFront(tabId: number, url: string): Promise<chrome.tabs.Tab> {
+  const tab = await chrome.tabs.get(tabId).catch(() => {
+    throw new NoShot('the tab was closed');
+  });
+  if (!tab.active) throw new NoShot('the tab was not in front');
+  // A link or redirect after the sample: the shot would show another page than the scan.
+  if (tab.url && !sameUrl(tab.url, url)) throw new NoShot('the page changed during the scan');
   return tab;
+}
+
+function noShotReason(e: unknown): string {
+  if (e instanceof NoShot) return e.message;
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/Cannot access|permission/i.test(msg)) return 'no site access';
+  return 'capture failed';
 }
 
 export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanResult> {
@@ -96,16 +111,17 @@ export async function scanRun(tabId: number, opts: ScanOpts = {}): Promise<ScanR
   // The thumbnail is a nice-to-have: a failed capture must not fail the scan.
   try {
     // captureVisibleTab shoots whatever tab is in front of the window, so check the scanned tab
-    // is that tab right before the shot and still is right after (the sample can take seconds).
-    const front = await inFront(tabId);
+    // is that tab, on the scanned page, right before the shot and still right after (the sample
+    // can take seconds).
+    const front = await inFront(tabId, raw.url);
     const shot = await chrome.tabs.captureVisibleTab(front.windowId, {
       format: 'jpeg',
       quality: 70,
     });
-    await inFront(tabId);
+    await inFront(tabId, raw.url);
     return { raw, screenshot: await downscale(shot) };
   } catch (e) {
-    raw.warnings.push(`screenshot unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    raw.warnings.push(`screenshot unavailable: ${noShotReason(e)}`);
     return { raw, screenshot: '' };
   }
 }

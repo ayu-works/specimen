@@ -101,10 +101,13 @@ function closeOf(css: string, open: number): number {
 function walkText(css: string, out: StateRule[], depth: number): void {
   if (depth > 6) return;
   let i = 0;
+  let semi = css.indexOf(';');
   while (i < css.length) {
     const open = css.indexOf('{', i);
-    const semi = css.indexOf(';', i);
     if (open === -1) break;
+    // Re-search only once we pass the last `;` found: searching every rule is O(n²) on a sheet
+    // with no `;` at all.
+    if (semi !== -1 && semi < i) semi = css.indexOf(';', i);
     if (semi !== -1 && semi < open && css.slice(i, semi).trim().startsWith('@')) {
       i = semi + 1; // @import / @charset / @layer a, b;
       continue;

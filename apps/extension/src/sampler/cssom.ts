@@ -191,29 +191,42 @@ export async function collectCssom(fetchCss?: FetchCss): Promise<CssomResult> {
     for (const u of fresh) seen.add(u);
     if (urls.length === 0) break;
     let texts: CssFetchEntry[] = [];
+    let fetchFailed = false;
     if (fetchCss) {
       try {
         texts = await fetchCss(urls);
       } catch {
-        texts = urls.map(() => ({ skipped: 'fetch failed' }));
+        fetchFailed = true; // the sampler's own reason, not one the background sends
       }
     }
-    // host → reason ('' when unknown), so each host and cause is one warning.
+    // One warning per host and cause ("host (reason)", or the bare host when the cause is unknown).
     const skipped = new Set<string>();
-    for (const u of fresh.slice(CSS_FETCH_MAX_URLS))
-      skipped.add(`${hostOf(u)} (over the 24-stylesheet limit)`);
+    const overCap = fresh.slice(CSS_FETCH_MAX_URLS).map(hostOf);
+    if (overCap.length > 0) {
+      const hosts = [...new Set(overCap)];
+      const named = hosts.slice(0, 3).join(', ') + (hosts.length > 3 ? ', …' : '');
+      warnings.push(
+        `${overCap.length} cross-origin stylesheets over the 24-stylesheet limit (${named})`,
+      );
+    }
     const unreadableHosts = new Set<string>();
     urls.forEach((url, idx) => {
       const text = texts[idx];
       if (typeof text !== 'string') {
-        const reason = skipReasonOf(text);
+        const reason = fetchFailed ? 'fetch failed' : skipReasonOf(text);
         skipped.add(reason ? `${hostOf(url)} (${reason})` : hostOf(url));
         return;
       }
       // One hostile or broken sheet must not fail the scan: drop it with a warning.
       try {
         const parsed = parseCssText(text);
-        for (const m of text.matchAll(/[^{}]*\{/g)) noteThemeSelectors(m[0], acc);
+        // Each `{` ends one selector. A split keeps this linear: a regex over a long brace-free
+        // run backtracks in O(n²) and would hang the scan on a hostile 2 MB sheet.
+        const segs = text.split('{');
+        for (let k = 0; k < segs.length - 1; k++) {
+          const seg = segs[k] as string;
+          noteThemeSelectors(`${seg.slice(seg.lastIndexOf('}') + 1)}{`, acc);
+        }
         if (acc.stateRules.length < MAX_STATE_RULES)
           acc.stateRules.push(...stateRulesFromText(text));
         for (const n of Object.keys(parsed.vars)) acc.varNames.add(n);

@@ -39,7 +39,7 @@ let tabState: { id: number; windowId: number; url: string; active: boolean } | n
 
 beforeEach(async () => {
   const c = installChrome() as FakeChrome & Partial<BgChrome>;
-  tabState = { id: 7, windowId: 1, url: 'https://stripe.com/', active: true };
+  tabState = { id: 7, windowId: 1, url: rawFixture.url, active: true };
   Object.assign(c.tabs, {
     get: vi.fn(async (id: number) => {
       if (!tabState || tabState.id !== id) throw new Error(`No tab with id: ${id}.`);
@@ -101,6 +101,15 @@ describe('friendlyScanError (audit H8)', () => {
       "Specimen's background worker stopped. Click Scan again.",
     ],
     ['no response for scan.run', "Specimen's background worker stopped. Click Scan again."],
+    [
+      'The message port closed before a response was received.',
+      "Specimen's background worker stopped. Click Scan again.",
+    ],
+    [
+      'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+      "Specimen's background worker stopped. Click Scan again.",
+    ],
+    ['Cannot access contents of url "https://example.com/webstore/".', SITE_ACCESS],
     ['Frame with ID 0 is showing error page', "This page didn't load. Reload it and scan again."],
     ['sampler returned no result', "Couldn't read this page. Reload it and scan again."],
     ['something odd', 'Scan failed: something odd'],
@@ -132,6 +141,13 @@ describe('runTabScan failures end in a clear error and no Library row (audit H8)
     chrome.tabs.query.mockResolvedValue([{ id: 7, url: 'chrome://settings/' }] as never);
     await expectFailure(RESTRICTED);
     expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('T1.11 a chrome:// tab with no visible url: refused by the injection (lens B L5)', async () => {
+    // Without the `tabs` permission Chrome hides a chrome:// tab's url, so the scan is sent.
+    chrome.tabs.query.mockResolvedValue([{ id: 7 }] as never);
+    chrome.scripting.executeScript.mockRejectedValue(new Error('Cannot access a chrome:// URL'));
+    await expectFailure(RESTRICTED);
   });
 
   it('T1.11 a file:// page gets the http(s)-only message', async () => {
@@ -189,15 +205,35 @@ describe('a failed screenshot leaves a working, saved scan (audit H9)', () => {
     const out = await scanTab(7);
     expect(out.screenshot).toBe('');
     expect(out.scan.host).toBe('stripe.com');
-    expect(out.scan.meta.warnings.some((w) => warning.test(w))).toBe(true);
+    expect(out.scan.meta.warnings.filter((w) => w.startsWith('screenshot'))).toEqual([
+      expect.stringMatching(warning),
+    ]);
     expect(out.saveError).toBeNull();
     expect(await db.scans.count()).toBe(1);
     expect(await db.thumbs.count()).toBe(0);
   }
 
   it('T1.11 captureVisibleTab rejects', async () => {
-    chrome.tabs.captureVisibleTab.mockRejectedValue(new Error('Cannot capture this tab'));
-    await expectSavedWithoutThumb(/^screenshot unavailable: Cannot capture this tab/);
+    chrome.tabs.captureVisibleTab.mockRejectedValue(
+      new Error('Cannot capture https://stripe.com/x'),
+    );
+    // A fixed text: Chrome's message (which can hold the URL) never lands in the scan.
+    await expectSavedWithoutThumb(/^screenshot unavailable: capture failed$/);
+  });
+
+  it('T1.11 a capture refused for permission says so with a fixed text', async () => {
+    chrome.tabs.captureVisibleTab.mockRejectedValue(
+      new Error('Cannot access contents of url "https://stripe.com/". Missing host permission'),
+    );
+    await expectSavedWithoutThumb(/^screenshot unavailable: no site access$/);
+  });
+
+  it('T1.11 a tab that navigates during the capture drops the shot (lens B M1)', async () => {
+    chrome.tabs.captureVisibleTab.mockImplementation(async () => {
+      if (tabState) tabState.url = 'https://stripe.com/pricing'; // a link click or redirect
+      return 'data:image/jpeg;base64,AAAA';
+    });
+    await expectSavedWithoutThumb(/^screenshot unavailable: the page changed during the scan$/);
   });
 
   it('T1.11 a tab that is not in front is never captured (it would shoot another tab)', async () => {
@@ -220,7 +256,7 @@ describe('a failed screenshot leaves a working, saved scan (audit H9)', () => {
       tabState = null; // closed while the sampler ran
       return [{ result: structuredClone(rawFixture) }];
     });
-    await expectSavedWithoutThumb(/^screenshot unavailable: No tab with id: 7/);
+    await expectSavedWithoutThumb(/^screenshot unavailable: the tab was closed$/);
   });
 
   it('T1.11 noScreenshot never captures', async () => {

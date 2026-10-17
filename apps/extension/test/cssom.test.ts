@@ -93,9 +93,35 @@ describe('cross-origin stylesheet warnings in the sampler (audit H11)', () => {
     const css = await collectCssom(fetchCss);
     expect(fetchCss.mock.calls[0]?.[0]).toHaveLength(24);
     expect(css.warnings).toEqual([
-      'cross-origin stylesheet skipped: h24.test (over the 24-stylesheet limit)',
-      'cross-origin stylesheet skipped: h25.test (over the 24-stylesheet limit)',
+      '2 cross-origin stylesheets over the 24-stylesheet limit (h24.test, h25.test)',
     ]);
+  });
+
+  it('T1.12 hundreds of sheets past the cap make one warning, not one per host (lens B L1)', async () => {
+    linkBlocked(Array.from({ length: 324 }, (_, i) => `https://h${i}.test/x.css`));
+    const css = await collectCssom(async (urls) => urls.map(() => ''));
+    expect(css.warnings).toEqual([
+      '300 cross-origin stylesheets over the 24-stylesheet limit (h24.test, h25.test, h26.test, …)',
+    ]);
+  });
+
+  // Lens B H1: a regex over long brace-free runs was O(n²) and hung the scan (2 MB > 120 s).
+  it.each([
+    ['2 MB with no braces', 'a'.repeat(2_000_000)],
+    ['2 MB with no braces, then one', `${'a'.repeat(2_000_000)}}`],
+    ['600k rules with no semicolon', 'a{}'.repeat(600_000)],
+    ['2 MB of {', '{'.repeat(2_000_000)],
+    ['2 MB of }', '}'.repeat(2_000_000)],
+    ['theme-ish selectors', 'html .dark '.repeat(180_000)],
+    ['state selectors', '.a:hover{color:red}'.repeat(100_000)],
+    ['222k balanced @media', `${'@media a{'.repeat(222_000)}${'}'.repeat(222_000)}`],
+    ['one 2 MB declaration block', `:root{${'--a:1;'.repeat(400_000)}}`],
+  ])('T1.12 a hostile 2 MB sheet (%s) is read in bounded time', async (_name, body) => {
+    linkBlocked(['https://a.test/x.css']);
+    const t0 = performance.now();
+    const css = await collectCssom(async () => [body]);
+    expect(performance.now() - t0).toBeLessThan(3000);
+    expect(css.warnings.filter((w) => w.includes('unreadable'))).toEqual([]);
   });
 });
 

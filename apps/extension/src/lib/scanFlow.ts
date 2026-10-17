@@ -20,7 +20,11 @@ export function friendlyScanError(msg: string): string {
     return SITE_ACCESS;
   if (/No tab with id|tab was closed/i.test(msg))
     return 'The tab was closed before the scan finished.';
-  if (/Receiving end does not exist|Could not establish connection|no response for/i.test(msg))
+  if (
+    /Receiving end does not exist|Could not establish connection|no response for|message (port|channel) closed/i.test(
+      msg,
+    )
+  )
     return "Specimen's background worker stopped. Click Scan again.";
   if (/showing error page/i.test(msg)) return "This page didn't load. Reload it and scan again.";
   if (/sampler returned no result/.test(msg))
@@ -118,15 +122,4 @@ export async function rescanUrl(url: string): Promise<ScanOutcome & { favicon: s
   return { ...out, favicon: fresh?.favIconUrl ?? null };
 }
 
-/** Same page, ignoring hash, query order and a trailing slash. */
-export function sameUrl(a: string | undefined, b: string | undefined): boolean {
-  if (!a || !b) return false;
-  try {
-    const x = new URL(a);
-    const y = new URL(b);
-    const path = (u: URL) => u.pathname.replace(/\/+$/, '') || '/';
-    return x.origin === y.origin && path(x) === path(y) && x.search === y.search;
-  } catch {
-    return a === b;
-  }
-}
+export { sameUrl } from './sameUrl';

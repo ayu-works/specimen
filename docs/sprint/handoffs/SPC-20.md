@@ -127,8 +127,22 @@ e2e (Playwright, local servers only):
 - PR #37. Lens A r1 (pe-8a): APPROVED, 0C/0H/0M, 1 LOW folded in 292804a (an unsupported page is judged by its
   scheme only); the fold was approved too. pe-8a handed over; the new PE is pe-4d. After lens B, send the head commit to pe-4d and specimen-6a.
 
+- Lens B r1 (`SPC-20-b-r1.md`, 0C/1H/3M/5L), all folded:
+  - **H1** the theme-selector regex `/[^{}]*\{/g` in `cssom.ts` was O(n²) (a 2 MB brace-free sheet hung the scan).
+    It's now a linear `split('{')`. The same class of bug was in `states.ts` `walkText` (an `indexOf(';')` per rule,
+    O(n²) on a sheet with no `;`): `;` is now searched again only once passed. There's a table test over 9 hostile
+    2 MB inputs through `collectCssom` (< 3 s each, all < 0.5 s measured); on the old code the run hangs past 120 s.
+  - **M1** the thumbnail also needs the tab still on the scanned page (`sameUrl(tab.url, raw.url)`; `sameUrl` moved
+    to `lib/sameUrl.ts` and is re-exported from `scanFlow`). **M2** "message port/channel closed" maps to the
+    background-stopped text. **M3** `fetch failed` is sampler-only (out of the wire type), so the contract matches
+    ARCHITECTURE §8 and the owner OK.
+  - **L1** sheets past the cap give one aggregate warning naming up to 3 hosts. **L2** the e2e asserts no
+    `unreadable` warning. **L3** screenshot warnings are fixed texts (`the tab was not in front`, `the page changed
+    during the scan`, `the tab was closed`, `no site access`, `capture failed`). **L4** was already folded in
+    292804a, plus a row for a `/webstore/` path in a permission error. **L5** adds a chrome:// tab with no visible url.
+
 ## Next
-- Lens B review: fold its findings, then send the diff back to the reviewer and to the new PE.
+- Send the head to pe-4d and specimen-6a for fold checks.
 
 ## How to resume
 Read this file, `git log origin/main..`, the PR, then any `docs/sprint/reviews/SPC-20-*.md`.

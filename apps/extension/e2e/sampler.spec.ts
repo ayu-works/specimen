@@ -421,6 +421,7 @@ extTest.describe('full extension', () => {
           `cross-origin stylesheet skipped: ${xo.replace('http://', '')} (HTTP 404)`,
         );
         expect(raw.rootVars['--after-deep']).toBe('#abcdef');
+        expect(raw.warnings.some((w: string) => w.includes('unreadable'))).toBe(false);
         expect(raw.samples.length).toBeGreaterThan(0);
       } finally {
         await page.close();

@@ -27,7 +27,6 @@ export type CssSkipReason =
   | 'not http(s)'
   | `HTTP ${number}`
   | 'network error'
-  | 'fetch failed'
   | 'over the 24-stylesheet limit';
 
 /** One stylesheet's answer: its text, why it was skipped, or `null` (skipped, reason unknown). */
@@ -37,7 +36,6 @@ const FIXED_REASONS = new Set<string>([
   'no site access',
   'not http(s)',
   'network error',
-  'fetch failed',
   'over the 24-stylesheet limit',
 ]);
 
