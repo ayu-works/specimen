@@ -6,7 +6,13 @@
 Newest UPDATE block on top. A fresh orchestrator session reads this, then `docs/sprint/setup.md`, `plan.md`,
 `linear.md`. The template these came from is `docs/sprint/setup-prompt.md`.
 
-## UPDATE 2026-10-17 ~14:35 (CURRENT STATE)
+## UPDATE 2026-10-17 ~14:40 (CURRENT STATE)
+
+- **Orchestrator is now specimen-75** (pane w1:p3, session 9a801fc2-f35e-4093-af49-48aab6a38438; kickoffs in its scratchpad). PE **pe-4d** (w1:pS) told.
+- **Running (build tab w1:tX), all from origin/main b01ea77, In Progress in Linear:** spc-28-10 (w1:p1M, SPC-28 waitForTabLoad race, lane A, scanFlow.ts; stubs chrome.tabs locally), spc-21-6e (w1:p1N, SPC-21 deny-capable stubs, lane B, Owns test/helpers/chrome.ts + wxt e2e config; PE agrees the stub design), spc-29-68 (w1:p1P, SPC-29 T3.33 flake, lane C, Owns council.test.tsx). Worktrees worktrees/spc-28|21|29, branches exec/<ticket>.
+- Next by priority when a slot frees: SPC-38 → SPC-37 → SPC-40 → SPC-41 → SPC-42 → SPC-43 → SPC-30 → SPC-31 → SPC-36 → SPC-27. SPC-23 held (Netlify).
+
+## UPDATE 2026-10-17 ~14:35
 
 - **Merged today (8, the owner said merge each):** #31 SPC-18, #32 SPC-32, #33 SPC-19 (DesignScan v5), #34 SPC-35, #35 SPC-33, #36 SPC-34 (truncated contract), #37 SPC-20 (css.fetch skipped contract), #38 SPC-39 (visible Library delete, owner-reported). Main b01ea77, CI green. All Done in Linear.
 - **No executors running.** PE **pe-4d** (w1:pS) idle. Orchestrator specimen-6a at ~33% context: restart fresh before starting the next batch.
