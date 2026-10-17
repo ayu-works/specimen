@@ -141,8 +141,12 @@ history) still says `debugger`, except the CHANGELOG 1.0.0 line and the "removed
   - M1 closed: CI run 39044944108 on b673af2 is green, and its log reads `T5.03 oracle: a 390px popup is 390px wide
     on this host`. T5.03 took the capture branch under xvfb.
 
+- Fold check (pe-b2, 705aa81..e85a983): APPROVED. Lens A is done.
+- Note: PR #46 (SPC-38, spc-38-63) is stacked on this branch at 4b2abe2. The `wide`-row hunk in Scan.tsx added later means
+  it has to rebase (a different hunk, so it should be clean).
+
 ## Next
-Waiting for pe-b2's fold check (realWindows fixture, L1 note) and lens B's sign-off. No merge: that's the owner's call.
+Done unless the owner or orchestrator asks for more. No merge: that's the owner's call ("merge all").
 
 ## How to resume
 Read this file, `git log exec/spc-44`, and any `docs/sprint/reviews/SPC-44-*.md`. Worktree `worktrees/spc-44`.
