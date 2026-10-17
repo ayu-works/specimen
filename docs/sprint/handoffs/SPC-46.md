@@ -105,8 +105,11 @@ T3.35 only (append "SPC-46" text; no new IDs).
 
 - `pnpm gate` green (secrets skipped locally: no gitleaks). PR #54 (base `exec/spc-41`), rebased on 81b4386; link on SPC-46.
 
+- Lens A r1 (pe-b2): APPROVED, 0 C/H/M, 1 LOW (4k Gemma vibe cap 1024 is tight). Folded as an owner manual step in the
+  PR body (no code change, no re-review needed).
+
 ## Next
-- Reviews (PE lens A + lens B): fold findings with new commits.
+- Lens B review: fold findings with new commits.
 
 ## How to resume
 Read this file, `gh pr diff 45`, and `docs/sprint/reviews/SPC-41-b-r1.md` (L1/L2/L4).
