@@ -85,7 +85,7 @@ Types: **U** = unit (Vitest, Node) · **C** = component (Vitest + Testing Librar
 | T2.02 | U | Each target (`claude-code`, `cursor`, `v0`, `lovable`) produces distinct wording and stack hints; snapshot |
 | T2.03 | U | **Ethics guardrail**: prompt never contains the site host/brand name, `title`, or heading snippets (fixture with brand text); DESIGN.md drops brands in camelCase, digit-suffixed and run-together CSS variable names (short brands only at boundaries); host forms (subdomain, `WWW.`, `.co.uk`, port, title-only) and the branded-font placeholder; brands spelled with ß, İ/ı, accents, decomposed marks or fullwidth/ligature forms are matched on a folded skeleton in every generator and the stream sanitizer, removing exactly the original characters, with the B1 hex/unit cases kept on that path (SPC-31) |
 | T2.04 | U | Prompt length 800–1500 tokens (approx. tokenizer) on all raw fixtures |
-| T2.05 | U | DESIGN.md has a table for colors, type, spacing, radii, shadows, layout; parses as valid Markdown (remark) |
+| T2.05 | U | DESIGN.md has a table for colors, type, spacing, radii, shadows, layout; parses as valid Markdown (remark). A backslash run before `\|` in a value never splits a table cell, under micromark's GFM table parser and a model of GitHub's (cmark-gfm) cell rules: plain text reads back exactly, a code cell shows the run doubled (SPC-36) |
 | T2.06 | U | Tailwind v4 `@theme` output compiles with `@tailwindcss/node`; utility `bg-accent` resolves to the accent hex |
 | T2.07 | U | Tailwind v3 config is valid JS exporting `theme.extend` |
 | T2.08 | U | CSS vars output parses (postcss) and defines every role |
