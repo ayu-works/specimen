@@ -3,6 +3,7 @@ import type { DesignScan } from '../../schema';
 import { describeSection, usableSections } from '../blueprint';
 import {
   breakpoints,
+  code,
   extraPalette,
   firstHex,
   fmt,
@@ -69,7 +70,7 @@ export function themeTokens(scan: DesignScan): string {
 }
 
 function fontLine(label: string, f: FontInfo): string {
-  return `- ${label}: ${fontPhrase(f)}. Stack: \`${f.stack}\``;
+  return `- ${label}: ${fontPhrase(f)}. Stack: ${code(f.stack)}`;
 }
 
 export function typography(scan: DesignScan): string {
@@ -111,7 +112,7 @@ export function spacingShape(scan: DesignScan): string {
   const shadows = levelShadows(scan);
   if (shadows.length > 0) {
     lines.push('- Shadows:');
-    for (const s of shadows) lines.push(`  - Level ${s.level}: \`${s.css}\``);
+    for (const s of shadows) lines.push(`  - Level ${s.level}: ${code(s.css)}`);
   } else lines.push('- Shadows: none; rely on borders for separation.');
   const widths = [...new Set(scan.borders.map((b) => b.width))].sort((a, b) => a - b);
   lines.push(
@@ -168,7 +169,7 @@ export function componentRules(scan: DesignScan): string {
       `- Secondary button: transparent or ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, text ${text ?? 'textPrimary'}, same radius and padding as primary.`,
     ],
     card: [
-      `- Card: ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(cardRadius)}, padding ${nearestSpace(scan, scan.spacing.baseUnit * 6)}px${shadow ? `, shadow \`${shadow.css}\`` : ', no shadow'}.`,
+      `- Card: ${surface ?? 'surface'} background, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(cardRadius)}, padding ${nearestSpace(scan, scan.spacing.baseUnit * 6)}px${shadow ? `, shadow ${code(shadow.css)}` : ', no shadow'}.`,
     ],
     input: [
       `- Input: ${bg ?? 'background'} fill, ${px(bw)} border in ${border ?? 'the border color'}, radius ${radiusText(inputRadius)}, height about ${py * 2 + (btnStyle?.size ?? scan.typography.baseSize)}px; focus ring in ${accent ?? text ?? 'the text color'}.`,

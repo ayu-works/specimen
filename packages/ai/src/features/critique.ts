@@ -2,7 +2,7 @@ import { computeA11y } from '@specimen/core';
 import type { DesignScan } from '@specimen/core/schema';
 import { mapThrown } from '../errors';
 import type { ChatRequest, LLMProvider, ProviderErrorKind } from '../types';
-import { safe } from './collect';
+import { safe, safeStream } from './collect';
 import { compactScan, PAGE_DATA_RULE, pageDataBudget, wrapPageData } from './pageData';
 
 /**
@@ -599,11 +599,12 @@ async function runTurn(
     arm(stall.first);
     let raw = '';
     let thrown: unknown = null;
+    const snapshot = safeStream(scan);
     try {
       for await (const d of provider.chat(req, attemptCtl.signal)) {
         arm(stall.gap);
         raw += d;
-        turn.content = safe(raw, scan);
+        turn.content = snapshot(raw);
         emit();
       }
     } catch (e) {
@@ -612,6 +613,8 @@ async function runTurn(
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
     }
+    // Every exit keeps the full sanitized text: the last snapshot can lag on a long line.
+    turn.content = safe(raw, scan);
     // Stop wins; some hosts end the stream quietly on abort instead of throwing.
     if (signal?.aborted) return stop();
     if (stalled) return fail(STALLED_ERROR);
@@ -635,7 +638,6 @@ async function runTurn(
       }
       return fail(CRITIQUE_ERRORS[err.kind]);
     }
-    turn.content = safe(raw, scan);
     turn.status = !raw.trim() ? 'empty' : !turn.content.trim() ? 'filtered' : 'done';
     emit();
     return { status: 'done' };

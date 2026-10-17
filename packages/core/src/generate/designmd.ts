@@ -3,6 +3,7 @@ import type { DesignScan } from '../schema';
 import { describeSection, usableSections } from './blueprint';
 import {
   breakpoints,
+  code,
   extraPalette,
   fmt,
   type GeneratedFile,
@@ -86,7 +87,7 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
       '',
       table(
         ['Weight', 'CSS'],
-        scan.colors.gradients.slice(0, 6).map((g) => [pct(g.weight), `\`${g.css}\``]),
+        scan.colors.gradients.slice(0, 6).map((g) => [pct(g.weight), code(g.css)]),
       ),
     );
   }
@@ -119,7 +120,7 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
     ['Body', fonts.body],
   ];
   if (fonts.mono) famEntries.push(['Mono', fonts.mono]);
-  const famRows = famEntries.map(([role, f]) => [role, fontPhrase(f), `\`${f.stack}\``]);
+  const famRows = famEntries.map(([role, f]) => [role, fontPhrase(f), code(f.stack)]);
   out.push('', '## Typography', '', table(['Use', 'Family', 'Stack'], famRows));
   out.push(
     '',
@@ -186,7 +187,7 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
         ['Level', 'Weight', 'CSS'],
         [...scan.shadows]
           .sort((a, b) => a.level - b.level || b.weight - a.weight)
-          .map((s) => [s.level, pct(s.weight), `\`${s.css}\``]),
+          .map((s) => [s.level, pct(s.weight), code(s.css)]),
       ),
     );
     const main = levelShadows(scan);
@@ -310,7 +311,7 @@ export function generateDesignMd(scan: DesignScan): GeneratedFile {
       '',
       table(
         ['Name', 'Value'],
-        vars.map(([k, v]) => [`\`${k}\``, `\`${v}\``]),
+        vars.map(([k, v]) => [code(k), code(v)]),
       ),
     );
   }
