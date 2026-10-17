@@ -84,8 +84,11 @@ for the whole test. The fix is test-only; no `src/` change.
   `notify` listener set; `afterEach` halts every host and waits (5 s, naming any stuck runId) for its final write.
 - After the fix: single test under 6× load **60/60** (was 3/60 failing); whole file 50× sequential **50/50**; `pnpm gate` green.
 
+- PR #41 open, linked on SPC-29. Lens A r1 (pe-b2): APPROVED, 1 optional LOW (L1: the drain missed a start still
+  building its provider). Folded: a `setTimeout(0)` before the drain's `waitFor`. No re-review needed.
+
 ## Next
-- PR open → comment on SPC-29 → message specimen-75 → fold PE lens A (pe-b2) + lens B reviews.
+- Lens B review → fold → owner's merge call. Then watch 10 CI runs for a T3.33 flake.
 
 ## How to resume
 Read this file; `git log origin/main..exec/spc-29`. Load loop: the scratchpad `loop.sh` is gone with the session,

@@ -112,6 +112,8 @@ afterEach(async () => {
   cleanup();
   // Stop every host's run and wait for its final write, so none lands in the next test's DB.
   for (const h of hosts) h.halt(Date.now());
+  // A start still building its provider has no liveRunId yet: let it reach `live` first.
+  await new Promise((r) => setTimeout(r, 0));
   await waitFor(
     () => {
       const stuck = hosts.map((h) => h.liveRunId).filter(Boolean);
